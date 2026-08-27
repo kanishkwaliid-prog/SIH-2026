@@ -1,0 +1,12 @@
+version 15.2
+!
+hostname edge-switch-01
+!
+service password-encryption
+!
+line vty 0 4
+ transport input ssh telnet
+ exec-timeout 0 0
+ login local
+!
+end

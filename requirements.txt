@@ -1,0 +1,21 @@
+# Backend / API
+fastapi==0.115.0
+uvicorn==0.30.6
+
+# Data validation
+pydantic==2.9.2
+
+# Rule packs
+pyyaml==6.0.2
+
+# LLM API (Block 2b)
+anthropic==0.34.2
+
+# PDF report generation (Block 4)
+weasyprint==62.3
+
+# Environment variables
+python-dotenv==1.0.1
+
+# Testing
+pytest==8.3.3

@@ -1,0 +1,63 @@
+framework: CIS
+version: "1.0"
+rules:
+  - id: CIS-4.1.1
+    field: ssh_enabled
+    expected: true
+    severity: high
+    explanation: "Remote administration should use SSH, which encrypts login credentials."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+      juniper_junos: |
+        set system services ssh
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+
+  - id: CIS-4.1.2
+    field: telnet_enabled
+    expected: false
+    severity: critical
+    explanation: "Telnet transmits login credentials in plain text and should be disabled."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         no transport input telnet
+      juniper_junos: |
+        delete system services telnet
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+
+  - id: CIS-4.2.1
+    field: session_timeout_seconds
+    expected: "<= 300"
+    severity: medium
+    explanation: "Idle admin sessions should time out to reduce the risk of hijacked sessions."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 5 0
+      juniper_junos: |
+        set system login idle-timeout 5
+
+  - id: CIS-6.1.1
+    field: logging_enabled
+    expected: true
+    severity: high
+    explanation: "Administrative access should be logged for auditing and incident response."
+    remediation:
+      cisco_ios: |
+        logging buffered 16384
+        logging trap informational
+      juniper_junos: |
+        set system syslog file messages any any
+
+  - id: CIS-4.3.1
+    field: password_encryption
+    expected: "not none"
+    severity: high
+    explanation: "Passwords stored in the config should not be stored in plain text."
+    remediation:
+      cisco_ios: |
+        service password-encryption

@@ -1,0 +1,17 @@
+{
+  "device": {
+    "vendor": "cisco_ios",
+    "hostname": "edge-switch-01",
+    "serial_number": "FTX1234A5BC",
+    "os_version": "15.2",
+    "detection_confidence": "high"
+  },
+  "config": {
+    "ssh_enabled": true,
+    "telnet_enabled": true,
+    "session_timeout_seconds": 0,
+    "logging_enabled": false,
+    "password_encryption": "type7",
+    "banner_configured": false
+  }
+}
