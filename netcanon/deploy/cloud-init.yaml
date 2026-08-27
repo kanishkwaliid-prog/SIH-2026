@@ -1,0 +1,132 @@
+#cloud-config
+# netcanon demo host — hardened Ubuntu 24.04 (docs/demo-plan/02-deployment.md).
+# No-retention controls (I2): swap off, core dumps discarded, journald volatile.
+# ⚠️ Draft — Gate 3 verifies swap empty, no core files, 443-only, HTTPS green.
+# EDIT before use: pin the SSH source (admin IPs / VPN) in the nftables filter.
+
+# Key-only SSH. Hetzner injects the key you select in the console; this makes
+# password auth impossible regardless of image defaults, so the fail2ban jail
+# below is a backstop against noise rather than the only thing standing between
+# the box and a password guess. Deliberately does NOT touch `disable_root` —
+# Hetzner's Ubuntu image expects root+key, and overriding it can lock you out.
+ssh_pwauth: false
+
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - git                 # clones this repo to /opt/demo (runcmd installs from it)
+  - make                # the deploy runbook is `make deploy` / `make whitepaper`
+  - fail2ban            # SSH brute-force protection (see jail below)
+  - unattended-upgrades # automatic security patches
+  - nftables            # host firewall + the demo-int isolation rules
+  - chrony              # time sync (TTL enforcement + audit timestamps depend on it)
+  - jq                  # `make whitepaper` fills the deploy date with it
+
+write_files:
+  # I2: swap-off is not the only RAM->disk path — discard core dumps too.
+  - path: /etc/sysctl.d/99-demo-hardening.conf
+    content: |
+      kernel.core_pattern=|/bin/false
+      vm.swappiness=0
+      net.bridge.bridge-nf-call-iptables=1
+  - path: /etc/modules-load.d/demo.conf
+    content: |
+      br_netfilter
+  - path: /etc/systemd/coredump.conf.d/demo.conf
+    content: |
+      [Coredump]
+      Storage=none
+      ProcessSizeMax=0
+  # Host logs live in RAM and rotate hard; nothing session-derived is in them.
+  - path: /etc/systemd/journald.conf.d/demo.conf
+    content: |
+      [Journal]
+      Storage=volatile
+      RuntimeMaxUse=64M
+  # fail2ban: SSH jail (the demo HTTP paths are intentionally unlogged, so the
+  # warden's in-RAM per-IP rate limit is the L7 abuse control, not fail2ban).
+  - path: /etc/fail2ban/jail.d/demo.conf
+    content: |
+      [sshd]
+      enabled  = true
+      maxretry = 4
+      findtime = 10m
+      bantime  = 1h
+  # Under memory pressure the OOM killer must hit an INSTANCE, never dockerd.
+  - path: /etc/systemd/system/docker.service.d/demo.conf
+    content: |
+      [Service]
+      LimitCORE=0
+      OOMScoreAdjust=-500
+  - path: /etc/docker/daemon.json
+    content: |
+      {"log-driver": "local", "log-opts": {"max-size": "10m"}, "live-restore": true}
+  # Host firewall: 443 + 80(ACME) inbound, SSH from admin only, default-deny.
+  # ⚠️ Replace 203.0.113.0/24 with your real admin source (IP / VPN subnet).
+  - path: /etc/nftables.conf
+    content: |
+      #!/usr/sbin/nft -f
+      # Host firewall in its OWN table so a reload never `flush ruleset`-wipes
+      # Docker's ip nat/filter tables (DOCKER-USER + the internal:true egress
+      # rules). Only host INPUT is managed here; Docker owns forward/isolation
+      # (see deploy/nftables/demo-int.nft applied by demo-firewall.service).
+      add table inet host_fw
+      delete table inet host_fw
+      table inet host_fw {
+        chain input {
+          type filter hook input priority 0; policy drop;
+          ct state established,related accept
+          iif "lo" accept
+          ip protocol icmp accept
+          # ICMPv6 is NOT optional when the server has an IPv6 address: Neighbour
+          # Discovery and Path-MTU live here, so dropping it breaks IPv6 outright
+          # (apt/registry pulls stall) rather than just blocking pings.
+          meta l4proto ipv6-icmp accept
+          # Family-agnostic in an `inet` table: covers both IPv4 and IPv6.
+          tcp dport { 80, 443 } accept
+          # ⚠️ SSH: replace with your real admin source before booting. This rule
+          # is IPv4-only — if you connect over IPv6 you will be locked out until
+          # you add the ip6 line below. Console access via Hetzner is the way back in.
+          ip saddr 203.0.113.0/24 tcp dport 22 accept
+          # ip6 saddr 2001:db8::/64 tcp dport 22 accept   # uncomment for an IPv6 admin source
+        }
+      }
+
+runcmd:
+  - swapoff -a
+  - sed -i.bak '/\sswap\s/d' /etc/fstab
+  - modprobe br_netfilter || true
+  - sysctl --system
+  - systemctl restart systemd-journald
+  - systemctl enable --now chrony fail2ban nftables docker
+  # The systemd units + nftables rules below are installed FROM this repo, so it
+  # has to be on the box first. Public repo, no credentials. `set -e` in the
+  # wrapper makes a clone failure loud: without it the installs below silently
+  # no-op and the host comes up LOOKING fine while missing two of the three
+  # hard-TTL enforcement mechanisms (I3) and the demo-int isolation (I4).
+  - bash -eux -c 'test -d /opt/demo || git clone --depth 1 https://github.com/netcanon/netcanon.git /opt/demo'
+  - bash -eux -c 'test -f /opt/demo/deploy/systemd/demo-ttl-backstop.sh'
+  # Install the warden-independent hard-TTL backstop (I3): removes any demo.*
+  # container older than HARD_TTL_BACKSTOP every 60s, even if the warden is dead.
+  - install -m 0755 /opt/demo/deploy/systemd/demo-ttl-backstop.sh /usr/local/bin/demo-ttl-backstop.sh
+  - install -m 0644 /opt/demo/deploy/systemd/demo-ttl-backstop.service /etc/systemd/system/
+  - install -m 0644 /opt/demo/deploy/systemd/demo-ttl-backstop.timer /etc/systemd/system/
+  # demo-int isolation (I4): apply the nftables rules into DOCKER-USER after docker.
+  - install -m 0755 /opt/demo/deploy/systemd/demo-firewall.sh /usr/local/bin/demo-firewall.sh
+  - install -m 0644 /opt/demo/deploy/systemd/demo-firewall.service /etc/systemd/system/
+  # Aggregate traffic sampler. The demo keeps no access log, and the warden's
+  # counters are in-RAM and die with the process, so without this "how much
+  # traffic did we get" has no answer at all. Totals only — no visitor dimension.
+  - install -m 0755 /opt/demo/deploy/systemd/demo-stats.sh /usr/local/bin/demo-stats.sh
+  - install -m 0644 /opt/demo/deploy/systemd/demo-stats.service /etc/systemd/system/
+  - install -m 0644 /opt/demo/deploy/systemd/demo-stats.timer /etc/systemd/system/
+  - systemctl daemon-reload
+  - systemctl enable --now demo-ttl-backstop.timer
+  - systemctl enable --now demo-firewall.service
+  - systemctl enable --now demo-stats.timer
+  # Gate-3 tripwire: prove both units are actually active. cloud-init logs to
+  # /var/log/cloud-init-output.log — check it before trusting the host.
+  - systemctl is-active --quiet demo-ttl-backstop.timer || echo "FATAL demo-ttl-backstop.timer inactive"
+  - systemctl is-enabled --quiet demo-firewall.service || echo "FATAL demo-firewall.service not enabled"

@@ -1,0 +1,156 @@
+"""
+``MockCodec`` — reference adapter proving the CodecBase contract.
+
+Internal tree representation: ``dict[str, str]`` — a flat xpath-to-value
+map.  Serialisation format: a single JSON object.  Neither choice is
+vendor-meaningful; both are picked for test-only simplicity.
+
+Capability matrix: declares ``/interfaces/**`` + ``/vlans/**`` as
+supported, a single ``/legacy/deprecated`` as lossy, and any path under
+``/unsafe/**`` as unsupported.  The pipeline's validate stage test
+suite uses these to exercise every classification branch.
+
+Round-trip invariant (enforced by ``tests/unit/migration/test_mock_
+adapter.py``)::
+
+    for tree in example_trees:
+        adapter = MockCodec()
+        assert adapter.parse(adapter.render(tree)) == tree
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any, ClassVar
+
+from ....models.migration import (
+    CapabilityMatrix,
+    DeviceClass,
+    LossyPath,
+    UnsupportedPath,
+)
+from ..base import CodecBase, ParseError
+from ..registry import register
+
+
+@register
+class MockCodec(CodecBase):
+    """In-memory reference adapter.  Not wired to any real device."""
+
+    name: ClassVar[str] = "mock"
+    version_hint: ClassVar[str | None] = "1.0"
+    input_format: ClassVar[str] = "json-flat"
+    direction: ClassVar[str] = "bidirectional"
+    certainty: ClassVar[str] = "experimental"
+    canonical_model: ClassVar[str] = "openconfig-lite"
+    # Internal reference/test adapter — never offered on user-facing
+    # surfaces (target dropdown, sanitize source list, auto-detection).
+    hidden: ClassVar[bool] = True
+    description: ClassVar[str] = (
+        "Paste a JSON object mapping xpath strings to values — the "
+        "reference mock adapter's format.  Not meaningful for any "
+        "real device; useful for exercising the pipeline."
+    )
+    sample_input: ClassVar[str] = (
+        '{\n'
+        '  "/interfaces/eth0/ip": "10.0.0.1",\n'
+        '  "/interfaces/eth0/description": "mock interface"\n'
+        '}\n'
+    )
+    output_extension: ClassVar[str] = "json"
+
+    #: Class-level capability matrix — constant across instances.
+    _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
+        adapter="mock",
+        vendor_id="mock",
+        version_range="1.x",
+        # Multi-class so unit tests can exercise the "non-empty
+        # intersection" path AND the "disjoint sets" path against
+        # tiny adapter stubs that declare narrower classes.
+        device_classes=[DeviceClass.switch, DeviceClass.router],
+        supported=[
+            "/interfaces/eth0/ip",
+            "/interfaces/eth0/description",
+            "/vlans/10/name",
+            "/vlans/10/description",
+        ],
+        lossy=[
+            LossyPath(
+                path="/legacy/deprecated",
+                reason="Mock adapter preserves but does not validate this path.",
+                severity="warn",
+            ),
+        ],
+        unsupported=[
+            UnsupportedPath(
+                path="/unsafe/kernel_module",
+                reason="No sane adapter would let you set this via migration.",
+            ),
+        ],
+    )
+
+    @property
+    def capabilities(self) -> CapabilityMatrix:
+        return self._CAPS
+
+    def parse(self, raw: str) -> dict[str, str]:
+        """Parse a JSON-encoded flat xpath map.
+
+        Raises:
+            ParseError: If *raw* is not valid JSON or not an object of
+                string->string mappings.
+        """
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ParseError(
+                f"mock adapter expects a JSON object; parser said {exc.msg}",
+                snippet=raw[:120],
+            ) from exc
+        if not isinstance(data, dict):
+            raise ParseError(
+                "mock adapter requires a JSON object at top level",
+                snippet=raw[:120],
+            )
+        for k, v in data.items():
+            if not isinstance(k, str) or not isinstance(v, str):
+                raise ParseError(
+                    "mock adapter requires string keys and string values",
+                    path=str(k),
+                    snippet=str(v)[:120],
+                )
+        return data
+
+    def render(self, tree: Any) -> str:
+        """Render *tree* back into pretty JSON.
+
+        Accepts either the native flat dict shape or a
+        :class:`CanonicalIntent` — the latter gets dumped via its
+        pydantic ``model_dump()`` so cross-vendor translation into
+        the mock codec doesn't choke on non-serialisable attrs.
+
+        The sort key ensures deterministic output — required by the
+        round-trip invariant and by the textual diff stage downstream.
+        """
+        from ...canonical.intent import CanonicalIntent
+        if isinstance(tree, CanonicalIntent):
+            return json.dumps(tree.model_dump(), indent=2, sort_keys=True) + "\n"
+        return json.dumps(tree, indent=2, sort_keys=True) + "\n"
+
+    @classmethod
+    def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
+        """Weak match: JSON shape.  MockCodec is a test-only codec so
+        we score it conservatively — any real JSON input is more
+        likely to belong to a future REST-API codec."""
+        stripped = raw_prefix.lstrip()
+        if not stripped.startswith("{"):
+            return None
+        # Try a cheap JSON parse on the prefix — if it's valid JSON
+        # that happens to be an object, we're a plausible candidate.
+        try:
+            # Many real JSON configs exceed 500 bytes so the prefix
+            # will be truncated / invalid JSON.  Accept the shape alone.
+            json.loads(stripped)
+            return (55, "input is valid JSON and looks like an object")
+        except json.JSONDecodeError:
+            return (40, "input starts with '{' (possibly JSON)")

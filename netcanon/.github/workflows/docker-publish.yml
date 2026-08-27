@@ -1,0 +1,459 @@
+name: Docker — build & publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'    # rc / alpha / beta pre-release tags
+  workflow_dispatch:
+    inputs:
+      move_latest:
+        description: >-
+          Move the :latest tag onto this build.  IGNORED on a tag-push run (a
+          stable push always moves :latest).  Only consulted on a manual
+          re-dispatch, where it defaults to false so re-running an OLDER stable
+          tag's publish cannot repoint :latest backwards onto old bytes (P2).
+        type: boolean
+        default: false
+        required: false
+
+# Least-privilege default: at the workflow level only the pytest `test`
+# gate's checkout runs, so read is all it needs.  The registry-push,
+# signing, SARIF-upload and CI-gate scopes are declared on the
+# `build-and-publish` job so the test gate can't reach them (PKG-4).
+permissions:
+  contents: read
+
+# Serialise release runs for a given ref so a re-pushed tag (or a
+# workflow_dispatch racing the tag push) can't double-build / double-push
+# and race the `:latest` move.  Never cancel an in-flight publish — a
+# half-signed / half-attested image is worse than a queued second run
+# (run3 no-concurrency-guard-publish).
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # GHCR is the primary, signed, SBOM-attested registry.
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  # Docker Hub is a convenience mirror — same image bytes, same tags,
+  # no cosign signature or SBOM attestation.  Operators in regulated
+  # environments should pull from GHCR (see SECURITY.md).
+  DOCKERHUB_IMAGE: docker.io/netcanon/netcanon
+  # Opt-in to Node.js 24 for JavaScript actions ahead of the June 2026
+  # forced cutover (https://github.blog/changelog/2025-09-19-deprecation-
+  # of-node-20-on-github-actions-runners/).  Surfaces any Node 24
+  # incompatibility now rather than at the cutover deadline.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  # ── Publish-time test gate (blind-audit 3ec11f3 T0-4) ──
+  # See pypi-publish.yml for the full rationale.  In short: the release gate
+  # is gate-at-merge (ruleset-protected `main` + on-main ancestry check), but
+  # that lives off-tree (admin-bypassable) and `workflow_dispatch` can publish
+  # a never-PR'd ref.  Re-running the unit + integration suite inside the
+  # publish run puts the gate in the artefact and holds even if the merge gate
+  # was bypassed.  Fast subset (single Python, no e2e/desktop) — defense in
+  # depth, not a re-run of the full CI matrix.  No pip cache (single-shot).
+  test:
+    name: Test gate (unit + integration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run unit tests
+        run: pytest tests/unit -q --no-header
+      - name: Run integration tests
+        run: pytest tests/integration -q --no-header
+
+  build-and-publish:
+    name: Build, push, sign, attest
+    needs: [test]
+    runs-on: ubuntu-latest
+    # Elevated scopes scoped to the publish job only (PKG-4): push to
+    # GHCR, keyless-sign via OIDC, upload the Trivy SARIF, read the CI
+    # run conclusion for the gate, and read the checkout.
+    permissions:
+      contents: read
+      packages: write          # push image + cosign artifacts to GHCR
+      id-token: write          # cosign keyless signing via Sigstore + GitHub OIDC
+      security-events: write   # Trivy SARIF upload to Code Scanning
+      actions: read            # read the CI run conclusion for the "require CI success" gate
+
+    steps:
+      # Refuse to publish from anything but a version tag.  A bare
+      # `workflow_dispatch` selects a git ref in the UI; on a branch ref
+      # `type=semver` emits no versioned tag, but `type=raw,value=latest`
+      # would still move `:latest` onto a `.devN` build — the same
+      # dev-publish footgun as pypi-publish.yml (PKG-5).  Tag pushes
+      # satisfy the guard; a workflow_dispatch rebuild must select a tag.
+      # Uses $GITHUB_REF (a default env var), not a `${{ }}` template, so
+      # there is no injection surface.
+      - name: Refuse a non-tag ref (workflow_dispatch footgun guard)
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" != refs/tags/v* ]]; then
+            echo "::error::Refusing to publish from '${GITHUB_REF}' — the image publish must run from a version tag (refs/tags/v*), not a branch. A branch run would move :latest onto a .devN build."
+            exit 1
+          fi
+          # Reject a stable-looking but non-semver tag (P10): a PEP 440 spelling
+          # slip like `v0.6.0rc1` (no dash) or a 4-part `v0.6.0.1` matches the
+          # `v*.*.*` trigger, but `type=semver` emits nothing so
+          # `steps.meta.outputs.version` falls back to the raw `latest` and the
+          # SETUPTOOLS_SCM_PRETEND_VERSION=latest build-arg fails PEP 440 parsing
+          # deep in the builder with a confusing "invalid version 'latest'".
+          # Name the real problem here instead.
+          if [[ ! "${GITHUB_REF}" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::Tag '${GITHUB_REF#refs/tags/}' is not a valid semver release tag (expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE — e.g. v0.6.0 or v0.6.0-rc1). A PEP 440 spelling like v0.6.0rc1 (no dash) or a 4-part v0.6.0.1 fails version derivation deep in the build; respell the tag."
+            exit 1
+          fi
+          echo "OK: publishing from tag '${GITHUB_REF}'."
+
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Full history so the on-main ancestry guard below can run a
+          # merge-base against origin/main (shallow clone lacks the graph).
+          fetch-depth: 0
+          # Registry logins use explicit secrets passed to
+          # docker/login-action; cosign uses keyless OIDC; no git push
+          # from this job.  Clear the token-in-.git/config default.
+          persist-credentials: false
+
+      # Refuse to publish a tag that isn't on main (see pypi-publish.yml
+      # for the rationale — "tag = publish" with no ancestry check would
+      # let a tag on any commit push an image + move :latest).
+      - name: Verify the build commit is on main
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$head_sha" FETCH_HEAD; then
+            echo "::error::Build commit $head_sha is not an ancestor of origin/main — refusing to publish."
+            exit 1
+          fi
+          echo "OK: build commit $head_sha is on origin/main."
+
+      # Prove the full CI matrix concluded 'success' for this commit, not just
+      # that it is on main (audit T0-4: ancestry != CI success). See
+      # pypi-publish.yml for the full rationale. Needs `actions: read`.
+      - name: Require CI success for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          for attempt in $(seq 1 30); do
+            out="$(gh api \
+              "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$head_sha&event=push&per_page=1" \
+              --jq '(.workflow_runs[0].status // "none") + " " + (.workflow_runs[0].conclusion // "none")' \
+              2>/dev/null || true)"
+            status="${out%% *}"; conclusion="${out##* }"
+            if [ "$conclusion" = "success" ]; then
+              echo "CI concluded success for $head_sha."; exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "::error::CI for $head_sha concluded '$conclusion' (not success) — refusing to publish."
+              exit 1
+            fi
+            echo "CI for $head_sha is '${status:-unknown}' (attempt $attempt/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for CI to complete for $head_sha — refusing to publish."
+          exit 1
+
+      # Belt-and-suspenders for the one check whose failure already cost a
+      # history rewrite: the gate above covers ci.yml, but pii-guard is a
+      # SEPARATE workflow with no publish-time backstop (review #54). Poll its
+      # run for this commit the same fail-closed way. Needs actions:read.
+      - name: Require PII-guard success for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          for attempt in $(seq 1 30); do
+            out="$(gh api \
+              "repos/$REPO/actions/workflows/pii-guard.yml/runs?head_sha=$head_sha&event=push&per_page=1" \
+              --jq '(.workflow_runs[0].status // "none") + " " + (.workflow_runs[0].conclusion // "none")' \
+              2>/dev/null || true)"
+            status="${out%% *}"; conclusion="${out##* }"
+            if [ "$conclusion" = "success" ]; then
+              echo "PII-guard concluded success for $head_sha."; exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "::error::PII-guard for $head_sha concluded '$conclusion' (not success) — refusing to publish."
+              exit 1
+            fi
+            echo "PII-guard for $head_sha is '${status:-unknown}' (attempt $attempt/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for PII-guard to complete for $head_sha — refusing to publish."
+          exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+
+      # Resolve whether the optional Docker Hub mirror is configured.  The
+      # `secrets` context is NOT available in a step-level `if:`, so we map
+      # the token to a step env var (allowed) and emit a plain boolean output
+      # the downstream `if:` / `with:` can consume via the `steps` context.
+
+      # Trivy scans the published image for CVEs in OS-package layers
+      # (Debian/Alpine under python:3.x-slim), the installed Python
+      # wheel set, and any secrets accidentally baked into image
+      # layers.  CodeQL scans source; this scans the artifact we ship.
+      # Results upload as SARIF to Security → Code scanning under the
+      # `trivy-image` category (distinct from CodeQL findings).
+      #
+      # `exit-code: 0` makes findings informational — they don't fail
+      # the publish.  Triage via the Security tab.  Flip to `1` with
+      # an explicit severity list to gate releases on CRITICAL CVEs.
+      #
+      # `ignore-unfixed: true` filters out CVEs with no upstream patch
+      # available — they'd just be noise we can't act on until the
+      # base image (or upstream maintainer) ships a fix.
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+      - name: Resolve Docker Hub mirror availability
+        id: mirror
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Docker Hub is an OPTIONAL convenience mirror.  Gate the login on the
+      # token being configured so a fork (or a repo that never set up the
+      # Docker Hub secret) doesn't hard-fail the whole publish on a missing
+      # credential.  The canonical repo has the secret, so this is a no-op
+      # there — login runs exactly as before (run3 dockerhub-login-unguarded).
+      - name: Log in to Docker Hub
+        if: steps.mirror.outputs.enabled == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute image metadata + tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          # Two images = same tag patterns applied to both registries.
+          # The build-push-action below pushes a single image manifest
+          # to both registries in one step (no double-build cost).
+          # The Docker Hub line is emitted only when the mirror is enabled
+          # (token configured); otherwise it resolves to an empty line,
+          # which metadata-action ignores — so build-push targets GHCR
+          # only and never attempts an unauthenticated docker.io push.
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ steps.mirror.outputs.enabled == 'true' && env.DOCKERHUB_IMAGE || '' }}
+          tags: |
+            # Semver-derived (no `v` prefix), e.g. `0.1.0-rc4` or `0.1.0`.
+            # Matches the convention of official Docker Hub images
+            # (`python:3.13-slim`, `node:20`, etc.) and the PyPI version
+            # string.  Earlier `type=ref,event=tag` line was removed
+            # (it emitted a redundant `v`-prefixed copy of the same
+            # image — `v0.1.0-rc3` AND `0.1.0-rc3` for one release).
+            type=semver,pattern={{version}}
+            # Major.minor floating tag (only emits for stable releases
+            # by default; pre-releases like `-rc4` are skipped).
+            type=semver,pattern={{major}}.{{minor}}
+            # `:latest` tracks the newest STABLE release only.  An earlier
+            # `enable={{is_default_branch}}` gate suppressed `:latest`
+            # entirely on tag-triggered runs (the ref is the tag, not
+            # `main`); dropping it (commit e809839) then let a pre-release
+            # tag like `v0.6.0-rc1` repoint `:latest` — the README/SECURITY
+            # quickstart pull — onto an rc (review #13).  Gate on the tag
+            # NOT being a semver pre-release (those carry a `-`), so rc
+            # pushes publish their versioned image without touching
+            # `:latest`, while a stable tag updates the documented quickstart
+            # tag.  `{{major}}.{{minor}}` above is already prerelease-aware.
+            #
+            # AND require a push trigger OR an explicit move_latest input (P2):
+            # a `workflow_dispatch` rebuild of an OLDER stable tag (a legitimate
+            # "refresh a corrupted artifact" use) otherwise passes every guard
+            # and repoints `:latest` BACKWARD onto the old release's bytes.  On
+            # a tag push `:latest` moves for a stable tag as before; on a manual
+            # re-dispatch it moves only when the maintainer sets move_latest=true.
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') && (github.event_name != 'workflow_dispatch' || inputs.move_latest) }}
+
+      # STEP ORDER IS LOAD-BEARING -- do not reorder these two apart.
+      #
+      # `Build and push` publishes every tag, `:latest` included, the moment
+      # it completes.  From that instant until `cosign sign` runs, GHCR is
+      # serving an image nobody has signed.  Anything failable sitting in
+      # that window turns a transient outage into a permanently-published
+      # unsigned `:latest`, because the job aborts and the tag stays moved.
+      #
+      # It used to contain three such steps -- Trivy, the SARIF upload (which
+      # had `if: always()` but no `continue-on-error`, so its own failure
+      # killed the job), and the cosign install itself.  A Code Scanning
+      # outage was therefore sufficient to ship an unsigned release.
+      #
+      # Now: cosign is installed up front, signing/SBOM/attest/verify follow
+      # the push immediately, and scanning is demoted to the end where it is
+      # purely a reporting step.  Guarded by
+      # tests/unit/test_docker_publish_signing_window.py.
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Pass the resolved package version into the builder stage as
+          # SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON.  metadata-action's
+          # `version` output is the semver-parsed tag (e.g. `0.1.0-rc5`
+          # for tag `v0.1.0-rc5`).  setuptools_scm consumes this in the
+          # builder stage in lieu of reading git tags directly (.git/ is
+          # excluded from the Docker context per .dockerignore).
+          build-args: |
+            SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON=${{ steps.meta.outputs.version }}
+          # No build cache on the release path (deliberately no cache-from /
+          # cache-to).  `type=gha` is a mutable, cross-run-writable scope;
+          # importing it into the image we then sign (cosign), SBOM-attest
+          # (syft) and push as :latest would let a poisoned cache layer
+          # launder into a signed, attested release (GHA cache-poisoning).
+          # This workflow only ever runs on a version tag — the "Refuse a
+          # non-tag ref" guard above rejects every other ref — so there is no
+          # PR-build cache to preserve here; the release simply builds clean
+          # from source.  zizmor does not model cache-poisoning, so this is a
+          # human-review invariant, not a tool-enforced one: do not re-add a
+          # `type=gha` (or any writable shared) cache to this build step.
+          provenance: true
+          sbom: false   # we generate via syft below for richer SPDX output
+
+
+      - name: Sign published image (GHCR only, keyless via Sigstore + GitHub OIDC)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        # Cosign signatures attach as separate OCI artifacts at the
+        # registry where the image lives.  We only sign the GHCR copy
+        # — Docker Hub is a convenience mirror; operators who need
+        # attested provenance pull from GHCR.  Filtering by registry
+        # prefix avoids "double-signing" the mirror with no value-add.
+        run: |
+          for tag in ${TAGS}; do
+            case "${tag}" in
+              ghcr.io/*)
+                echo "Signing ${tag}"
+                cosign sign --yes "${tag}@${DIGEST}"
+                ;;
+              *)
+                echo "Skipping cosign for ${tag} (mirror, not signed)"
+                ;;
+            esac
+          done
+
+      - name: Generate SBOM (SPDX JSON) via syft
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: true
+          # Do NOT attach the SBOM to the GitHub Release.  sbom-action
+          # auto-attaches when a Release for the tag already exists, which
+          # needs `contents: write` (we only grant `contents: read`) and so
+          # fails the step + skips the cosign attestation below — this bit
+          # the v0.4.2 re-tag, where the Release already existed from the
+          # first push's MSI run.  We publish the SBOM as a cosign
+          # attestation on the image (next step), not as a release asset.
+          upload-release-assets: false
+
+      - name: Attach SBOM as a cosign attestation
+        env:
+          IMAGE_DIGEST: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          cosign attest --yes --predicate sbom.spdx.json --type spdxjson "${IMAGE_DIGEST}"
+
+      - name: Verify signature (post-publish smoke test)
+        env:
+          IMAGE_DIGEST: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          # The keyless signer identity (Fulcio cert SAN) is fully
+          # deterministic for a tag-triggered run of THIS workflow: the
+          # workflow file path at the exact triggering ref.  github.ref is
+          # refs/tags/vX.Y.Z here, so the SAN is
+          # https://github.com/<repo>/.github/workflows/docker-publish.yml@refs/tags/vX.Y.Z.
+          # Both github.repository and github.ref are trusted contexts mapped
+          # into env (never `${{ }}` in the run: block) so there is no
+          # template-injection surface.
+          EXPECTED_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/docker-publish.yml@${{ github.ref }}
+        run: |
+          # Pin the signer identity EXACTLY (not a regexp).  The prior
+          # --certificate-identity-regexp was head-anchored but had NO tail
+          # anchor ("...@refs/tags/v"), so it accepted a signature minted by
+          # ANY version tag's run of this workflow — a cross-version
+          # substitution hole (verify vX.Y.Z's digest against v0.0.1's
+          # signature).  The identity is fully known at run time, so match it
+          # verbatim: this closes both the different-repo-suffix case the old
+          # regexp guarded and the different-version case it did not.
+          cosign verify "${IMAGE_DIGEST}" \
+            --certificate-identity "${EXPECTED_IDENTITY}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+      # Trivy scans the published image for CVEs in OS-package layers
+      # (Debian/Alpine under python:3.x-slim), the installed Python
+      # wheel set, and any secrets accidentally baked into image
+      # layers.  CodeQL scans source; this scans the artifact we ship.
+      # Results upload as SARIF to Security → Code scanning under the
+      # `trivy-image` category (distinct from CodeQL findings).
+      #
+      # `exit-code: 0` makes findings informational — they don't fail
+      # the publish.  Triage via the Security tab.  Flip to `1` with
+      # an explicit severity list to gate releases on CRITICAL CVEs.
+      #
+      # `ignore-unfixed: true` filters out CVEs with no upstream patch
+      # available — they'd just be noise we can't act on until the
+      # base image (or upstream maintainer) ships a fix.
+      - name: Scan published image with Trivy
+        # Pinned at v0.36.0 (latest stable, 2026-04-22) — clears
+        # GHSA-?? / CVE-2026-33634 "Trivy ecosystem supply chain was
+        # briefly compromised" advisory.  Vulnerable ranges were
+        # `< 0.35.0` and exact `= 0.69.4`.  Do NOT bump to 0.69.x
+        # without re-confirming v0.69.4 has been remediated.  The
+        # action repo tags use a `v` prefix (`v0.24.0` not `0.24.0`)
+        # — earlier @0.24.0 reference would have failed to resolve.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-image.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload Trivy SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v4.37.7
+        continue-on-error: true   # reporting only; never fail a publish (image is signed + attested by now)
+        if: always()      # upload even if Trivy failed, so partial findings still surface
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image

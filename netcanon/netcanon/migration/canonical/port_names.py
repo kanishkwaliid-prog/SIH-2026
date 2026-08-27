@@ -1,0 +1,808 @@
+"""
+Cross-vendor port-name translation — orchestration layer.
+
+The canonical intent stores interface names verbatim from the source
+vendor (``GigabitEthernet1/0/24`` from Cisco, ``1/24`` from Aruba,
+``ether1`` from MikroTik, ``igb0`` from OPNsense, ``port1`` from
+FortiGate).  Cross-vendor translation can't just pass those through
+— they're vendor-specific encodings of physical topology.
+
+This module defines the **vendor-agnostic bridge**:
+
+1. :class:`PortIdentity` — a logical classification of a port name
+   (kind + structural coordinates) with no vendor knowledge.
+2. :func:`translate_port_names` — iterates over a :class:`CanonicalIntent`
+   and rewrites every port-name field from source convention to target
+   convention, using ONLY each codec's own ``classify_port_name`` /
+   ``format_port_identity`` methods.  Never conditionals vendor pair.
+
+**Modular boundary:** each codec knows ONLY its own vendor's naming
+convention.  Cisco's codec classifies ``Gi1/0/24`` → ``PortIdentity``
+but has no idea how to turn that into Aruba's ``1/24`` — that's
+Aruba's ``format_port_identity`` method's job.  The orchestrator
+below sits in the middle and never hard-codes a vendor name.
+
+**Mesh-ready:** works for every (source, target) pair, including
+pairs that haven't shipped yet.  Adding a new codec requires
+implementing the two methods; zero edits here.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Literal
+
+from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from ..codecs.base import CodecBase
+    from .intent import CanonicalIntent
+
+logger = logging.getLogger(__name__)
+
+
+PortKind = Literal[
+    "physical",     # real ethernet port (1 logical = 1 physical)
+    "breakout",     # one lane of a broken-out QSFP (parent = 1 physical,
+                    # child = 1 of N logical; source vendor specifies via
+                    # PortIdentity.breakout_lane + breakout_parent)
+    "hw_aggregate", # N physical ports unified into 1 logical (FortiGate
+                    # internal/hard-switch, some Aruba ArubaStack).  N of
+                    # member names in PortIdentity.aggregate_members.
+    "lag",          # LAG / port-channel / trunk / bond (explicit config)
+    "svi",          # VLAN SVI (L3 interface bound to a VLAN)
+    "loopback",     # virtual loopback
+    "tunnel",       # VPN / GRE / WireGuard / IPsec tunnel
+    "vtep",         # VXLAN tunnel endpoint (NX-OS nve1, etc.) — most
+                    # codecs have no native equivalent and return None
+                    # from format_port_identity (verbatim + warning)
+    "mgmt",         # out-of-band management port
+    "virtual",      # vendor-specific virtual (VirtualPortGroup, etc.)
+    "unknown",      # codec couldn't classify — leave verbatim
+]
+
+
+AggregateKind = Literal[
+    "hardware-switch",  # L2 switched in silicon (FortiGate `internal`)
+    "soft-switch",      # software aggregation
+    "vsf-stack",        # Aruba VSF stack member grouping
+    "",                 # not an aggregate
+]
+
+
+class PortIdentity(BaseModel):
+    """Vendor-agnostic logical identity of a port name.
+
+    Produced by ``CodecBase.classify_port_name(name)`` on the source
+    side and consumed by ``CodecBase.format_port_identity(ident)`` on
+    the target side.  Neither codec sees the other's name format —
+    they both only know how to talk to this shape.
+
+    Fields are deliberately permissive (all optional) because not
+    every vendor encodes every concept.  Aruba's ``1/A24`` uses
+    ``stack`` + ``subslot_letter`` + ``port`` but no ``module``.
+    Cisco's ``Gi1/0/24`` uses ``stack`` + ``module`` + ``port`` but
+    no ``subslot_letter``.  MikroTik's ``ether1`` uses just ``port``
+    (no stack, no module).  OPNsense's ``igb0`` uses just ``port``
+    too (the BSD unit number).  FortiGate's ``port1`` uses just
+    ``port``.  When fields are irrelevant for a vendor, they stay
+    ``None``/``""`` and the target's formatter ignores them.
+    """
+
+    #: Logical role of this port.  Drives the target formatter's
+    #: top-level branching.
+    kind: PortKind = "unknown"
+
+    #: Stack member (1..N) for stacked switches.  ``None`` if the
+    #: vendor doesn't encode stack membership in the port name
+    #: (MikroTik, OPNsense, FortiGate) or the device is standalone.
+    stack: int | None = None
+
+    #: Slot / sub-module / line-card index.  Cisco uses this as the
+    #: middle digit in ``<member>/<module>/<port>``.  Aruba uses the
+    #: ``subslot_letter`` field instead.  MikroTik / OPNsense /
+    #: FortiGate don't encode modules in names.
+    module: int | None = None
+
+    #: Terminal port number on the line card / stack member / device.
+    port: int | None = None
+
+    #: Aruba AOS-S uplink-module letter prefix (``A1``, ``B1``, ``C1``).
+    #: Empty string when not applicable.
+    subslot_letter: str = ""
+
+    #: Bandwidth hint derived from the **port NAME** (Cisco
+    #: ``GigabitEthernet`` prefix, MikroTik ``sfp-sfpplus`` vs ``ether``).
+    #: This is the speed the NAMING convention implies, NOT the port's
+    #: operational speed — a Cisco ``GigabitEthernet1/0/24`` mGig port
+    #: can run at 2.5G/5G/10G despite the name, and the name stays
+    #: ``GigabitEthernet`` regardless.  Kept for render-side prefix
+    #: selection (so a ``10gig`` source maps to ``TenGigabitEthernet``
+    #: on Cisco targets even when the same identity came from
+    #: ``sfp-sfpplus1`` on MikroTik).  Empty when the source doesn't
+    #: encode speed in the name.  Canonical values: ``"fast"``, ``"gig"``,
+    #: ``"2.5gig"``, ``"5gig"``, ``"10gig"``, ``"25gig"``, ``"40gig"``,
+    #: ``"100gig"``, ``"400gig"``.
+    name_speed_hint: str = ""
+
+    #: Actual operational / configured speed if the parser extracted
+    #: it from explicit ``speed`` config lines.  Distinct from
+    #: ``name_speed_hint`` because they can disagree (Cisco mGig).
+    #: Empty in v1 — parsers don't populate yet; hook reserved for a
+    #: future enrichment pass.  Target formatters MAY consult this in
+    #: future to pick the right name prefix when the source name's
+    #: implied speed doesn't match the actual speed.
+    operational_speed: str = ""
+
+    #: Integer index for ``kind`` in {``lag``, ``svi``, ``loopback``,
+    #: ``tunnel``, ``virtual``}.  For LAGs this is the
+    #: ``Port-channel<N>`` / ``Trk<N>`` / ``bond<N>`` number; for SVIs
+    #: the VLAN id; for loopbacks the loopback number; for tunnels the
+    #: tunnel id.  ``None`` otherwise.
+    index: int | None = None
+
+    # ---- Breakout (1 physical → N logical) ----
+
+    #: For ``kind="breakout"`` child ports: which lane (1..N) of the
+    #: QSFP breakout this interface represents.  Cisco 4-part notation
+    #: ``TenGigabitEthernet1/1/1/1`` puts this in the 4th digit.
+    breakout_lane: int | None = None
+
+    #: For ``kind="breakout"`` child ports: the parent QSFP name
+    #: (``FortyGigabitEthernet1/1/1``).  Used by target formatters that
+    #: need to check "does my target also support breakout?" and
+    #: fall back accordingly.
+    breakout_parent: str = ""
+
+    # ---- Aggregate (N physical → 1 logical) ----
+
+    #: Distinguishes true L2/L3 aggregation (``kind="hw_aggregate"``)
+    #: from a plain LAG (``kind="lag"``).  FortiGate's ``internal``
+    #: interface is ``hardware-switch``; OPNsense/Aruba LAGs are
+    #: ``""`` (not an aggregate — just a LAG).
+    aggregate_kind: AggregateKind = ""
+
+    #: For ``kind="hw_aggregate"`` / ``kind="lag"``: member physical
+    #: interface names that make up this logical port.  Usually
+    #: sparsely populated — the caller's rename pass works on the
+    #: canonical tree's ``lags[].members`` list directly.  Kept here
+    #: so future 1:N expansion passes (hardware-aware mode) have the
+    #: membership info without re-parsing.
+    aggregate_members: list[str] = Field(default_factory=list)
+
+    #: Source-side advisory flag: this PHYSICAL port is a member of a
+    #: hardware-switch L2 fabric on the source device.  FortiGate
+    #: ``internalN`` / ``lanN`` on small appliances (40F/60F/80F) are
+    #: switched ports of the ``internal`` / ``lan`` fabric, NOT
+    #: standalone routed ports — the bare ``internal`` / ``lan`` form
+    #: classifies as ``hw_aggregate`` (and warns), but the numbered
+    #: member historically classified as plain ``physical`` and was
+    #: remapped to a positional target name with no advisory at all.
+    #: The cross-vendor name mapping is purely positional (name-shape)
+    #: and cannot carry the L2-switch membership, so the orchestrator
+    #: surfaces a soft "verify cabling / L2 role" advisory when source
+    #: and target vendors differ.  ``kind`` STAYS ``physical`` (the
+    #: port IS a real port) — this flag only drives the advisory, never
+    #: the rename or drop.  Vendor-agnostic: any codec whose classifier
+    #: can detect hw-switch membership may set it; today only FortiGate
+    #: does.  Same-vendor round-trip preserves the name, so no advisory.
+    hw_switch_member: bool = False
+
+    #: Verbatim source name — used as fallback when the target codec
+    #: can't format this identity (``format_port_identity`` returns
+    #: ``None``).  Always populated by the source classifier.
+    original: str = ""
+
+    #: Free-form vendor-advisory hints.  Useful when a vendor has
+    #: naming concepts that don't fit the structured fields — e.g.
+    #: FortiGate's role-based names ``wan1`` / ``lan2`` stash
+    #: ``{"role": "wan"}`` here.  Target codecs may consult this to
+    #: pick better defaults but must not depend on it.
+    meta: dict[str, str] = Field(default_factory=dict)
+
+
+class PortRenameResult(BaseModel):
+    """Outcome of :func:`translate_port_names`.
+
+    Returned so the UI / API can surface exactly what was rewritten
+    and what was left verbatim (with a reason).
+    """
+
+    applied: dict[str, str] = Field(default_factory=dict)
+    """Map of source_name → target_name for every rewrite that happened.
+    Names that already match, or that fell through verbatim, are NOT in
+    this map — it only captures actual changes.
+    """
+
+    warnings: list[str] = Field(default_factory=list)
+    """Per-name advisories.  One line per affected port, describing
+    why the name couldn't be auto-translated (unknown kind, no target
+    equivalent, etc.).  Safe to concatenate into a UI panel.
+    """
+
+    dropped: list[str] = Field(default_factory=list)
+    """Source names the operator explicitly marked "don't render".
+    Entries in the :func:`translate_port_names` ``rename_map``
+    parameter with ``None`` value signal a drop — the orchestrator
+    removes every reference to that name from the canonical tree
+    (interface stanzas, VLAN port lists, LAG members, static-route
+    interface fields, DHCP pool interface).  The rendered output
+    simply does not contain the dropped interface.  Used by the
+    Tier 3 rename modal when the operator decides a source
+    interface has no target representation and should be stripped
+    rather than mapped (e.g. Cisco ``AppGigabitEthernet1/0/1``
+    app-hosting bridge, loopbacks where the target has no loopback
+    concept, unused physical ports)."""
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator — vendor-agnostic cross-vendor rewrite
+# ---------------------------------------------------------------------------
+
+
+def translate_port_names(  # noqa: C901
+    intent: CanonicalIntent,
+    source_codec: CodecBase,
+    target_codec: CodecBase,
+    rename_map: dict[str, str | None] | None = None,
+    strip_unmappable: bool = True,
+) -> PortRenameResult:
+    """Rewrite every port-name reference in *intent* from source-vendor
+    convention to target-vendor convention.
+
+    Priority for each name:
+        1. If *rename_map* contains an entry for the source name with
+           a ``None`` value: the entry is DROPPED from the canonical
+           tree (no rename, no warning — the interface disappears
+           from the rendered output entirely).  Used when an operator
+           decides a source interface has no target representation
+           and should be stripped rather than mapped.
+        2. If *rename_map* contains an entry with a string value, use
+           that as the target name verbatim.  (Tier 2 hybrid: user
+           override wins over auto.)
+        3. Else run ``source_codec.classify_port_name(name)`` →
+           ``target_codec.format_port_identity(ident)`` and use the
+           target's native formatting.
+        4. If the auto-path returns ``None`` (target has no equivalent
+           for this kind — e.g. Aruba AOS-S can't express
+           ``Loopback0``) the behaviour depends on *strip_unmappable*:
+
+             * ``True`` (default) — the source name is AUTO-DROPPED
+               from the canonical tree alongside the warning.  This
+               produces clean target output (no garbage
+               source-vendor names leaking into the render) and
+               matches the operator's typical intent when cross-
+               vendor translating.  Operators who want to keep the
+               name verbatim anyway can add ``{name: name}`` to
+               *rename_map* (a no-op rename beats the auto-drop) or
+               use the Tier 3 UI's "keep verbatim" affordance.
+             * ``False`` — name stays verbatim in the canonical
+               tree, warning fires.  Used by tests or API callers
+               that want to inspect what the auto-heuristic
+               couldn't resolve without the rename sweep silently
+               deleting data.
+
+        SVI + target-absorbs-SVI is a special case that short-
+        circuits before (4): no warning, no drop, name stays verbatim
+        (target's VLAN-stanza render path handles the L3 data).
+
+    Port-name references are rewritten uniformly across ALL places
+    the canonical tree stores them:
+
+        * ``intent.interfaces[].name``
+        * ``intent.interfaces[].lag_member_of``
+        * ``intent.interfaces[].vrrp_groups[].track_interfaces[]``
+        * ``intent.vlans[].tagged_ports[]``
+        * ``intent.vlans[].untagged_ports[]``
+        * ``intent.lags[].name``
+        * ``intent.lags[].members[]``
+        * ``intent.static_routes[].interface``
+        * ``intent.dhcp_servers[].interface``
+        * ``intent.vxlan_vnis[].source_interface``
+
+    Mutates *intent* in place.
+
+    Returns a :class:`PortRenameResult` summarising what changed.
+    """
+    # Non-CanonicalIntent trees have no port-name structure to
+    # rewrite — the legacy mock adapter and any future back-compat
+    # adapter that returns a plain dict fall through this path.
+    # Returning an empty result is a correct no-op: nothing got
+    # renamed, nothing got dropped, the pipeline continues and the
+    # target's render pane sees the tree unchanged.  Without this
+    # guard the iteration below crashes on ``intent.interfaces`` →
+    # ``AttributeError: 'dict' object has no attribute 'interfaces'``
+    # which surfaces in the UI as a spurious "status: failed" job.
+    from .intent import CanonicalIntent
+
+    # Entry log fires on EVERY call — including no-op paths — so
+    # "did the orchestrator run at all?" is answerable from logs
+    # even against a mock tree or when the operator's map is empty.
+    # Outcome counts are summarised at the exit log below.
+    logger.debug(
+        "translate_port_names: entry %s → %s rename_map=%s "
+        "source_ifaces=%d",
+        source_codec.name, target_codec.name,
+        "None" if rename_map is None
+        else f"{len(rename_map)}-entry dict",
+        len(getattr(intent, "interfaces", []) or []),
+    )
+
+    if not isinstance(intent, CanonicalIntent):
+        return PortRenameResult(applied={}, warnings=[], dropped=[])
+
+    user_map = dict(rename_map or {})
+    applied: dict[str, str] = {}
+    warnings: list[str] = []
+    memo: dict[str, str] = {}
+
+    # (#19) Reject empty / blank source keys BEFORE the drop/rename split.
+    # ``interface`` defaults to '' on gateway-only static routes and unbound
+    # DHCP pools, so an empty-string drop key (``{'': None}``) would match all
+    # of them in _strip_dropped_ports and silently delete every such
+    # route/pool.  Pydantic accepts the key (port_rename_map is
+    # ``dict[str, str | None]``) and a UI row with a blank source + "drop"
+    # produces exactly this.  Mirror local_user_names.py: warn + skip.
+    for key in list(user_map):
+        if not isinstance(key, str) or not key.strip():
+            warnings.append(
+                f"port_rename: source port {key!r} is empty or blank; "
+                f"entry skipped"
+            )
+            del user_map[key]
+
+    # Split user map into drops (value is None) and renames (value is str).
+    # Drops never go through the target codec.
+    #
+    # (#6) User drops are keyed by SOURCE names and are stripped BEFORE the
+    # rename sweep, not after: a rename can move a DIFFERENT interface ONTO a
+    # dropped name (``{A: B, B: None}``), and a post-sweep strip keyed by ``B``
+    # would then also delete the freshly-renamed survivor — silently losing a
+    # configured interface while ``applied`` still claims the rename landed.
+    # Stripping first (while names are still source-form) removes exactly the
+    # operator's target and leaves the renamed survivor intact.
+    user_dropped: set[str] = {
+        name for name, tgt in user_map.items() if tgt is None
+    }
+    str_map: dict[str, str] = {
+        name: tgt for name, tgt in user_map.items() if isinstance(tgt, str)
+    }
+    # Auto-drops accumulate DURING resolve() when ``strip_unmappable`` removes a
+    # name the target codec can't format.  Unlike user drops, these names stay
+    # verbatim through the sweep (they were never renamed to something else), so
+    # their post-sweep name still equals their source name and stripping them
+    # AFTER the sweep is safe.
+    auto_dropped: set[str] = set()
+
+    # Per-interface kind overrides — populated by source codecs that
+    # detect logical role (mgmt, etc.) from CONTEXT rather than from
+    # the interface name.  Cisco IOS-XE CLI is the canonical example:
+    # ``GigabitEthernet0/0`` with ``vrf forwarding Mgmt-vrf`` is
+    # semantically the OOBM port but the name alone classifies as
+    # kind="physical".  The parser sets ``CanonicalInterface.kind =
+    # "mgmt"``; the override is applied AFTER classify_port_name so
+    # the source codec doesn't have to thread context through its
+    # pure name-based classifier.  The override cascades: every
+    # target's kind=mgmt handling (Aruba ``oobm``, etc.) fires
+    # automatically — no per-target codec changes required.
+    kind_overrides: dict[str, str] = {
+        iface.name: iface.kind
+        for iface in intent.interfaces
+        if getattr(iface, "kind", "")
+    }
+
+    def resolve(name: str) -> str:
+        # Idempotent + cached: resolving the same input twice returns
+        # the same output without re-classifying.
+        if name in memo:
+            return memo[name]
+        if name in user_dropped:
+            # User drops are stripped from the tree BEFORE this sweep runs,
+            # so resolve() normally never sees them; this guard is defensive
+            # (any residual reference stays verbatim rather than being
+            # classified/renamed).  Memoise to skip the classifier lookup.
+            memo[name] = name
+            return name
+        if name in str_map:
+            out = str_map[name]
+            memo[name] = out
+            if out != name:
+                applied[name] = out
+            return out
+        ident = source_codec.classify_port_name(name)
+        if ident is None or ident.kind == "unknown":
+            warnings.append(
+                f"{source_codec.name}: could not classify port name "
+                f"{name!r}; left verbatim"
+            )
+            memo[name] = name
+            return name
+        # Apply CanonicalInterface.kind override — used when the source
+        # vendor's interface-name alone undersells the role (Cisco
+        # ``GigabitEthernet0/0`` with ``vrf forwarding Mgmt-vrf`` is
+        # semantically mgmt but the name says physical).  The parser
+        # set the override; we honour it before the target's formatter
+        # sees the identity so kind=mgmt cascades through every
+        # target's existing kind=mgmt handling automatically.
+        if name in kind_overrides:
+            ident = ident.model_copy(
+                update={"kind": kind_overrides[name]},
+            )
+        out = target_codec.format_port_identity(ident)
+        if out is None or out == "":
+            # Target codecs that absorb SVI L3 state into the VLAN
+            # stanza (Aruba AOS-S) have NO port-name for SVIs by
+            # design — the rendered output still carries the IP
+            # address via the VLAN stanza render path.  Suppress
+            # the noise from the rename table so operators don't
+            # see non-actionable "review" rows for something the
+            # codec handles correctly elsewhere.
+            if ident.kind == "svi" and getattr(
+                target_codec, "absorbs_svi_into_vlan", False
+            ):
+                memo[name] = name
+                return name
+            # Surface specific advisory text for the complexity cases
+            # the user most needs to review, not a generic "no native
+            # representation" blurb.  The breakout / hw_aggregate cases
+            # cannot be resolved without hardware-aware context; the
+            # UI (Tier 3) turns these into an interactive punch list.
+            if ident.kind == "breakout":
+                warnings.append(
+                    f"{target_codec.name}: {source_codec.name} port {name!r} "
+                    f"is lane {ident.breakout_lane} of breakout parent "
+                    f"{ident.breakout_parent!r} — target has no native "
+                    f"breakout representation; review target port mapping."
+                )
+            elif ident.kind == "hw_aggregate":
+                members = ", ".join(ident.aggregate_members) or "unknown"
+                warnings.append(
+                    f"{target_codec.name}: {source_codec.name} interface "
+                    f"{name!r} is a {ident.aggregate_kind or 'hardware'} "
+                    f"aggregate of [{members}]; target lacks this concept "
+                    f"— enumerate member ports or LAG manually."
+                )
+            elif ident.kind == "loopback":
+                warnings.append(
+                    f"{target_codec.name}: {source_codec.name} loopback "
+                    f"{name!r} has no native representation; drop or "
+                    f"carry as raw_section."
+                )
+            elif ident.kind == "tunnel":
+                warnings.append(
+                    f"{target_codec.name}: {source_codec.name} tunnel "
+                    f"{name!r} has no direct representation; tunnel "
+                    f"configuration is inherently vendor-specific and "
+                    f"needs manual porting."
+                )
+            elif ident.kind == "mgmt":
+                warnings.append(
+                    f"{target_codec.name}: {source_codec.name} mgmt "
+                    f"interface {name!r} — target OOBM model differs; "
+                    f"review target mgmt config."
+                )
+            else:
+                warnings.append(
+                    f"{target_codec.name}: no native representation for "
+                    f"{ident.kind} {name!r} "
+                    f"(source {source_codec.name}); left verbatim."
+                )
+            # Auto-drop: the target codec can't represent this name,
+            # so leaving it verbatim in the canonical tree pollutes
+            # the rendered output with invalid source-vendor syntax.
+            # Default strip_unmappable=True removes the name from
+            # downstream rendering; operators who explicitly want to
+            # keep it can use a verbatim-override (``map[name] =
+            # name``) or the Tier 3 UI's "keep verbatim" link.
+            if strip_unmappable:
+                auto_dropped.add(name)
+            memo[name] = name
+            return name
+        # A structurally-clean rename can STILL drop a source-side
+        # semantic the target can't carry.  A hardware-switch member
+        # (FortiGate ``internalN`` / ``lanN``) maps to a positional
+        # target name by name-shape only — the L2-fabric membership is
+        # lost even though the rename "succeeded".  This is the
+        # success-branch analogue of the ``hw_aggregate`` warning above
+        # (which fires for the bare ``internal`` / ``lan`` aggregate).
+        # Same-vendor round-trip reproduces the name losslessly, so
+        # gate on a cross-vendor pair to avoid spurious noise.  The
+        # rename is still applied + recorded; the advisory rides
+        # alongside it (the operator needs both).
+        if ident.hw_switch_member and source_codec.name != target_codec.name:
+            warnings.append(
+                f"{target_codec.name}: {source_codec.name} port {name!r} is "
+                f"a hardware-switch (L2 fabric) member; the mapping to {out!r} "
+                f"is positional (name-shape only) and does NOT carry the "
+                f"L2-switch membership — verify the target port's physical "
+                f"cabling and L2 role."
+            )
+        memo[name] = out
+        if out != name:
+            applied[name] = out
+        return out
+
+    # (#49b) Snapshot every port name actually present in the tree BEFORE the
+    # rewrite sweep mutates names in place — used to (a) warn on operator map
+    # entries that named a port absent from the config, and (b) avoid
+    # over-reporting those absent names as "dropped" (mirrors local_user /
+    # snmpv3 honesty).
+    present_names: set[str] = set()
+    for iface in intent.interfaces:
+        present_names.add(iface.name)
+        if iface.lag_member_of:
+            present_names.add(iface.lag_member_of)
+        # (#3) VRRP track-interface references are port names too.
+        for grp in iface.vrrp_groups:
+            present_names.update(grp.track_interfaces)
+    for vlan in intent.vlans:
+        present_names.update(vlan.tagged_ports)
+        present_names.update(vlan.untagged_ports)
+    for lag in intent.lags:
+        present_names.add(lag.name)
+        present_names.update(lag.members)
+    for route in intent.static_routes:
+        if route.interface:
+            present_names.add(route.interface)
+    for pool in intent.dhcp_servers:
+        if pool.interface:
+            present_names.add(pool.interface)
+    # (#3) VXLAN VTEP source-interface is a port name (Loopback0 / lo0.0).
+    for vx in intent.vxlan_vnis:
+        if vx.source_interface:
+            present_names.add(vx.source_interface)
+
+    # (#6) Strip operator-requested drops BEFORE the rename sweep so a rename
+    # TARGET that reuses a dropped SOURCE name isn't itself deleted afterwards.
+    if user_dropped:
+        _strip_dropped_ports(intent, user_dropped)
+
+    # Rewrite everywhere a port name might be referenced.  Order doesn't
+    # matter — memoisation keeps us idempotent.
+    for iface in intent.interfaces:
+        iface.name = resolve(iface.name)
+        if iface.lag_member_of:
+            iface.lag_member_of = resolve(iface.lag_member_of)
+        # (#3) Rewrite each VRRP group's track-interface list so failover
+        # tracking survives a rename (a stale name silently disables it).
+        for grp in iface.vrrp_groups:
+            grp.track_interfaces = [resolve(t) for t in grp.track_interfaces]
+    for vlan in intent.vlans:
+        vlan.tagged_ports = [resolve(p) for p in vlan.tagged_ports]
+        vlan.untagged_ports = [resolve(p) for p in vlan.untagged_ports]
+    for lag in intent.lags:
+        lag.name = resolve(lag.name)
+        lag.members = [resolve(m) for m in lag.members]
+    for route in intent.static_routes:
+        if route.interface:
+            route.interface = resolve(route.interface)
+    for pool in intent.dhcp_servers:
+        if pool.interface:
+            pool.interface = resolve(pool.interface)
+    # (#3) Rewrite the VXLAN VTEP source-interface so the binding stays valid
+    # on the target (a stale source name breaks the whole VTEP).
+    for vx in intent.vxlan_vnis:
+        if vx.source_interface:
+            vx.source_interface = resolve(vx.source_interface)
+
+    # Strip pass: remove every reference to an AUTO-dropped (unmappable) name
+    # from the canonical tree.  Runs AFTER the rename sweep — these names stay
+    # verbatim through the sweep so their post-sweep name equals their source
+    # name.  (User drops were already stripped above, pre-sweep — see #6.)
+    if auto_dropped:
+        _strip_dropped_ports(intent, auto_dropped)
+
+    # (#17) Detect rename TARGET collisions: two+ source ports resolving to the
+    # same final interface/LAG name render duplicate stanzas (same-vendor) or
+    # fuse into one interface on re-parse (cross-vendor) — previously silent
+    # (warnings=[]).  The vlan / local-user / snmpv3 orchestrators surface
+    # target collisions; the ports pane didn't.  Warn (naming the colliding
+    # sources) so the operator can map each source to a distinct target.  We do
+    # NOT drop/merge here: some targets already dedupe + annotate the collision
+    # at render time (FortiGate emits ``# port collision``), and dropping at the
+    # orchestrator would pre-empt that and silently discard a port's config.
+    def _warn_collisions(objs: list, kind: str) -> None:
+        counts: dict[str, int] = {}
+        for obj in objs:
+            counts[obj.name] = counts.get(obj.name, 0) + 1
+        for final in sorted(n for n, c in counts.items() if c > 1):
+            sources = sorted(s for s, f in memo.items() if f == final) or [final]
+            warnings.append(
+                f"port_rename: multiple source ports map to {final!r} "
+                f"(sources: {', '.join(sources)}); the target will render "
+                f"duplicate/fused {kind} stanzas — map each source to a "
+                f"distinct target"
+            )
+
+    _warn_collisions(intent.interfaces, "interface")
+    _warn_collisions(intent.lags, "LAG")
+
+    # (#49b) Operator drop/rename keys that named a port absent from the tree
+    # did nothing — warn instead of silently over-reporting them as dropped.
+    for key in user_map:
+        if key not in present_names:
+            warnings.append(
+                f"port_rename: source port {key!r} does not exist in the "
+                f"parsed config; entry ignored"
+            )
+    # Report only drops that actually removed a present name (auto-dropped
+    # unmappable names were resolved from real references, so they qualify).
+    reported_dropped = sorted(
+        d for d in (user_dropped | auto_dropped) if d in present_names
+    )
+
+    # (#4) A rename/drop invalidates any verbatim vendor-provenance group
+    # bodies (Junos apply-groups): the target's render re-emits those bodies
+    # UNCHANGED, resurrecting the PRE-rename interface names alongside the
+    # renamed ones (the same IP ends up on two ports).  The flattened
+    # canonical tree already carries the group semantics, so drop the
+    # verbatim bodies + apply-group refs once names have moved — mirrors the
+    # sanitizer's group_content strip.  Fail closed with a warning.
+    if (applied or reported_dropped) and (
+        intent.group_content or intent.apply_groups
+    ):
+        intent.group_content = {}
+        intent.apply_groups = []
+        warnings.append(
+            "port_rename: cleared verbatim apply-group bodies because a "
+            "rename/drop was applied — group content was flattened into the "
+            "canonical tree to avoid resurrecting pre-rename names"
+        )
+
+    logger.debug(
+        "translate_port_names: exit %s → %s applied=%d dropped=%d "
+        "warnings=%d",
+        source_codec.name, target_codec.name,
+        len(applied),
+        len(reported_dropped),
+        len(warnings),
+    )
+    return PortRenameResult(
+        applied=applied,
+        warnings=warnings,
+        dropped=reported_dropped,
+    )
+
+
+def _strip_dropped_ports(
+    intent: CanonicalIntent, dropped: set[str]
+) -> None:
+    """Remove every reference to *dropped* port names from *intent*.
+
+    Cascades through every canonical field that stores a port name:
+
+        * ``intent.interfaces`` — interfaces whose name is dropped
+          are deleted outright.  Surviving interfaces get their
+          ``lag_member_of`` cleared if the referenced LAG is dropped.
+        * ``intent.vlans[].tagged_ports`` / ``untagged_ports`` —
+          dropped names filtered out.
+        * ``intent.lags`` — LAGs whose name is dropped are deleted;
+          surviving LAGs get their ``members`` list filtered.
+        * ``intent.static_routes`` — routes whose ``interface`` is
+          dropped are deleted (they no longer have a viable egress).
+        * ``intent.dhcp_servers`` — pools whose ``interface`` is
+          dropped are deleted (pool has no interface to serve).
+        * ``intent.interfaces[].vrrp_groups[].track_interfaces`` — dropped
+          names filtered out (a dangling track ref silently disables
+          failover on the target).
+        * ``intent.vxlan_vnis[].source_interface`` — cleared if dropped
+          (a dangling VTEP source breaks the whole overlay binding).
+
+    Mutates *intent* in place.  Idempotent: subsequent calls with the
+    same *dropped* set are no-ops.
+    """
+    intent.interfaces = [
+        i for i in intent.interfaces if i.name not in dropped
+    ]
+    for iface in intent.interfaces:
+        if iface.lag_member_of in dropped:
+            iface.lag_member_of = None
+        # (#3) Drop dangling VRRP track-interface references.
+        for grp in iface.vrrp_groups:
+            grp.track_interfaces = [
+                t for t in grp.track_interfaces if t not in dropped
+            ]
+    for vlan in intent.vlans:
+        vlan.tagged_ports = [
+            p for p in vlan.tagged_ports if p not in dropped
+        ]
+        vlan.untagged_ports = [
+            p for p in vlan.untagged_ports if p not in dropped
+        ]
+    intent.lags = [lag for lag in intent.lags if lag.name not in dropped]
+    for lag in intent.lags:
+        lag.members = [m for m in lag.members if m not in dropped]
+    # (#19) Guard on a truthy interface: a gateway-only route / unbound pool
+    # has ``interface == ''`` and must never be matched by a drop set (an
+    # empty-string drop key would otherwise delete every one of them).
+    intent.static_routes = [
+        r for r in intent.static_routes
+        if not (r.interface and r.interface in dropped)
+    ]
+    intent.dhcp_servers = [
+        p for p in intent.dhcp_servers
+        if not (p.interface and p.interface in dropped)
+    ]
+    # (#3) Clear dangling VXLAN VTEP source-interface references.
+    for vx in intent.vxlan_vnis:
+        if vx.source_interface in dropped:
+            vx.source_interface = ""
+
+
+def build_port_rename_transform(
+    source_codec: CodecBase,
+    target_codec: CodecBase,
+    rename_map: dict[str, str | None] | None = None,
+    strip_unmappable: bool = True,
+) -> tuple[Callable[[CanonicalIntent], CanonicalIntent], PortRenameResult]:
+    """Return a pipeline-compatible transform + a result accumulator
+    for cross-vendor port-name rewriting.
+
+    Tier-2 factory: callers build the transform with or without a
+    user rename map and feed it into ``run_plan`` alongside any other
+    transforms.  The pipeline stays oblivious — ``run_plan`` just
+    sees another ``TransformCallable``.  Pattern is mirrored by the
+    other four per-pane orchestrators
+    (:func:`build_vlan_rename_transform`,
+    :func:`build_local_user_rename_transform`,
+    :func:`build_snmp_community_rename_transform`,
+    :func:`build_snmpv3_user_rename_transform`).
+
+    Args:
+        source_codec: Adapter for the source vendor — supplies
+            ``classify_port_name`` for the auto-heuristic path.
+        target_codec: Adapter for the target vendor — supplies
+            ``format_port_identity`` so the cross-vendor bridge can
+            emit native target-vendor names.
+        rename_map: Optional ``{source_name: target_name | None}``
+            override map.  Sentinel semantics (per AGENTS.md +
+            ``run_plan_with_overrides`` docstring):
+
+              * ``None`` — pane not engaged (caller should not even
+                wrap this transform; included for symmetry).
+              * ``{}`` — engaged with auto-heuristic only; the
+                cross-vendor classifier → formatter bridge runs but
+                no explicit overrides are applied.
+              * ``{src: tgt}`` — explicit rewrite; wins over the
+                auto-heuristic.
+              * ``{src: None}`` — explicit drop; the source name is
+                stripped from every canonical-tree field that
+                referenced it (interfaces, VLAN port lists, LAGs,
+                static-route interfaces, DHCP pools).
+        strip_unmappable: When the auto-heuristic finds no target
+            equivalent for a source name, ``True`` (default) drops
+            the name from the canonical tree alongside the warning;
+            ``False`` leaves it verbatim.
+
+    Returns:
+        Tuple of ``(transform_fn, result)``.  ``transform_fn`` fits
+        the existing ``run_plan(transforms=...)`` signature — it
+        takes an intent, mutates it in-place via
+        :func:`translate_port_names`, and returns the same intent.
+        ``result`` is a :class:`PortRenameResult` that accumulates
+        applied / warnings / dropped entries across any invocations
+        of the transform (in practice, just one per pipeline run).
+        The caller reads ``result`` after the pipeline finishes to
+        surface the rewrite outcome on the :class:`MigrationJob`.
+    """
+    result = PortRenameResult()
+
+    def transform(intent: CanonicalIntent) -> CanonicalIntent:
+        outcome = translate_port_names(
+            intent, source_codec, target_codec, rename_map,
+            strip_unmappable=strip_unmappable,
+        )
+        # Merge into the shared result object so the caller sees the
+        # aggregate even if the transform runs more than once.
+        result.applied.update(outcome.applied)
+        result.warnings.extend(outcome.warnings)
+        # Union of drops (order-preserving dedup).
+        seen = set(result.dropped)
+        for name in outcome.dropped:
+            if name not in seen:
+                result.dropped.append(name)
+                seen.add(name)
+        return intent
+
+    return transform, result

@@ -1,0 +1,2317 @@
+"""
+Unit tests for the Juniper Junos codec.
+
+v1 — set-form parse-only (shipped Phase 13).
+v2a — flat set-form render added (GAP 2 commit); apply-groups
+      optimisation deferred to v2b.
+
+Real-capture parse is exercised separately by
+``test_real_captures.py`` against
+``tests/fixtures/real/junos/buraglio_netlab_junos184.set``.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from netcanon.migration.canonical.intent import (
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
+    CanonicalLAG,
+    CanonicalLocalUser,
+    CanonicalSNMP,
+    CanonicalStaticRoute,
+    CanonicalVlan,
+    CanonicalVRRPGroup,
+)
+from netcanon.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.juniper_junos import JunosCodec
+from netcanon.migration.codecs.juniper_junos.port_names import (
+    classify_port_name,
+    format_port_identity,
+)
+
+pytestmark = pytest.mark.unit
+
+
+# ---------------------------------------------------------------------------
+# Parse — top-level scalars
+# ---------------------------------------------------------------------------
+
+
+class TestParseScalars:
+    def test_hostname(self):
+        intent = JunosCodec().parse("set system host-name sw-edge-01\n")
+        assert intent.hostname == "sw-edge-01"
+
+    def test_hostname_with_dots(self):
+        """Real-world: FQDN hostnames are common on service-provider
+        edge devices."""
+        intent = JunosCodec().parse(
+            "set system host-name sw-edge-01.example.com\n"
+        )
+        assert intent.hostname == "sw-edge-01.example.com"
+
+    def test_set_version_not_stored_as_hostname(self):
+        """``set version 18.4R1`` must not leak into hostname."""
+        raw = (
+            "set version 18.4R1\n"
+            "set system host-name real-host\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "real-host"
+
+    def test_source_version_set_form(self):
+        """``set version`` (display-set) captured into source_version."""
+        raw = (
+            "set version 25.4R1.12\n"
+            "set system host-name r1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.source_version == "25.4R1.12"
+
+    def test_source_version_service_release(self):
+        """Hyphenated service-release token captured whole."""
+        raw = "set version 18.4R1-S1.1\nset system host-name r1\n"
+        intent = JunosCodec().parse(raw)
+        assert intent.source_version == "18.4R1-S1.1"
+
+    def test_source_version_block_form(self):
+        """Block-form ``version X;`` is captured from the original input
+        (before the block→set conversion), trailing semicolon stripped."""
+        raw = (
+            "system {\n"
+            '    host-name r1;\n'
+            "}\n"
+            "version 21.4R3.15;\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.source_version == "21.4R3.15"
+
+    def test_source_version_absent(self):
+        """No version statement → honest empty string."""
+        intent = JunosCodec().parse("set system host-name r1\n")
+        assert intent.source_version == ""
+
+
+# ---------------------------------------------------------------------------
+# Parse — interfaces
+# ---------------------------------------------------------------------------
+
+
+class TestParseInterfaces:
+    def test_interface_with_ipv4_on_unit_0(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/31\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert len(intent.interfaces) == 1
+        iface = intent.interfaces[0]
+        assert iface.name == "ge-0/0/0"
+        assert iface.ipv4_addresses[0].ip == "10.0.0.1"
+        assert iface.ipv4_addresses[0].prefix_length == 31
+
+    def test_interface_description_top_level(self):
+        """Junos allows description at interface OR unit level.  v1
+        captures both into ``iface.description``."""
+        raw = (
+            "set system host-name sw1\n"
+            'set interfaces ge-0/0/0 description "uplink to core"\n'
+            "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/31\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = intent.interfaces[0]
+        assert iface.description == "uplink to core"
+
+    def test_interface_description_on_unit(self):
+        """``unit 0 description`` also captured as the iface description."""
+        raw = (
+            "set system host-name sw1\n"
+            'set interfaces ge-0/0/0 unit 0 description "Unit desc"\n'
+        )
+        intent = JunosCodec().parse(raw)
+        iface = intent.interfaces[0]
+        assert iface.description == "Unit desc"
+
+    def test_interface_disable(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set interfaces ge-0/0/5 disable\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = intent.interfaces[0]
+        assert iface.enabled is False
+
+    def test_multiple_interfaces_different_media(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set interfaces em0 unit 0 family inet address 172.22.0.253/24\n"
+            "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/31\n"
+            "set interfaces xe-0/0/48 unit 0 family inet address 10.1.1.1/30\n"
+            "set interfaces lo0 unit 0 family inet address 172.16.0.1/32\n"
+        )
+        intent = JunosCodec().parse(raw)
+        names = [i.name for i in intent.interfaces]
+        assert names == ["em0", "ge-0/0/0", "lo0", "xe-0/0/48"]
+
+    def test_unit_nonzero_not_materialised_in_v1(self):
+        """Sub-units 1+ on non-physical interfaces not modelled in v1."""
+        raw = (
+            "set system host-name sw1\n"
+            "set interfaces ge-0/0/0 unit 10 family inet address 10.1.1.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        # Interface exists but no IPv4 (unit 10 ignored).
+        ifaces = [i for i in intent.interfaces if i.name == "ge-0/0/0"]
+        assert len(ifaces) == 1
+        assert len(ifaces[0].ipv4_addresses) == 0
+
+
+# ---------------------------------------------------------------------------
+# Parse — VLANs
+# ---------------------------------------------------------------------------
+
+
+class TestParseVlans:
+    def test_vlan_with_id(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set vlans USERS vlan-id 10\n"
+            "set vlans VOICE vlan-id 20\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert len(intent.vlans) == 2
+        vlan_map = {v.id: v.name for v in intent.vlans}
+        assert vlan_map == {10: "USERS", 20: "VOICE"}
+
+
+# ---------------------------------------------------------------------------
+# Parse — local users
+# ---------------------------------------------------------------------------
+
+
+class TestParseUsers:
+    def test_user_with_class_and_password(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set system login user netadmin class super-user\n"
+            "set system login user netadmin authentication "
+            'encrypted-password "$6$abcdef$hash"\n'
+        )
+        intent = JunosCodec().parse(raw)
+        assert len(intent.local_users) == 1
+        u = intent.local_users[0]
+        assert u.name == "netadmin"
+        assert u.role == "super-user"
+        assert u.privilege_level == 15  # super-user → 15
+        assert u.hashed_password == "junos:$6$abcdef$hash"
+
+    def test_user_read_only_class_gets_privilege_1(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set system login user operator class read-only\n"
+        )
+        intent = JunosCodec().parse(raw)
+        u = intent.local_users[0]
+        assert u.role == "read-only"
+        assert u.privilege_level == 1
+
+    def test_root_authentication_ignored(self):
+        """``set system root-authentication encrypted-password`` is
+        NOT a user declaration — it configures the root account's
+        auth.  v1 ignores it (Tier-3)."""
+        raw = (
+            "set system host-name sw1\n"
+            "set system root-authentication encrypted-password "
+            '"$6$abcd$foo"\n'
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.local_users == []
+
+
+# ---------------------------------------------------------------------------
+# Parse — static routes
+# ---------------------------------------------------------------------------
+
+
+class TestParseStaticRoutes:
+    def test_default_route(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.2\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert len(intent.static_routes) == 1
+        r = intent.static_routes[0]
+        assert r.destination == "0.0.0.0/0"
+        assert r.gateway == "10.0.0.2"
+
+    def test_multiple_routes(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.2\n"
+            "set routing-options static route 192.168.0.0/16 next-hop 10.0.0.3\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert len(intent.static_routes) == 2
+
+
+# ---------------------------------------------------------------------------
+# Parse — LAG mode (promotion #5)
+# ---------------------------------------------------------------------------
+
+
+class TestParseLagMode:
+    def test_static_bundle_is_static_not_active(self):
+        """A bundle seen only through its members (no ``lacp active|passive``
+        line) is STATIC — not active.  Defaulting to active invented
+        ``lacp active`` on re-render, which downs a static-bonded peer."""
+        raw = (
+            "set interfaces ge-0/0/0 ether-options 802.3ad ae0\n"
+            "set interfaces ge-0/0/1 ether-options 802.3ad ae0\n"
+        )
+        lags = JunosCodec().parse(raw).lags
+        assert [(lag.name, lag.mode) for lag in lags] == [("ae0", "static")]
+
+    def test_lacp_periodic_does_not_clobber_passive(self):
+        """``lacp periodic <interval>`` does not enable/disable LACP and must
+        not overwrite an explicit ``lacp passive`` that precedes it."""
+        raw = (
+            "set interfaces ge-0/0/0 ether-options 802.3ad ae1\n"
+            "set interfaces ae1 aggregated-ether-options lacp passive\n"
+            "set interfaces ae1 aggregated-ether-options lacp periodic fast\n"
+        )
+        lags = JunosCodec().parse(raw).lags
+        assert lags[0].mode == "passive"
+
+    @pytest.mark.parametrize("mode", ["active", "passive", "static"])
+    def test_lag_mode_round_trips(self, mode):
+        """render→reparse preserves every mode; active/passive emit a ``lacp``
+        line, static emits none (and re-parses as static)."""
+        codec = JunosCodec()
+        tree = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="ge-0/0/0", lag_member_of="ae0")],
+            lags=[CanonicalLAG(name="ae0", members=["ge-0/0/0"], mode=mode)],
+        )
+        rendered = codec.render(tree)
+        assert ("lacp" in rendered) == (mode in ("active", "passive"))
+        reparsed = codec.parse(rendered)
+        assert reparsed.lags[0].mode == mode
+
+    def test_lag_mode_classified_supported(self):
+        assert JunosCodec().capabilities.classify("/lags/lag/mode") == "supported"
+
+
+# ---------------------------------------------------------------------------
+# Parse — SNMP
+# ---------------------------------------------------------------------------
+
+
+class TestParseSnmp:
+    def test_community_read_only(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set snmp community public authorization read-only\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.snmp is not None
+        assert intent.snmp.community == "public"
+
+    def test_location_and_contact(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set snmp community public authorization read-only\n"
+            'set snmp location "Rack 4 DC1"\n'
+            "set snmp contact netops@example.com\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.snmp.location == "Rack 4 DC1"
+        assert intent.snmp.contact == "netops@example.com"
+
+
+# ---------------------------------------------------------------------------
+# Parse — validation
+# ---------------------------------------------------------------------------
+
+
+class TestParseValidation:
+    def test_empty_input_raises(self):
+        with pytest.raises(ParseError, match="empty"):
+            JunosCodec().parse("")
+
+    def test_xml_input_rejected(self):
+        with pytest.raises(ParseError, match="XML"):
+            JunosCodec().parse("<config/>")
+
+    def test_block_form_now_accepted_via_gap_9a_conversion(self):
+        """GAP 9a: block-form (curly-brace hierarchical) input now
+        parses via automatic conversion to set-form.  The earlier
+        rejection-with-helpful-hint behaviour was removed in the
+        v2b commit."""
+        raw = "system {\n    host-name sw1;\n}\n"
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "sw1"
+
+    def test_render_rejects_non_canonical_tree(self):
+        """Render is strict: anything other than a CanonicalIntent raises
+        RenderError — matching the CodecBase.render contract + the other
+        codecs, so the pipeline catches it in the render stage (R-03)."""
+        with pytest.raises(RenderError, match="CanonicalIntent"):
+            JunosCodec().render({"hostname": "oops"})
+
+
+# ---------------------------------------------------------------------------
+# Parse tolerance — unknown stanzas silently ignored
+# ---------------------------------------------------------------------------
+
+
+class TestParseTolerance:
+    def test_bgp_stanza_ignored(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set protocols bgp group bgp-te type internal\n"
+            "set protocols bgp group bgp-te local-address 10.0.0.1\n"
+            "set protocols bgp group bgp-te neighbor 10.0.0.2\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "sw1"
+        # BGP doesn't populate any canonical fields in v1.
+
+    def test_isis_stanza_ignored(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set protocols isis interface ge-0/0/0.0 level 2 metric 100\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "sw1"
+
+    def test_firewall_filter_ignored(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set firewall family inet filter cull term c1 "
+            "from source-port 179\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "sw1"
+
+
+# ---------------------------------------------------------------------------
+# Probe
+# ---------------------------------------------------------------------------
+
+
+class TestProbe:
+    def test_set_version_banner_signal(self):
+        raw = "set version 23.2R1.14\nset system host-name sw1\n"
+        result = JunosCodec.probe(raw)
+        assert result is not None
+        score, reason = result
+        assert score >= 85
+        assert "version" in reason.lower()
+
+    def test_multiple_markers_signal(self):
+        raw = (
+            "set system host-name sw1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/31\n"
+            "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.2\n"
+            "set vlans USERS vlan-id 10\n"
+        )
+        result = JunosCodec.probe(raw)
+        assert result is not None
+        score, _ = result
+        assert score >= 85  # 4 markers → strong signal
+
+    def test_rancid_juniper_header_detected(self):
+        """RANCID collection header (Junos comment char ``#``, with or
+        without a space) is a definitive Juniper declaration — claims
+        block-form / marker-light captures the set-form markers miss."""
+        for header in ("# RANCID-CONTENT-TYPE: juniper", "#RANCID-CONTENT-TYPE: juniper"):
+            raw = header + "\nsystem {\n    host-name r1;\n}\n"
+            result = JunosCodec.probe(raw)
+            assert result is not None, header
+            score, reason = result
+            assert score >= 95, header
+            assert "juniper" in reason
+
+    def test_non_junos_returns_none(self):
+        """Cisco IOS-like text must NOT probe as Junos."""
+        raw = (
+            "hostname router1\n"
+            "interface GigabitEthernet0/0\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+        )
+        result = JunosCodec.probe(raw)
+        # No set-form lines — must not claim a match.
+        assert result is None or result[0] < 60
+
+    def test_block_form_returns_none(self):
+        """Block-form curly-brace input isn't parseable in v1; probe
+        must not claim it."""
+        assert JunosCodec.probe("{ system { host-name sw1; } }") is None
+
+
+# ---------------------------------------------------------------------------
+# port_names identity bridge
+# ---------------------------------------------------------------------------
+
+
+class TestPortNames:
+    def test_classify_ge_3part(self):
+        ident = classify_port_name("ge-0/0/24")
+        assert ident.kind == "physical"
+        assert ident.stack == 0
+        assert ident.module == 0
+        assert ident.port == 24
+        assert ident.name_speed_hint == "gig"
+
+    def test_classify_xe_speed_hint(self):
+        ident = classify_port_name("xe-1/0/47")
+        assert ident.kind == "physical"
+        assert ident.name_speed_hint == "10gig"
+
+    def test_classify_et_speed_hint(self):
+        ident = classify_port_name("et-0/0/0")
+        assert ident.name_speed_hint == "100gig"
+
+    def test_classify_em0_mgmt(self):
+        ident = classify_port_name("em0")
+        assert ident.kind == "mgmt"
+        assert ident.port == 0
+
+    def test_classify_lo0_loopback(self):
+        ident = classify_port_name("lo0")
+        assert ident.kind == "loopback"
+        assert ident.index == 0
+
+    def test_classify_ae0_lag(self):
+        ident = classify_port_name("ae0")
+        assert ident.kind == "lag"
+        assert ident.index == 0
+
+    def test_classify_irb_svi(self):
+        ident = classify_port_name("irb.10")
+        assert ident.kind == "svi"
+        assert ident.index == 10
+
+    def test_classify_unknown_returns_unknown(self):
+        ident = classify_port_name("SomeWeirdPort")
+        assert ident.kind == "unknown"
+
+    def test_format_ge_roundtrip(self):
+        ident = classify_port_name("ge-0/0/24")
+        assert format_port_identity(ident) == "ge-0/0/24"
+
+    def test_format_xe_roundtrip(self):
+        ident = classify_port_name("xe-1/0/47")
+        assert format_port_identity(ident) == "xe-1/0/47"
+
+    def test_format_cross_vendor_cisco_to_junos(self):
+        """Cisco GigabitEthernet1/0/24 (stack=1, module=0, port=24)
+        → Junos ge-1/0/24."""
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
+            classify_port_name as cisco_classify,
+        )
+        cisco_ident = cisco_classify("GigabitEthernet1/0/24")
+        junos_name = format_port_identity(cisco_ident)
+        assert junos_name == "ge-1/0/24"
+
+    def test_format_cross_vendor_tengig(self):
+        """Cisco TenGigabitEthernet1/0/48 → Junos xe-1/0/48
+        (speed hint drives media prefix choice)."""
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
+            classify_port_name as cisco_classify,
+        )
+        cisco_ident = cisco_classify("TenGigabitEthernet1/0/48")
+        junos_name = format_port_identity(cisco_ident)
+        assert junos_name == "xe-1/0/48"
+
+
+# ---------------------------------------------------------------------------
+# Render (v2a — flat set-form, no apply-groups)
+# ---------------------------------------------------------------------------
+
+
+class TestRenderBasic:
+    def test_render_empty_tree(self):
+        """Rendering an empty intent yields an empty string (no noise
+        lines).  Operator pasting an empty output gets silent no-op."""
+        out = JunosCodec().render(CanonicalIntent())
+        assert out == ""
+
+    def test_render_hostname_only(self):
+        intent = CanonicalIntent(hostname="sw1")
+        out = JunosCodec().render(intent)
+        assert out == "set system host-name sw1\n"
+
+    def test_render_fqdn_hostname(self):
+        intent = CanonicalIntent(hostname="sw-edge-01.example.com")
+        out = JunosCodec().render(intent)
+        assert "set system host-name sw-edge-01.example.com" in out
+
+    def test_render_deterministic(self):
+        """Repeated renders of the same tree must produce identical
+        output — load-bearing for diff-based deploy + snapshot compare."""
+        intent = CanonicalIntent(
+            hostname="deterministic-host",
+            vlans=[
+                CanonicalVlan(id=10, name="USERS"),
+                CanonicalVlan(id=20, name="VOICE"),
+            ],
+        )
+        codec = JunosCodec()
+        first = codec.render(intent)
+        second = codec.render(intent)
+        assert first == second
+
+
+class TestRenderInterfaces:
+    def test_render_simple_interface(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0",
+                    description="uplink to core",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.0.0.1", prefix_length=31),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert 'set interfaces ge-0/0/0 description "uplink to core"' in out
+        assert (
+            "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/31"
+            in out
+        )
+
+    def test_render_disabled_interface(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="ge-0/0/5", enabled=False),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces ge-0/0/5 disable" in out
+
+    def test_render_loopback_with_ip(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="lo0",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="172.16.0.1", prefix_length=32),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces lo0 unit 0 family inet address 172.16.0.1/32"
+            in out
+        )
+
+    def test_render_description_quoting(self):
+        """Descriptions with special chars get escaped in the double-
+        quoted wrapper — operator should paste the render output back
+        and have it parse identically."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/1",
+                    description='uplink with "quoted" words',
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert 'description "uplink with \\"quoted\\" words"' in out
+
+    def test_render_multiple_ipv4_addresses(self):
+        """Junos allows multiple `family inet address` entries per unit;
+        render each on its own line preserving order."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24),
+                        CanonicalIPv4Address(ip="10.0.1.1", prefix_length=24),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "10.0.0.1/24" in out
+        assert "10.0.1.1/24" in out
+        assert out.index("10.0.0.1/24") < out.index("10.0.1.1/24")
+
+    def test_render_bare_interface_preserves_junos_physical_for_round_trip(self):
+        """Updated regression guard for the bare-interface round-trip
+        bug surfaced by the ksator EX4550 fixture (originally GAP 3).
+
+        Junos parse creates an interface entry for every
+        ``set interfaces <name> ...`` line seen — including lines
+        whose trailing tokens are all Tier-3 grammar (e.g.
+        ``unit 0 family ethernet-switching port-mode trunk``) that
+        the canonical tree can't carry.  Those interfaces end up
+        with no description, no IP, enabled=True — nothing the
+        canonical model surfaces.
+
+        Round-trip stability fix: render emits ``set interfaces
+        <name>`` as a placeholder declaration so the interface
+        survives re-parse — but ONLY when ``<name>`` matches a
+        Junos physical-port shape (``ge-X/Y/Z``, ``xe-X/Y/Z``,
+        ``et-X/Y/Z``, ``mge-X/Y/Z``, ``fxp0``, ``me0``, ``lo0``,
+        ``irb``).  Cross-vendor renames into Junos (Cisco
+        ``Vlan1`` → ``irb.1``, etc.) deliberately don't match —
+        skipping their empty stubs is the user_smoke_findings
+        issue #9 fix.
+        """
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="xe-0/0/0",
+                    description="",
+                    enabled=True,
+                ),
+            ],
+        )
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        assert "set interfaces xe-0/0/0\n" in rendered or (
+            rendered.rstrip().endswith("set interfaces xe-0/0/0")
+        )
+        # Round-trip stability: the iface canonical comes back.
+        reparsed = codec.parse(rendered)
+        assert len(reparsed.interfaces) == 1
+        assert reparsed.interfaces[0].name == "xe-0/0/0"
+
+    def test_render_empty_irb_subiface_skipped(self):
+        """Cross-vendor renames into Junos (e.g. Cisco ``Vlan1`` →
+        ``irb.1``) with no L3 attributes deliberately drop the
+        empty ``set interfaces irb.1`` stub.  Sub-iface names
+        (those with ``.``) are logical-only on Junos — an empty
+        canonical sub-iface means there's nothing to declare.
+        Issue #9 in user_smoke_findings.md."""
+        intent = CanonicalIntent(
+            hostname="lab-sw1",
+            interfaces=[CanonicalInterface(name="irb.1")],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces irb.1" not in out
+
+
+class TestRenderVlans:
+    def test_render_named_vlan(self):
+        intent = CanonicalIntent(vlans=[CanonicalVlan(id=10, name="USERS")])
+        out = JunosCodec().render(intent)
+        assert "set vlans USERS vlan-id 10" in out
+
+    def test_render_unnamed_vlan_uses_synthetic_key(self):
+        """VLANs without a name fall back to ``VLAN-<id>`` so Junos
+        grammar stays valid — ``set vlans <key> vlan-id N`` requires a
+        non-empty key."""
+        intent = CanonicalIntent(vlans=[CanonicalVlan(id=42)])
+        out = JunosCodec().render(intent)
+        assert "set vlans VLAN-42 vlan-id 42" in out
+
+    def test_render_vlan_name_with_space_quoted(self):
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=100, name="GUEST WIFI")],
+        )
+        out = JunosCodec().render(intent)
+        assert 'set vlans "GUEST WIFI" vlan-id 100' in out
+
+
+class TestRenderUsers:
+    def test_render_super_user_from_privilege(self):
+        """Privilege 15 with no explicit role → super-user on render."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(name="admin", privilege_level=15),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set system login user admin class super-user" in out
+
+    def test_render_read_only_from_privilege(self):
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(name="auditor", privilege_level=1),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set system login user auditor class read-only" in out
+
+    def test_render_explicit_role_wins_over_privilege(self):
+        """A role like ``super-user`` on the canonical user takes
+        precedence over the privilege-to-role fallback."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(
+                    name="admin",
+                    role="super-user",
+                    privilege_level=1,  # nonsense, but role must win
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "class super-user" in out
+
+    def test_render_encrypted_password_strips_vendor_tag(self):
+        """Hashes stored under ``junos:<hash>`` get the prefix stripped
+        on render so parse(render(tree)) is a true round-trip."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(
+                    name="admin",
+                    privilege_level=15,
+                    hashed_password="junos:$6$abcd$fake",
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert 'authentication encrypted-password "$6$abcd$fake"' in out
+        assert "junos:" not in out  # prefix must not leak
+
+    def test_render_hash_from_other_vendor_preserved_verbatim(self):
+        """If a hash lacks the junos: prefix (came from another
+        codec's canonical layer), emit it verbatim inside the
+        double-quoted wrapper — it's still a valid encrypted-password
+        value."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(
+                    name="admin",
+                    privilege_level=15,
+                    hashed_password="$9$foreign$hash",
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert 'authentication encrypted-password "$9$foreign$hash"' in out
+
+
+class TestRenderRouting:
+    def test_render_static_route(self):
+        intent = CanonicalIntent(
+            static_routes=[
+                CanonicalStaticRoute(
+                    destination="0.0.0.0/0",
+                    gateway="10.0.0.2",
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.2"
+            in out
+        )
+
+    def test_render_connected_route_skipped(self):
+        """Junos static routes require a next-hop; connected/blackhole
+        routes (empty gateway) have no representation in the flat
+        set-form grammar we emit, so skip them rather than produce
+        invalid input."""
+        intent = CanonicalIntent(
+            static_routes=[
+                CanonicalStaticRoute(destination="10.1.0.0/24", gateway=""),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "10.1.0.0/24" not in out
+
+
+class TestRenderSnmp:
+    def test_render_community_read_only(self):
+        intent = CanonicalIntent(snmp=CanonicalSNMP(community="public"))
+        out = JunosCodec().render(intent)
+        assert (
+            "set snmp community public authorization read-only" in out
+        )
+
+    def test_render_location_contact_quoted(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(
+                location="Rack 4 DC1",
+                contact="neteng@example.com",
+            ),
+        )
+        out = JunosCodec().render(intent)
+        assert 'set snmp location "Rack 4 DC1"' in out
+        assert 'set snmp contact "neteng@example.com"' in out
+
+    def test_render_trap_hosts(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(
+                trap_hosts=["10.1.1.100", "10.1.1.101"],
+            ),
+        )
+        out = JunosCodec().render(intent)
+        assert "set snmp trap-group targets targets 10.1.1.100" in out
+        assert "set snmp trap-group targets targets 10.1.1.101" in out
+
+
+class TestRenderRoundTrip:
+    """parse(render(tree)) == tree for every feature v2a emits."""
+
+    def _assert_roundtrip(self, intent: CanonicalIntent) -> None:
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        reparsed = codec.parse(rendered) if rendered.strip() else CanonicalIntent()
+        # Normalise source-vendor metadata (added by parse, not by
+        # caller-supplied intent).
+        reparsed.source_vendor = intent.source_vendor
+        reparsed.source_format = intent.source_format
+        assert reparsed.hostname == intent.hostname
+        assert len(reparsed.interfaces) == len(intent.interfaces)
+        assert len(reparsed.vlans) == len(intent.vlans)
+        assert len(reparsed.static_routes) == len(intent.static_routes)
+        assert len(reparsed.local_users) == len(intent.local_users)
+
+    def test_roundtrip_hostname_only(self):
+        self._assert_roundtrip(CanonicalIntent(hostname="sw1"))
+
+    def test_roundtrip_sample_input(self):
+        """The codec's sample_input round-trips via parse → render →
+        parse without data loss on any field v2a emits."""
+        codec = JunosCodec()
+        first = codec.parse(codec.sample_input)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        assert second.hostname == first.hostname
+        assert len(second.interfaces) == len(first.interfaces)
+        assert len(second.vlans) == len(first.vlans)
+        assert len(second.static_routes) == len(first.static_routes)
+        assert len(second.local_users) == len(first.local_users)
+        # SNMP field-by-field.
+        assert (second.snmp is None) == (first.snmp is None)
+        if first.snmp is not None:
+            assert second.snmp.community == first.snmp.community
+            assert second.snmp.location == first.snmp.location
+
+    def test_roundtrip_user_with_hash(self):
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(
+                    name="admin",
+                    privilege_level=15,
+                    role="super-user",
+                    hashed_password="junos:$6$abcd$fake",
+                ),
+            ],
+        )
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        reparsed = codec.parse(rendered)
+        assert len(reparsed.local_users) == 1
+        user = reparsed.local_users[0]
+        assert user.name == "admin"
+        assert user.role == "super-user"
+        assert user.privilege_level == 15
+        assert user.hashed_password == "junos:$6$abcd$fake"
+
+    def test_roundtrip_interface_with_special_chars_in_description(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/1",
+                    description="long haul link $to $us",
+                ),
+            ],
+        )
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        reparsed = codec.parse(rendered)
+        assert len(reparsed.interfaces) == 1
+        assert reparsed.interfaces[0].description == "long haul link $to $us"
+
+
+class TestRenderCodecMetadata:
+    def test_direction_promoted_to_bidirectional(self):
+        assert JunosCodec.direction == "bidirectional"
+
+    def test_render_idempotent_via_double_parse(self):
+        """Trees produced by re-parsing rendered output render
+        identically — proves render is deterministic on the parsed
+        form's ordering."""
+        codec = JunosCodec()
+        first = codec.parse(codec.sample_input)
+        rendered_a = codec.render(first)
+        second = codec.parse(rendered_a)
+        rendered_b = codec.render(second)
+        assert rendered_a == rendered_b
+
+
+# ---------------------------------------------------------------------------
+# GAP 4: apply-groups host-name inheritance
+# ---------------------------------------------------------------------------
+
+
+class TestApplyGroupsHostname:
+    """Junos allows host-name (and other system scalars) to live under a
+    named ``groups`` stanza that ``apply-groups`` composes into the
+    candidate config.  The ksator QFX5100 + EX4550 fixtures both follow
+    this convention — without wiring it, ``intent.hostname`` came out
+    empty even though the device clearly has a name.
+    """
+
+    def test_apply_groups_hostname_resolved(self):
+        raw = (
+            "set groups POC_Lab system host-name QFX5100-183\n"
+            "set apply-groups POC_Lab\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "QFX5100-183"
+
+    def test_top_level_hostname_wins_over_group(self):
+        """A top-level ``set system host-name`` takes precedence over
+        any group-scoped fallback — matches Junos's own config-
+        composition semantics (direct intent > inherited group)."""
+        raw = (
+            "set system host-name real-host\n"
+            "set groups POC_Lab system host-name group-host\n"
+            "set apply-groups POC_Lab\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "real-host"
+
+    def test_unapplied_group_hostname_ignored(self):
+        """A group that declares a host-name but isn't named in
+        ``apply-groups`` must not leak into intent.hostname."""
+        raw = (
+            "set groups POC_Lab system host-name group-host\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == ""
+
+    def test_first_applied_group_wins(self):
+        """Apply-groups is ordered; the first group declaring a
+        host-name wins (mirrors Junos's first-match semantics)."""
+        raw = (
+            "set groups A system host-name host-from-A\n"
+            "set groups B system host-name host-from-B\n"
+            "set apply-groups A\n"
+            "set apply-groups B\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "host-from-A"
+
+    def test_bracketed_apply_groups_syntax(self):
+        """``set apply-groups [ g1 g2 ]`` is a valid Junos form; the
+        bracket tokens get split by the shlex tokeniser and need to
+        be filtered out of the applied-groups list."""
+        raw = (
+            "set groups A system host-name host-from-A\n"
+            "set groups B system host-name host-from-B\n"
+            "set apply-groups [ A B ]\n"
+        )
+        intent = JunosCodec().parse(raw)
+        # Either A or B would be acceptable — the only failure mode
+        # is getting an empty hostname (brackets leaking) or an
+        # error parsing the line.
+        assert intent.hostname in {"host-from-A", "host-from-B"}
+
+    def test_real_qfx5100_fixture_hostname_populates(self):
+        """Regression guard specifically for the ksator QFX5100
+        fixture — before GAP 4, its hostname came out empty."""
+        import pathlib
+        raw = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "fixtures" / "real" / "junos"
+            / "ksator_labmgmt_qfx5100_junos173.set"
+        ).read_text(encoding="utf-8")
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "QFX5100-183"
+
+    def test_real_ex4550_fixture_hostname_populates(self):
+        """Regression guard specifically for the ksator EX4550
+        fixture — before GAP 4, its hostname came out empty."""
+        import pathlib
+        raw = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "fixtures" / "real" / "junos"
+            / "ksator_labmgmt_ex4550_junos151.set"
+        ).read_text(encoding="utf-8")
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "EX4550-190"
+
+
+# ---------------------------------------------------------------------------
+# GAP 4: sub-interfaces (unit 1+)
+# ---------------------------------------------------------------------------
+
+
+class TestSubInterfaces:
+    """v1 collapsed unit 0 into the parent and ignored units 1+.
+    GAP 4 materialises unit-N sub-interfaces as distinct
+    CanonicalInterface entries named ``<parent>.<N>`` — matches
+    Cisco's dot1Q convention so canonical-tree consumers see the
+    same shape across vendors.
+    """
+
+    def test_parse_unit_100_materialised_as_subiface(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        names = {i.name for i in intent.interfaces}
+        # Parent exists as a stub (placeholder); sub-interface
+        # carries the IP.
+        assert "ge-0/0/0" in names
+        assert "ge-0/0/0.100" in names
+        sub = next(i for i in intent.interfaces if i.name == "ge-0/0/0.100")
+        assert len(sub.ipv4_addresses) == 1
+        assert sub.ipv4_addresses[0].ip == "10.1.100.1"
+        assert sub.ipv4_addresses[0].prefix_length == 24
+
+    def test_routed_subif_not_mis_rendered_as_access_vlan_cross_vendor(self):
+        """GAP 7 end-to-end: a Junos routed sub-interface tag must NOT
+        become ``switchport access vlan N`` on a Cisco IOS-XE CLI target
+        (the semantic inversion this dedicated field fixes).  IOS-XE-CLI
+        declares dot1q-vlan unsupported (ship-before-wire), so it DROPS the
+        tag rather than emitting an L2 access-port line."""
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 vlan-id 100\n"
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.0.0.1/30\n"
+        )
+        intent = JunosCodec().parse(raw)
+        out = CiscoIOSXECLICodec().render(intent)
+        assert "switchport access vlan" not in out.lower()
+
+    def test_parse_unit_description_on_subiface(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 description "
+            '"user VLAN 100"\n'
+        )
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.description == "user VLAN 100"
+
+    def test_parse_unit_disable_on_subiface(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+            "set interfaces ge-0/0/0 unit 100 disable\n"
+        )
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.enabled is False
+
+    def test_multiple_subifaces_on_same_parent(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+            "set interfaces ge-0/0/0 unit 200 family inet "
+            "address 10.1.200.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        names = [i.name for i in intent.interfaces]
+        assert "ge-0/0/0.100" in names
+        assert "ge-0/0/0.200" in names
+
+    def test_irb_dot_N_not_treated_as_subiface(self):
+        """``irb.10`` is an SVI-like interface; its dot is part of the
+        base name.  The sub-interface detector must not split it into
+        ``irb`` + ``10`` — that would lose identity.
+        """
+        raw = (
+            "set interfaces irb unit 10 family inet address "
+            "192.168.10.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        # The sub-interface regex requires ``<media>-<fpc>/<pic>/<port>``
+        # in the parent, so ``irb`` unit 10 materialises as ``irb.10``
+        # and the render loop treats it as a top-level interface
+        # (no parent-split) because it lacks the slash grammar.
+        # The parse side emits a compound ``irb.10`` either way;
+        # the key property is that ``render(parse)`` round-trips.
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        reparsed = codec.parse(rendered)
+        reparsed_names = {i.name for i in reparsed.interfaces}
+        assert any(n.startswith("irb") for n in reparsed_names)
+
+    def test_render_subiface_emits_unit_form(self):
+        """Sub-interface render MUST use Junos's native
+        ``set interfaces <parent> unit <N> ...`` grammar, not the
+        compound canonical name verbatim."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0.100",
+                    description="user vlan",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.100.1", prefix_length=24,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24" in out
+        )
+        assert (
+            'set interfaces ge-0/0/0 unit 100 description "user vlan"'
+            in out
+        )
+        # Must NOT emit the compound-name form (that'd be invalid
+        # Junos grammar).
+        assert "set interfaces ge-0/0/0.100" not in out
+
+    def test_subiface_roundtrip_stable(self):
+        """Sub-interface parse → render → parse preserves IP + desc."""
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+            "set interfaces ge-0/0/0 unit 100 description "
+            '"user VLAN"\n'
+            "set interfaces ge-0/0/0 unit 200 family inet "
+            "address 10.1.200.1/24\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        first_by_name = {i.name: i for i in first.interfaces}
+        second_by_name = {i.name: i for i in second.interfaces}
+        assert set(first_by_name.keys()) == set(second_by_name.keys())
+        for name in first_by_name:
+            a, b = first_by_name[name], second_by_name[name]
+            assert a.description == b.description
+            assert [(x.ip, x.prefix_length) for x in a.ipv4_addresses] == [
+                (x.ip, x.prefix_length) for x in b.ipv4_addresses
+            ]
+
+
+# ---------------------------------------------------------------------------
+# GAP 7: per-unit 802.1Q VLAN tagging
+# ---------------------------------------------------------------------------
+
+
+class TestPreElsPortMode:
+    """Pre-ELS Junos (and platforms like the EX4550 that stayed non-ELS at
+    15.1) spell the L2 switchport mode ``port-mode`` where ELS spells it
+    ``interface-mode``.  Both must parse — otherwise a ``port-mode access``
+    port falls through to the ``vlan members``-without-explicit-mode default
+    and is silently promoted to a TRUNK on reparse (an access port becoming
+    a trunk = a real data-fidelity bug)."""
+
+    def test_pre_els_port_mode_access_stays_access(self):
+        raw = (
+            "set vlans V10 vlan-id 10\n"
+            "set interfaces ge-0/0/1 unit 0 family ethernet-switching "
+            "port-mode access\n"
+            "set interfaces ge-0/0/1 unit 0 family ethernet-switching "
+            "vlan members V10\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/1")
+        assert iface.switchport_mode == "access"
+        assert iface.access_vlan == 10
+        assert iface.trunk_allowed_vlans == []  # NOT promoted to a trunk
+
+    def test_pre_els_port_mode_trunk_stays_trunk(self):
+        raw = (
+            "set vlans V10 vlan-id 10\n"
+            "set vlans V20 vlan-id 20\n"
+            "set interfaces xe-0/0/0 unit 0 family ethernet-switching "
+            "port-mode trunk\n"
+            "set interfaces xe-0/0/0 unit 0 family ethernet-switching "
+            "vlan members V10\n"
+            "set interfaces xe-0/0/0 unit 0 family ethernet-switching "
+            "vlan members V20\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "xe-0/0/0")
+        assert iface.switchport_mode == "trunk"
+        assert iface.trunk_allowed_vlans == [10, 20]
+
+    def test_els_interface_mode_still_parses(self):
+        raw = (
+            "set vlans V10 vlan-id 10\n"
+            "set interfaces ge-0/0/2 unit 0 family ethernet-switching "
+            "interface-mode trunk\n"
+            "set interfaces ge-0/0/2 unit 0 family ethernet-switching "
+            "vlan members V10\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/2")
+        assert iface.switchport_mode == "trunk"
+        assert iface.trunk_allowed_vlans == [10]
+
+    def test_pre_els_access_round_trips(self):
+        raw = (
+            "set vlans V10 vlan-id 10\n"
+            "set interfaces ge-0/0/1 unit 0 family ethernet-switching "
+            "port-mode access\n"
+            "set interfaces ge-0/0/1 unit 0 family ethernet-switching "
+            "vlan members V10\n"
+        )
+        codec = JunosCodec()
+        tree = codec.parse(raw)
+        reparsed = codec.parse(codec.render(tree))
+        iface = next(i for i in reparsed.interfaces if i.name == "ge-0/0/1")
+        assert iface.switchport_mode == "access"
+        assert iface.access_vlan == 10
+
+    def test_ksator_ex4550_trunk_ports_unchanged(self):
+        """The committed real 15.1 EX4550 fixture uses ``port-mode trunk`` on
+        xe-0/0/0-2 — recognising ``port-mode`` explicitly must leave those
+        trunk ports (and their allowed-VLAN lists) exactly as before."""
+        import pathlib
+        raw = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "fixtures" / "real" / "junos"
+            / "ksator_labmgmt_ex4550_junos151.set"
+        ).read_text(encoding="utf-8")
+        intent = JunosCodec().parse(raw)
+        by_name = {i.name: i for i in intent.interfaces}
+        for name in ("xe-0/0/0", "xe-0/0/1", "xe-0/0/2"):
+            assert by_name[name].switchport_mode == "trunk"
+            assert by_name[name].trunk_allowed_vlans  # non-empty
+
+
+class TestPerUnitVlanTagging:
+    """``set interfaces <parent> unit <N> vlan-id <tag>`` is Junos's
+    per-subinterface 802.1Q tag primitive — semantically equivalent to
+    Cisco's ``encapsulation dot1Q <N>`` on a subinterface.  Stores on the
+    DEDICATED CanonicalInterface.dot1q_vlan field (NOT access_vlan, an L2
+    switchport concept) without setting switchport_mode (Junos sub-
+    interfaces are L3 on a tagged VLAN, not L2 access ports).  GAP 7.
+    """
+
+    def test_parse_vlan_id_on_unit(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 vlan-id 100\n"
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.dot1q_vlan == 100
+        assert sub.access_vlan is None  # NOT the L2 access-mode field
+        # switchport_mode stays None — this is L3 on a tagged VLAN.
+        assert sub.switchport_mode is None
+
+    def test_parse_vlan_id_alone_creates_subiface(self):
+        """A unit declared only with vlan-id (no IP) still materialises
+        as a CanonicalInterface — useful for sub-interfaces that will
+        get IPs later, and round-trip stability."""
+        raw = "set interfaces ge-0/0/0 unit 100 vlan-id 100\n"
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.dot1q_vlan == 100
+
+    def test_parse_vlan_id_non_integer_rejected(self):
+        """Malformed ``vlan-id abc`` silently no-ops rather than crashing."""
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 vlan-id not-a-number\n"
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.dot1q_vlan is None  # bad token silently dropped
+        # Rest of the unit's config still parses.
+        assert len(sub.ipv4_addresses) == 1
+
+    def test_render_vlan_id_on_subiface(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0.100",
+                    dot1q_vlan=100,
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.100.1", prefix_length=24,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces ge-0/0/0 unit 100 vlan-id 100" in out
+
+    def test_render_vlan_id_alone_emits_set_line(self):
+        """Sub-interface with only dot1q_vlan (no IP, no description)
+        still emits the vlan-id line — it IS renderable content."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0.100",
+                    dot1q_vlan=100,
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces ge-0/0/0 unit 100 vlan-id 100" in out
+        # Must NOT also emit the bare-placeholder line (that'd be
+        # redundant).
+        assert "set interfaces ge-0/0/0 unit 100\n" not in out
+
+    def test_vlan_id_roundtrip(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 vlan-id 100\n"
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+            "set interfaces ge-0/0/0 unit 200 vlan-id 200\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        sub1_first = next(
+            i for i in first.interfaces if i.name == "ge-0/0/0.100"
+        )
+        sub1_second = next(
+            i for i in second.interfaces if i.name == "ge-0/0/0.100"
+        )
+        sub2_second = next(
+            i for i in second.interfaces if i.name == "ge-0/0/0.200"
+        )
+        assert sub1_first.dot1q_vlan == sub1_second.dot1q_vlan == 100
+        assert sub2_second.dot1q_vlan == 200
+
+    def test_unit_0_vlan_id_collapses_into_parent(self):
+        """``unit 0 vlan-id N`` is uncommon but legal Junos — stores
+        on the parent interface's dot1q_vlan (unit 0 collapses into
+        parent per the v1 convention)."""
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 vlan-id 42\n"
+        )
+        intent = JunosCodec().parse(raw)
+        parent = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0"),
+            None,
+        )
+        assert parent is not None
+        assert parent.dot1q_vlan == 42
+        assert parent.access_vlan is None
+
+    def test_render_channelized_subiface_splits_correctly(self):
+        """Regression: channelized port names contain ``:<N>`` (the
+        break-out channel index — ``xe-0/0/6:2`` is channel 2 of
+        physical 6).  Before the ``_SUBIFACE_RE`` fix, the render
+        regex required ``parent`` to match
+        ``[A-Za-z]+-\\d+/\\d+/\\d+`` exactly with no trailing
+        ``:N``, so ``xe-0/0/6:2.10`` fell through to the top-level
+        branch and emitted the malformed double-suffix form
+        (``set interfaces xe-0/0/6:2.10 unit 0 family inet ...``).
+        Correct emission: ``set interfaces xe-0/0/6:2 unit 10
+        vlan-id 10`` + ``set interfaces xe-0/0/6:2 unit 10 family
+        inet address ...``.  QFX 10K / 100G break-out fixtures
+        exercise this surface.
+        """
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="xe-0/0/6:2.10",
+                    dot1q_vlan=10,
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.10.20.1", prefix_length=31,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces xe-0/0/6:2 unit 10 vlan-id 10" in out
+        assert (
+            "set interfaces xe-0/0/6:2 unit 10 family inet "
+            "address 10.10.20.1/31" in out
+        )
+        # Must NOT emit the pre-fix malformed double-suffix line.
+        assert "set interfaces xe-0/0/6:2.10 unit 0" not in out
+
+    def test_channelized_subiface_round_trip(self):
+        """End-to-end round-trip for a channelized sub-interface —
+        parses cleanly, renders the native ``unit N`` grammar, and
+        re-parses to a canonical-stable tree.  This was the failure
+        mode that initially held the QFX10K2-174 real-capture fixture
+        out of the corpus.
+        """
+        raw = (
+            "set interfaces xe-0/0/6:2 vlan-tagging\n"
+            "set interfaces xe-0/0/6:2 unit 10 vlan-id 10\n"
+            "set interfaces xe-0/0/6:2 unit 10 family inet "
+            "address 10.10.20.1/31\n"
+            "set interfaces xe-0/0/6:2 unit 100 vlan-id 100\n"
+            "set interfaces xe-0/0/6:2 unit 100 family inet "
+            "address 10.10.20.101/31\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Both sub-interfaces should materialise with the same dot1q_vlan
+        # after the round-trip (the regression had second-parse showing
+        # the tag None because render emitted the malformed form).
+        for first_iface in first.interfaces:
+            second_iface = next(
+                (i for i in second.interfaces if i.name == first_iface.name),
+                None,
+            )
+            assert second_iface is not None, (
+                f"{first_iface.name} disappeared on round-trip"
+            )
+            assert first_iface.dot1q_vlan == second_iface.dot1q_vlan, (
+                f"{first_iface.name} dot1q_vlan unstable: "
+                f"{first_iface.dot1q_vlan} -> {second_iface.dot1q_vlan}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# GAP 9a: block-form (curly-brace hierarchical) parse
+# ---------------------------------------------------------------------------
+
+
+class TestBlockFormParse:
+    """v1 rejected block-form with a helpful hint; v2b (GAP 9a) now
+    auto-converts block-form → set-form internally and feeds it
+    through the normal parser.  The conversion is grammar-agnostic
+    beyond brace balancing; unknown sub-trees still parse-tolerate
+    via Tier-3 fall-through.
+    """
+
+    def test_system_host_name(self):
+        raw = "system {\n    host-name sw1;\n}\n"
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "sw1"
+
+    def test_nested_blocks(self):
+        raw = (
+            "system {\n"
+            "    host-name router1;\n"
+            "    login {\n"
+            "        user admin {\n"
+            "            class super-user;\n"
+            "            authentication {\n"
+            '                encrypted-password "$6$fake$hash";\n'
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "router1"
+        assert len(intent.local_users) == 1
+        u = intent.local_users[0]
+        assert u.name == "admin"
+        assert u.role == "super-user"
+        assert u.privilege_level == 15
+        assert u.hashed_password == "junos:$6$fake$hash"
+
+    def test_interface_with_ip(self):
+        raw = (
+            "interfaces {\n"
+            "    ge-0/0/0 {\n"
+            '        description "uplink";\n'
+            "        unit 0 {\n"
+            "            family inet {\n"
+            "                address 10.0.0.1/24;\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        assert iface.description == "uplink"
+        assert iface.ipv4_addresses[0].ip == "10.0.0.1"
+        assert iface.ipv4_addresses[0].prefix_length == 24
+
+    def test_vlan_with_vxlan_vni(self):
+        raw = (
+            "vlans {\n"
+            "    V100 {\n"
+            "        vlan-id 100;\n"
+            "        vxlan {\n"
+            "            vni 10100;\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert any(v.id == 100 and v.name == "V100" for v in intent.vlans)
+        assert len(intent.vxlan_vnis) == 1
+        assert intent.vxlan_vnis[0].vlan_id == 100
+        assert intent.vxlan_vnis[0].vni == 10100
+
+    def test_routing_instance_vrf(self):
+        raw = (
+            "routing-instances {\n"
+            "    TENANT_A {\n"
+            "        instance-type vrf;\n"
+            "        route-distinguisher 1.1.1.1:100;\n"
+            "        vrf-target target:65000:100;\n"
+            "        interface ge-0/0/1.0;\n"
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        ri = next(r for r in intent.routing_instances if r.name == "TENANT_A")
+        assert ri.instance_type == "vrf"
+        assert ri.route_distinguisher == "1.1.1.1:100"
+        assert ri.rt_imports == ["65000:100"]
+        assert ri.rt_exports == ["65000:100"]
+
+    def test_apply_groups_inheritance_in_blockform(self):
+        raw = (
+            "groups {\n"
+            "    G {\n"
+            "        system {\n"
+            "            host-name from-group;\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+            "apply-groups G;\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "from-group"
+
+    def test_quoted_strings_preserved(self):
+        raw = (
+            "interfaces {\n"
+            "    ge-0/0/0 {\n"
+            '        description "contains spaces and $specials";\n'
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        assert iface.description == "contains spaces and $specials"
+
+    def test_comments_stripped(self):
+        raw = (
+            "/* top-level comment */\n"
+            "system {\n"
+            "    /* inline comment */\n"
+            "    host-name sw1;\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "sw1"
+
+    def test_mixed_input_still_rejected_if_not_blockform(self):
+        """JSON-shaped input still raises (starts with `{` but isn't
+        Junos hierarchical)."""
+        from netcanon.migration.codecs.base import ParseError
+        raw = '{"hostname": "not-junos"}'
+        with pytest.raises(ParseError):
+            JunosCodec().parse(raw)
+
+    def test_unbalanced_braces_raises(self):
+        from netcanon.migration.codecs.base import ParseError
+        raw = "system {\n    host-name sw1;\n"  # no closing `}`
+        with pytest.raises(ParseError):
+            JunosCodec().parse(raw)
+
+    def test_pathologically_deep_braces_raise_clean_parseerror(self):
+        """A hostile ``{{{{…`` payload must surface as a clean
+        ParseError, not an opaque RecursionError / HTTP 500.  The block
+        below is perfectly *balanced* — absent the depth guard it would
+        parse fine — so a raised ParseError proves the guard fired.
+
+        (Review finding #20: the recursive block-form pre-parser used
+        one Python frame per brace with no cap.)"""
+        from netcanon.migration.codecs.base import ParseError
+        from netcanon.migration.codecs.juniper_junos.parse import (
+            _MAX_BLOCK_DEPTH,
+        )
+
+        # Newline-separated with a `;` leaf so `_looks_like_blockform`
+        # routes it through the recursive pre-parser (it needs a first
+        # line ending in `{` and at least one statement terminator).
+        depth = _MAX_BLOCK_DEPTH + 2
+        raw = (
+            "".join(f"n{i} {{\n" for i in range(depth))
+            + "leaf x;\n"
+            + ("}\n" * depth)
+        )
+        with pytest.raises(ParseError) as exc:
+            JunosCodec().parse(raw)
+        assert "too deep" in str(exc.value)
+
+
+class TestVxlanSwitchOptions:
+    """GAP-EVPN-2: ``set switch-options vtep-source-interface ...`` and
+    ``set switch-options vxlan-port ...`` are switch-level globals; they
+    stamp onto every CanonicalVxlan record."""
+
+    def test_parse_vtep_source_interface(self):
+        raw = (
+            "set vlans V100 vlan-id 100\n"
+            "set vlans V100 vxlan vni 10100\n"
+            "set switch-options vtep-source-interface lo0.0\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert len(intent.vxlan_vnis) == 1
+        rec = intent.vxlan_vnis[0]
+        assert rec.source_interface == "lo0.0"
+        assert rec.udp_port == 4789  # default
+
+    def test_parse_vxlan_port_override(self):
+        raw = (
+            "set vlans V100 vlan-id 100\n"
+            "set vlans V100 vxlan vni 10100\n"
+            "set switch-options vtep-source-interface lo0.0\n"
+            "set switch-options vxlan-port 8472\n"
+        )
+        intent = JunosCodec().parse(raw)
+        rec = intent.vxlan_vnis[0]
+        assert rec.source_interface == "lo0.0"
+        assert rec.udp_port == 8472
+
+    def test_parse_switch_options_before_vni_records(self):
+        # Order-independent: switch-options can precede the vlans.
+        raw = (
+            "set switch-options vtep-source-interface lo0.0\n"
+            "set vlans V100 vlan-id 100\n"
+            "set vlans V100 vxlan vni 10100\n"
+            "set vlans V200 vlan-id 200\n"
+            "set vlans V200 vxlan vni 10200\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert len(intent.vxlan_vnis) == 2
+        for rec in intent.vxlan_vnis:
+            assert rec.source_interface == "lo0.0"
+
+    def test_render_emits_switch_options_when_set(self):
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent as _CI,
+        )
+        from netcanon.migration.canonical.intent import (
+            CanonicalVlan as _CV,
+        )
+        from netcanon.migration.canonical.intent import CanonicalVxlan
+        intent = _CI(
+            vlans=[_CV(id=100, name="V100")],
+            vxlan_vnis=[CanonicalVxlan(
+                vlan_id=100, vni=10100,
+                source_interface="lo0.0",
+                udp_port=4789,
+            )],
+        )
+        out = JunosCodec().render(intent)
+        assert "set switch-options vtep-source-interface lo0.0" in out
+        # 4789 is the default — should NOT be emitted.
+        assert "set switch-options vxlan-port" not in out
+
+    def test_render_emits_non_default_udp_port(self):
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent as _CI,
+        )
+        from netcanon.migration.canonical.intent import (
+            CanonicalVlan as _CV,
+        )
+        from netcanon.migration.canonical.intent import CanonicalVxlan
+        intent = _CI(
+            vlans=[_CV(id=100, name="V100")],
+            vxlan_vnis=[CanonicalVxlan(
+                vlan_id=100, vni=10100,
+                source_interface="lo0.0",
+                udp_port=8472,
+            )],
+        )
+        out = JunosCodec().render(intent)
+        assert "set switch-options vtep-source-interface lo0.0" in out
+        assert "set switch-options vxlan-port 8472" in out
+
+    def test_round_trip_preserves_vtep_globals(self):
+        raw = (
+            "set vlans V100 vlan-id 100\n"
+            "set vlans V100 vxlan vni 10100\n"
+            "set vlans V200 vlan-id 200\n"
+            "set vlans V200 vxlan vni 10200\n"
+            "set switch-options vtep-source-interface lo0.0\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        assert len(second.vxlan_vnis) == 2
+        for rec in second.vxlan_vnis:
+            assert rec.source_interface == "lo0.0"
+
+
+# ---------------------------------------------------------------------------
+# Wave B: VRRP / classic FHRP redundancy groups
+# ---------------------------------------------------------------------------
+
+
+class TestVRRPGroups:
+    """v0.2.0 Wave B: classic FHRP redundancy groups land on
+    :class:`CanonicalVRRPGroup` and live under
+    :attr:`CanonicalInterface.vrrp_groups`.  Junos's grammar is
+    distinctive — every ``vrrp-group <gid> <sub>`` sub-command nests
+    under a parent ``family inet address <ip>/<prefix>`` line so the
+    address acts as the binding anchor.  Other vendors (IOS-XE,
+    Arista) bind at the interface level, but the canonical schema
+    is vendor-neutral; only the render path knows about the anchor.
+    """
+
+    def test_parse_vrrp_virtual_address(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0"),
+            None,
+        )
+        assert iface is not None
+        assert len(iface.vrrp_groups) == 1
+        g = iface.vrrp_groups[0]
+        assert g.group_id == 10
+        assert g.mode == "vrrp"
+        assert g.virtual_ips == ["10.1.1.1"]
+        # Defaults: priority 100, preempt True, no description.
+        assert g.priority == 100
+        assert g.preempt is True
+        assert g.description == ""
+
+    def test_parse_vrrp_priority_preempt_description(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 priority 200\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 no-preempt\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 description "
+            '"core-gw"\n'
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        g = iface.vrrp_groups[0]
+        assert g.priority == 200
+        assert g.preempt is False
+        assert g.description == "core-gw"
+
+    def test_parse_vrrp_track_interface(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 track interface "
+            "ge-0/0/1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 track interface "
+            "ge-0/0/2\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        g = iface.vrrp_groups[0]
+        assert g.track_interfaces == ["ge-0/0/1", "ge-0/0/2"]
+
+    def test_parse_vrrp_authentication(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 authentication-type "
+            "simple\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 authentication-key "
+            'secret123\n'
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        g = iface.vrrp_groups[0]
+        # Canonical form is ``<scheme>:<value>`` per the schema.
+        assert g.authentication == "simple:secret123"
+
+    def test_parse_multiple_groups_on_same_address(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 20 virtual-address "
+            "10.1.1.2\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        # Materialised in group-id order (10 then 20).
+        assert [g.group_id for g in iface.vrrp_groups] == [10, 20]
+        assert iface.vrrp_groups[0].virtual_ips == ["10.1.1.1"]
+        assert iface.vrrp_groups[1].virtual_ips == ["10.1.1.2"]
+
+    def test_render_vrrp_minimal(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.1.5", prefix_length=24,
+                        ),
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            virtual_ips=["10.1.1.1"],
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        # Address line emits first as the anchor.
+        assert (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24" in out
+        )
+        # VRRP set-line nests under the same address path.
+        assert (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1" in out
+        )
+        # Default priority (100) + preempt (True): preempt emits,
+        # priority does NOT.
+        assert (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 preempt" in out
+        )
+        assert "priority 100" not in out
+
+    def test_render_vrrp_priority_no_preempt(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.1.5", prefix_length=24,
+                        ),
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            virtual_ips=["10.1.1.1"],
+                            priority=200,
+                            preempt=False,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "vrrp-group 10 priority 200" in out
+        )
+        assert (
+            "vrrp-group 10 no-preempt" in out
+        )
+
+    def test_round_trip_vrrp_group(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 priority 150\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 no-preempt\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 track interface "
+            "ge-0/0/1\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Both ends carry exactly one vrrp_group with the same
+        # fields.
+        assert len(second.interfaces) == 1
+        s_iface = second.interfaces[0]
+        assert len(s_iface.vrrp_groups) == 1
+        s_g = s_iface.vrrp_groups[0]
+        assert s_g.group_id == 10
+        assert s_g.virtual_ips == ["10.1.1.1"]
+        assert s_g.priority == 150
+        assert s_g.preempt is False
+        assert s_g.track_interfaces == ["ge-0/0/1"]
+
+
+# ---------------------------------------------------------------------------
+# Wave C: Anycast-gateway companions (virtual-gateway-address +
+# virtual-gateway-v4-mac / -v6-mac)
+# ---------------------------------------------------------------------------
+
+
+class TestAnycastGateway:
+    """v0.2.0 Wave C: per-IP anycast-gateway companion fields
+    (``CanonicalIPv4Address.virtual_gateway_address``,
+    ``CanonicalIPv4Address.virtual_gateway_mac``, mirror for IPv6).
+
+    Junos's grammar is dense — both halves of the anycast surface
+    land on the same line in native ``set`` form:
+    ``set interfaces irb unit <vid> family inet address <X>/<M>
+    virtual-gateway-address <Y>``.  The per-unit MAC override
+    (``virtual-gateway-v4-mac`` / ``-v6-mac``) is per-unit, not
+    per-address, and applies to every address record on that unit
+    (one MAC per family per unit per the Junos commit-time
+    validator).
+    """
+
+    def test_parse_virtual_gateway_address_v4(self):
+        raw = (
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        # The irb.<vid> sub-interface exists in the materialised
+        # iface list with the anycast companion on its v4 record.
+        iface = next(
+            (i for i in intent.interfaces if i.name == "irb.100"),
+            None,
+        )
+        assert iface is not None
+        assert len(iface.ipv4_addresses) == 1
+        addr = iface.ipv4_addresses[0]
+        assert addr.ip == "10.1.1.5"
+        assert addr.prefix_length == 24
+        assert addr.virtual_gateway_address == "10.1.1.1"
+
+    def test_parse_virtual_gateway_address_v6(self):
+        raw = (
+            "set interfaces irb unit 100 family inet6 "
+            "address fd20::5/64 virtual-gateway-address fd20::1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(
+            (i for i in intent.interfaces if i.name == "irb.100"),
+            None,
+        )
+        assert iface is not None
+        assert len(iface.ipv6_addresses) == 1
+        v6 = iface.ipv6_addresses[0]
+        assert v6.ip == "fd20::5"
+        assert v6.virtual_gateway_address == "fd20::1"
+        # Global-scope (not fe80::/10).
+        assert v6.scope == "global"
+
+    def test_parse_virtual_gateway_v4_mac(self):
+        """``virtual-gateway-v4-mac`` is per-unit and applies to every
+        v4 address on the unit."""
+        raw = (
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1\n"
+            "set interfaces irb unit 100 virtual-gateway-v4-mac "
+            "02:00:11:00:00:01\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "irb.100")
+        addr = iface.ipv4_addresses[0]
+        assert addr.virtual_gateway_mac == "02:00:11:00:00:01"
+
+    def test_parse_virtual_gateway_v6_mac_only_on_global(self):
+        """The IPv6 MAC override applies only to GLOBAL-scope
+        addresses; ``fe80::/10`` link-local stays bare."""
+        raw = (
+            "set interfaces irb unit 100 family inet6 "
+            "address fd20::5/64 virtual-gateway-address fd20::1\n"
+            "set interfaces irb unit 100 family inet6 "
+            "address fe80::1/64\n"
+            "set interfaces irb unit 100 virtual-gateway-v6-mac "
+            "02:00:11:06:00:01\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "irb.100")
+        v6_global = next(
+            a for a in iface.ipv6_addresses if a.scope == "global"
+        )
+        v6_link_local = next(
+            a for a in iface.ipv6_addresses if a.scope == "link-local"
+        )
+        assert v6_global.virtual_gateway_mac == "02:00:11:06:00:01"
+        # Link-local doesn't carry the per-unit MAC override.
+        assert v6_link_local.virtual_gateway_mac == ""
+
+    def test_parse_mac_before_address_order_independent(self):
+        """Order-independence: the MAC line can come BEFORE the
+        address lines (a different operator's idiom)."""
+        raw = (
+            "set interfaces irb unit 100 virtual-gateway-v4-mac "
+            "02:00:11:00:00:01\n"
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "irb.100")
+        assert iface.ipv4_addresses[0].virtual_gateway_mac == (
+            "02:00:11:00:00:01"
+        )
+
+    def test_render_virtual_gateway_address_v4(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="irb.100",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.1.5", prefix_length=24,
+                            virtual_gateway_address="10.1.1.1",
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1"
+            in out
+        )
+
+    def test_render_virtual_gateway_address_v6(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="irb.100",
+                    ipv6_addresses=[
+                        CanonicalIPv6Address(
+                            ip="fd20::5", prefix_length=64,
+                            scope="global",
+                            virtual_gateway_address="fd20::1",
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces irb unit 100 family inet6 "
+            "address fd20::5/64 virtual-gateway-address fd20::1"
+            in out
+        )
+
+    def test_render_virtual_gateway_mac(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="irb.100",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.1.5", prefix_length=24,
+                            virtual_gateway_address="10.1.1.1",
+                            virtual_gateway_mac="02:00:11:00:00:01",
+                        ),
+                    ],
+                    ipv6_addresses=[
+                        CanonicalIPv6Address(
+                            ip="fd20::5", prefix_length=64,
+                            scope="global",
+                            virtual_gateway_address="fd20::1",
+                            virtual_gateway_mac="02:00:11:06:00:01",
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces irb unit 100 virtual-gateway-v4-mac "
+            "02:00:11:00:00:01" in out
+        )
+        assert (
+            "set interfaces irb unit 100 virtual-gateway-v6-mac "
+            "02:00:11:06:00:01" in out
+        )
+
+    def test_render_link_local_v6_skips_mac(self):
+        """Render only emits ``virtual-gateway-v6-mac`` for global-
+        scope IPv6 records (mirror of the parse-side filter)."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="irb.100",
+                    ipv6_addresses=[
+                        CanonicalIPv6Address(
+                            ip="fe80::1", prefix_length=64,
+                            scope="link-local",
+                            # Even with a MAC set, the link-local
+                            # scope filter blocks emission.
+                            virtual_gateway_mac="02:00:11:06:00:01",
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "virtual-gateway-v6-mac" not in out
+
+    def test_round_trip_anycast_full(self):
+        """End-to-end round-trip across the full Junos anycast
+        surface: per-IP v4 + v6 anycast addresses + per-unit MAC
+        overrides on both families.  Matches the QFX10K2 fixture
+        shape (one v4, one global v6, one link-local v6, per-unit
+        MAC for v4 + v6)."""
+        raw = (
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1\n"
+            "set interfaces irb unit 100 family inet6 "
+            "address fd20::5/64 virtual-gateway-address fd20::1\n"
+            "set interfaces irb unit 100 family inet6 "
+            "address fe80::1/64\n"
+            "set interfaces irb unit 100 virtual-gateway-v4-mac "
+            "02:00:11:00:00:01\n"
+            "set interfaces irb unit 100 virtual-gateway-v6-mac "
+            "02:00:11:06:00:01\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Find the irb.100 interface in both trees.
+        f_iface = next(
+            i for i in first.interfaces if i.name == "irb.100"
+        )
+        s_iface = next(
+            i for i in second.interfaces if i.name == "irb.100"
+        )
+        # v4: same address + anycast + MAC.
+        assert s_iface.ipv4_addresses == f_iface.ipv4_addresses
+        # v6: same addresses + scopes + anycast + MAC distribution.
+        assert s_iface.ipv6_addresses == f_iface.ipv6_addresses
+
+    def test_round_trip_qfx10k2_anycast_section(self):
+        """Targeted round-trip for the QFX10K2 fixture's anycast
+        section (lines 95-128).  Confirms the parse + render
+        symmetry on REAL Junos grammar — multiple IRB units, each
+        with a global v6 + link-local v6, per-unit MAC overrides
+        on both families, and the ``proxy-macip-advertisement``
+        line interspersed (Tier-3; parse-and-ignore)."""
+        raw = (
+            "set interfaces irb unit 2021 family inet "
+            "address 10.221.0.5/16 virtual-gateway-address "
+            "10.221.0.1\n"
+            "set interfaces irb unit 2021 family inet6 "
+            "address fd20:2021::5/64 virtual-gateway-address "
+            "fd20:2021::1\n"
+            "set interfaces irb unit 2021 family inet6 "
+            "address fe80:2021::1/64\n"
+            "set interfaces irb unit 2021 virtual-gateway-v4-mac "
+            "02:00:21:00:00:01\n"
+            "set interfaces irb unit 2021 virtual-gateway-v6-mac "
+            "02:00:21:06:00:01\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Compare model dumps so any field added to the model is
+        # automatically covered.
+        f_iface = next(
+            i for i in first.interfaces if i.name == "irb.2021"
+        )
+        s_iface = next(
+            i for i in second.interfaces if i.name == "irb.2021"
+        )
+        assert f_iface.model_dump() == s_iface.model_dump()
+
+
+# ---------------------------------------------------------------------------
+# Wave B/C: capability-matrix declarations
+# ---------------------------------------------------------------------------
+
+
+class TestVRRPAnycastCapabilities:
+    """The capability matrix declares the new paths as ``supported``
+    (VRRP + per-IP anycast) and the system-wide MAC as
+    ``unsupported`` (Junos uses per-unit MAC, not chassis-wide).
+    """
+
+    def test_vrrp_groups_supported(self):
+        caps = JunosCodec().capabilities
+        assert (
+            "/interfaces/interface/vrrp-groups/group" in caps.supported
+        )
+
+    def test_virtual_gateway_address_supported(self):
+        caps = JunosCodec().capabilities
+        assert (
+            "/interfaces/interface/ipv4/address/virtual-gateway-address"
+            in caps.supported
+        )
+        assert (
+            "/interfaces/interface/ipv6/address/virtual-gateway-address"
+            in caps.supported
+        )
+
+    def test_anycast_gateway_mac_unsupported(self):
+        caps = JunosCodec().capabilities
+        unsupported_paths = {u.path for u in caps.unsupported}
+        assert "/anycast-gateway-mac" in unsupported_paths
+
+    def test_routing_static_route_vrf_supported(self):
+        # v0.2.0 — per-VRF static routes now round-trip via
+        # ``set routing-instances <NAME> routing-options static route``,
+        # so the path graduated from lossy to supported.
+        caps = JunosCodec().capabilities
+        supported = set(caps.supported)
+        lossy_paths = {p.path for p in caps.lossy}
+        assert "/routing/static-route/vrf" in supported
+        assert "/routing/static-route/vrf" not in lossy_paths
+
+    def test_per_vrf_static_route_round_trip(self):
+        codec = JunosCodec()
+        intent = codec.parse(
+            "set routing-instances RED routing-options static route "
+            "10.10.0.0/16 next-hop 10.0.0.2\n"
+        )
+        vrf_routes = [r for r in intent.static_routes if r.vrf]
+        assert len(vrf_routes) == 1
+        assert vrf_routes[0].vrf == "RED"
+        assert vrf_routes[0].destination == "10.10.0.0/16"
+        assert vrf_routes[0].gateway == "10.0.0.2"
+        out = codec.render(intent)
+        assert (
+            "set routing-instances RED routing-options static route "
+            "10.10.0.0/16 next-hop 10.0.0.2" in out
+        )
+        # discard / reject blackhole forms carry no next-hop and are not
+        # modelled (next-hop form only — mirrors the global table).
+        intent2 = codec.parse(
+            "set routing-instances BLUE routing-options static route "
+            "10.20.0.0/16 discard\n"
+        )
+        assert not [r for r in intent2.static_routes if r.vrf == "BLUE"]

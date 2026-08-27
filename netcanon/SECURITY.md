@@ -1,0 +1,754 @@
+# Netcanon — Security Architecture
+
+This document describes the security model, threat assumptions, implemented
+controls, and known limitations of Netcanon.  It must be updated whenever
+a security-relevant change is made to the codebase.
+
+---
+
+## Reporting a Vulnerability
+
+**Do not open public GitHub issues for security vulnerabilities.**
+
+Use GitHub's private vulnerability reporting flow:
+**https://github.com/netcanon/netcanon/security/advisories/new**
+
+What to include:
+
+- Affected component (codec, pipeline stage, API endpoint, desktop shell)
+- Affected versions (commit SHA or release tag)
+- Steps to reproduce — sanitized; never include real credentials, IPs,
+  or hostnames in the report
+- Impact assessment as you see it
+- Suggested fix if you have one
+
+What to expect:
+
+- Acknowledgment within 7 days
+- Triage outcome within 14 days
+- Coordinated disclosure if a fix is needed
+- Credit in the advisory unless you prefer otherwise
+
+We treat any cross-trust-boundary vulnerability — auth bypass, credential
+exposure, arbitrary file write outside the configured directory, code
+execution via crafted device output — as critical.  Issues entirely within
+the local-trust boundary (a malicious local user) are accepted risks per
+the threat model below.
+
+---
+
+## Threat Model
+
+Netcanon ships in two deployment shapes:
+
+1. **Desktop application (primary).**  The Windows MSI / `python -m
+   netcanon_desktop` shell binds the embedded server exclusively to
+   `127.0.0.1`.  Security controls assume a single-user local
+   machine.
+2. **Web / Docker deployment.**  The configured default bind is
+   `127.0.0.1` (loopback), so exposing the API on a network interface
+   is always an explicit choice.  Operators who set
+   `NETCANON_HOST=0.0.0.0` / pass `--host 0.0.0.0` (the published GHCR
+   image sets the former) are deploying outside the
+   single-user-local-machine threat model.  Netcanon does NOT ship
+   API authentication, TLS, or rate-limiting — operators in this
+   shape must front the app with a reverse proxy that provides those
+   controls (nginx + auth_request, Caddy + basic-auth, Cloudflare
+   Access, etc.) and restrict ingress at the network layer.
+
+   As an in-app backstop, set `NETCANON_API_KEY=<token>` to require an
+   `Authorization: Bearer <token>` header on every `/api/v1`
+   data/operation route.  (The `/api/v1/openapi.json` schema stays open
+   so the intentionally-unauthenticated `/docs` page can render it; it
+   exposes only route metadata — no config contents or credentials.)
+   `netcanon serve` (the Docker entry point) refuses to start on a
+   non-loopback bind unless a key is set or
+   `NETCANON_ALLOW_INSECURE_BIND=1` is passed, so accidental
+   unauthenticated exposure is a conscious opt-out, not the default.
+
+   For this shape you can also set `NETCANON_BLOCK_PRIVATE_EGRESS=true`
+   (default `false`): the backup entry points then refuse any target
+   that resolves to a loopback or link-local address — including the
+   `169.254.169.254` cloud-metadata endpoint — so a reachable
+   non-operator can't turn the (unauthenticated) backup engine into an
+   internal port-scanner / metadata probe.  RFC-1918 ranges stay
+   allowed (real managed devices live there).  The check runs at the
+   request / schedule entry point, not at SSH-connect time, so it does
+   not fully defeat a DNS-rebinding attacker who controls a hostname;
+   connect-time re-validation is a noted follow-up.
+
+| Actor | Trust level |
+|-------|-------------|
+| Local user running the desktop app | Fully trusted |
+| Other processes on the same machine | Untrusted |
+| Network peers (desktop deployment) | Out of scope — server bound to loopback only |
+| Network peers (web deployment without reverse proxy) | Out of scope — operator responsibility to add auth + TLS |
+
+---
+
+## Credential Storage (Encryption at Rest)
+
+**Module:** `netcanon/security/credentials.py`  
+**Stores:** `netcanon/storage/device_profile_store.py`, `netcanon/storage/schedule_store.py`
+
+Device passwords and enable passwords are **never written to disk in
+plaintext**.  The storage layer encrypts all credential fields with
+[Fernet symmetric encryption](https://cryptography.io/en/latest/fernet/)
+before writing JSON files, and decrypts them immediately after reading.
+
+### Key management — three-tier resolution
+
+The Fernet key is resolved in this order, first hit wins:
+
+| Tier | Source | Best fit | Key on disk? |
+|------|--------|----------|--------------|
+| **1** | `NETCANON_FERNET_KEY` env var | Container / headless / production | No |
+| **2** | OS keyring (Windows Cred Manager / macOS Keychain / Linux SecretService) | Desktop install | No |
+| **3** | File at `$NETCANON_DATA_DIR/.fernet_key` (auto-generated) | Zero-config container | Yes, in the operator's bind-mounted data volume |
+
+The key never moves between tiers — once a key exists at any tier, that
+key is used.  Tier promotion (e.g. moving from file fallback to env var)
+is an operator-driven re-keying operation: read the key from the lower
+tier, set it as the higher-tier value, then optionally remove the lower
+tier (e.g. `rm $NETCANON_DATA_DIR/.fernet_key` after copying the value
+into `NETCANON_FERNET_KEY`).
+
+**Tier 1 — Environment variable (recommended for production):**
+Generate once with:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Inject via your orchestrator's secret-injection mechanism:
+
+```bash
+docker run -e NETCANON_FERNET_KEY=<key> ghcr.io/netcanon/netcanon:latest
+```
+
+The key never touches the application's data directory.  This is the
+recommended deployment pattern for any environment where the bind-
+mounted volume's filesystem permissions aren't sufficient credential
+protection (multi-tenant hosts, shared CI environments, regulated
+infrastructure).
+
+**Tier 2 — OS keyring (default for desktop installs):**
+
+| Platform | Backend |
+|----------|---------|
+| Windows  | Windows Credential Manager (DPAPI) |
+| macOS    | Keychain |
+| Linux    | SecretService / libsecret (via dbus) |
+
+A random 256-bit Fernet key is generated on first use and stored via
+the [`keyring`](https://pypi.org/project/keyring/) library.  The
+application never writes the key to disk itself.  This is the default
+for `pip install netcanon` and MSI / desktop-app deployments.
+
+**Tier 3 — File fallback (zero-config bootstrap):**
+When neither the env var nor a working keyring backend is available
+(typical container deployments without an injected env var), a new
+Fernet key is auto-generated and written to
+`$NETCANON_DATA_DIR/.fernet_key` with restrictive permissions (0o600
+on POSIX; Windows relies on operator-managed directory perms).  The
+file persists in the operator's bind-mounted data volume, so
+subsequent container restarts decrypt existing profiles.
+
+The key is plaintext on disk, but the disk in question is
+`NETCANON_DATA_DIR` — the same volume the operator already chose to
+trust for jobs / schedules / device profile JSON.  This is the weakest
+tier; production deployments should prefer tier 1 so the key is
+auditable through the orchestrator's secret-management surface rather
+than living in the data volume.
+
+A `WARNING`-level log line announces the auto-generation event so the
+operator can choose to upgrade to tier 1 by reading the file contents,
+setting them as `NETCANON_FERNET_KEY`, and deleting the file.
+
+### Migration
+
+On first startup after upgrading from a pre-encryption version, a
+credential field that fails Fernet decryption **and does not have the
+structural shape of a Fernet token** is treated as a legacy plaintext
+value: `decrypt_field()` returns it and signals the caller to re-save the
+file with encryption applied.  That migration is transparent and logged
+at `INFO`.
+
+A value that *is* token-shaped but fails to decrypt means the wrong /
+rotated / lost key, so `decrypt_field()` **fails closed** — it raises
+`CredentialDecryptError` instead of returning the ciphertext as if it
+were plaintext.  The migration helper logs loudly, leaves the field
+untouched, and skips the re-save, so the still-ciphertext value is never
+double-encrypted.  The profile still loads, but the undecryptable
+credential fails SSH auth at backup time and is stripped from API output
+(`DeviceProfilePublic`) — it is never silently accepted as a password.
+Restore the original key (or re-enter the credential) to recover; see the
+"Key loss" row under Known Limitations.
+
+### In-memory model
+
+`DeviceProfile`, `ScheduleDevice`, and all other model objects always hold
+**plaintext** credential strings in memory.  Encryption is a storage-layer
+concern only.  Credential fields are **never logged**: the store loaders
+decrypt credentials in memory *before* validating, so a validation failure
+could otherwise surface the freshly-decrypted secret through a pydantic
+`ValidationError`'s captured input.  Both loaders route their error path
+through `scrub_exc_for_log`, which formats a `ValidationError` from its field
+locations + error types only (never the input value).  Verified by
+`tests/unit/test_credential_log_redaction.py`.
+
+### Backup artifacts are stored in plaintext (deliberate; use an encrypted volume)
+
+Credential *fields* are encrypted (above), but the **fetched device
+configurations themselves** are written to `configs/<type>/<host>/*.{ext}`
+**verbatim, in plaintext** (`netcanon/services/backup_runner.py`).  A running
+config routinely contains device-side secrets — `$9$` / type-7 / `$6$` password
+hashes, SNMP / RADIUS / IKE keys.  This is deliberate: a backup is only useful
+if it is the real, complete config, and the directory is meant to be
+human-readable / diffable.  Netcanon does **not** encrypt or redact stored
+backups at rest (the sanitiser is an on-demand, bug-reporting-only tool — it
+never runs on the backup-write path).
+
+**Recommended at-rest control: an OS-level encrypted volume** — BitLocker (on by
+default on the Windows 11 desktop target), LUKS, or an encrypted cloud volume
+(EBS / PV) holding `NETCANON_DATA_DIR`.  One layer covers `configs/`, the
+credential JSON, **and** the Tier-3 `.fernet_key`, with no application
+complexity.  Its ceiling is honest: an encrypted volume protects an **offline**
+copy (stolen disk, leaked volume tarball) — it does *not* defend a read by a
+process on the live, mounted host, nor a config an operator deliberately copies
+off the box.
+
+> **Why not SOPS / app-level file encryption?**  SOPS's value is keeping the
+> decryption key on a *different host* than the ciphertext (the model the sibling
+> Kontroll project uses for its multi-service control plane).  Netcanon is a
+> local-first single app — desktop / server / Docker / MSI all co-locate the
+> process, the key, and the ciphertext on one machine — so SOPS cannot deliver
+> that separation, and the one decoupled posture it could offer (an off-host key)
+> is exactly what Tier 1 (`NETCANON_FERNET_KEY`) already provides.  SOPS is an
+> operator-side delivery option for the Tier-1 key, **not** a netcanon feature.
+> (Evaluated 2026-06-17 — see `docs/reviews/2026-06-17-sops-evaluation/`.)
+
+---
+
+## Credential Exposure in the Browser
+
+Credentials are **not embedded in HTML**.
+
+- **Dashboard (`index.html`)** — the Saved Device `<select>` options include
+  only non-sensitive fields (`type_key`, `host`, `port`, `username`).
+
+- **Devices page (`devices.html`)** — the `data-profile` DOM attribute
+  contains only non-sensitive fields (id, name, type_key, host, port,
+  notes, created_at).
+
+The browser **never receives the credential.** Every device-profile API
+response is serialised through the write-only `DeviceProfilePublic` model,
+which omits the password / enable-password fields entirely — so
+`GET /api/v1/devices/{id}` returns no secret.  A backup is launched by
+submitting the profile **id**; the server then resolves and decrypts the
+credential from encrypted storage server-side (`backup_runner`), so the
+plaintext secret never crosses the network to the client.
+
+---
+
+## Path Traversal Protection
+
+**File:** `netcanon/storage/file_store.py` → `FileConfigStore.resolve_path()`
+
+All config file access is gated through `resolve_path()`, which:
+
+1. Requires the filename to match `_FILENAME_RE` — a strict regex that only
+   accepts the `{DeviceType}_{safe_host}_{YYYYMMDD_HHmmss}[_N].{ext}` naming
+   convention.  Any filename containing `..`, `/`, path separators, or
+   characters outside that pattern is immediately rejected with
+   `FileNotFoundError`.
+
+2. Resolves symlinks (`Path.resolve()`) and asserts the result lies inside
+   `storage_dir` before returning the path.  This is defence-in-depth
+   against symlink attacks.
+
+Covered by `tests/unit/test_storage.py` → `TestResolvePathSecurity` and
+`tests/integration/test_configs_api.py` → `TestPathTraversal`.
+
+---
+
+## Open-in-Editor Endpoint
+
+**File:** `netcanon/api/routes/configs.py` → `open_config()`
+
+`POST /api/v1/configs/{filename}/open` is **only enabled on the desktop
+build** (`Settings.open_in_editor = True`).  It is disabled (403) on all
+web deployments.
+
+Two additional guards beyond the path traversal fix:
+
+1. **Extension whitelist** — only `.cfg`, `.conf`, `.txt`, `.xml`, `.log`
+   may be opened.  Any other suffix returns 400 before filesystem access.
+
+2. **`resolve_path()` guard** — the filename must pass the regex check;
+   traversal attempts are rejected with 404.
+
+Covered by `tests/integration/test_configs_api.py` → `TestOpenConfig`.
+
+---
+
+## Input Validation — Operator-Uploaded XML
+
+**Files:** `netcanon/migration/codecs/opnsense/parse.py` (line 169) +
+`netcanon/migration/codecs/cisco_iosxe/codec.py` (line 543)
+
+Both codecs parse operator-uploaded XML — OPNsense `config.xml` files
+and Cisco IOS-XE NETCONF outputs.  Until v0.1.2, both used Python's
+stdlib `xml.etree.ElementTree.fromstring`, which expands internal
+entities by default — verified empirically on Python 3.14.4.  A
+five-line billion-laughs payload (`<!ENTITY lol "lol">` + `<!ENTITY
+lol1 "&lol;&lol;&lol;">` + `&lol1;`) would return the expanded text
+rather than raising, hanging the FastAPI worker on memory exhaustion.
+External entities (XXE `SYSTEM "file:///etc/passwd"`) are already
+blocked since Python 3.7.1, but the entity-bomb / quadratic-blowup
+DoS class was live.
+
+v0.1.2 swapped both parse sites to `defusedxml.ElementTree.fromstring`,
+which is an exact API drop-in that rejects entity-bomb / external-
+entity payloads while preserving full compatibility with normal
+config XML.  Generation-side ET use (`ET.Element`, `ET.SubElement`,
+`tostring`, `register_namespace`) stays on stdlib — those don't
+consume untrusted input.
+
+Each call site wraps the rejection in an explicit `DefusedXmlException`
+clause so malicious-payload rejection produces a clean operator-facing
+`ParseError` (`opnsense: refusing potentially-malicious XML
+(entity-bomb / XXE attempt)`) rather than a 500 stack trace.
+
+Triage detail: [`docs/security-triage/2026-05-21/`](docs/security-triage/2026-05-21/)
+investigations A § alerts #14/#15.
+
+Covered by the normal codec round-trip test suites; a bomb-payload
+unit test is on the v0.1.x follow-up backlog.
+
+---
+
+## Input Validation — Host Field
+
+**Files:** `netcanon/models/device.py`, `netcanon/models/device_profile.py`
+
+`DeviceTarget.host`, `DeviceProfileCreate.host`, and `DeviceProfileUpdate.host`
+all run through `_validate_host()`, which accepts only:
+
+- Valid IPv4 addresses (`ipaddress.ip_address()`)
+- Valid IPv6 addresses
+- RFC-1123 hostnames (alphanumeric labels, hyphens, dots)
+
+Any other value (path separators, semicolons, spaces, shell metacharacters)
+is rejected with a Pydantic `ValidationError` → HTTP 422.
+
+Covered by `tests/unit/test_models.py` → `TestDeviceTarget` host validation cases.
+
+---
+
+## Data Directory Isolation
+
+Runtime data directories (`devices/`, `schedules/`, `jobs/`, `configs/`)
+are listed in `.gitignore` and must not be committed to version control.
+These directories are created automatically at runtime.
+
+---
+
+## Localhost-Only Binding (Desktop)
+
+**File:** `netcanon_desktop/settings.py`
+
+The desktop app binds the embedded Uvicorn server to `127.0.0.1` only.
+`--host` / `--port` flags for public binding are a web-deployment-only
+concern and are never exposed in the desktop shell.
+
+For the web/Docker deployment shape, operators who choose to bind on
+a non-loopback address are responsible for fronting the app with a
+reverse proxy that adds authentication and TLS — see "Threat Model"
+above.
+
+---
+
+## Sanitiser (Bug-Reporting Workflow)
+
+**Module:** `netcanon/tools/sanitize.py`
+**CLI:** `netcanon sanitize`
+**HTTP:** `POST /api/v1/sanitize`
+
+When operators submit configs for bug reports / fixture submissions,
+the sanitiser strips identity-bearing data via field-typed redactions
+on the canonical model:
+
+| Category | Replacement |
+|---|---|
+| Hostname | `device-N` |
+| Domain | `example-N.test` |
+| Public IPv4 | RFC 5737 docs ranges |
+| Public / global IPv6 | RFC 3849 docs range (`2001:db8::`) — ULA / link-local / loopback / multicast / docs preserved |
+| Hashed passwords | Format-preserving fakes (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1) |
+| SNMP communities | `public_redacted_N` |
+| SNMP contact / location (operator PII) | `<contact redacted>` / `<location redacted>` |
+| SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
+| RADIUS shared secrets | `REDACTED-RADIUS-N` |
+| RADIUS / SNMP-trap / NTP / syslog / DHCP gateway+range+subnet hosts (public IPv4 / IPv6) | RFC 5737 / RFC 3849 docs ranges; an FQDN NTP / syslog / trap / RADIUS target → `host-N.example.test` (bare single label preserved) |
+| VLAN-SVI IPv4 addresses (public) | RFC 5737 docs ranges |
+| VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
+| VRRP / CARP virtual IPs (public, v4 + v6) | RFC 5737 / RFC 3849 docs ranges |
+| Anycast / VARP virtual-gateway addresses (public, v4 + v6) | RFC 5737 / RFC 3849 docs ranges |
+| Anycast virtual-gateway MAC + VRRP virtual MAC + system anycast-gateway MAC (burned-in / operator-assigned) | RFC 7042 documentation MAC (`00:00:5e:00:53:NN`), separator style preserved; protocol-standard VRRP / HSRP / GLBP / CARP vMACs + multicast / broadcast preserved (identify nothing) |
+| Static-route destination prefix + next-hop (public) | RFC 5737 / RFC 3849 docs ranges (prefix length preserved) |
+| Interface descriptions | `description redacted` |
+| Tier-3 sections (firewall / NAT / VPN) | Stripped entirely |
+
+Counter-per-session stable: same input value always maps to the same
+redaction (so cross-references survive — a hostname referenced 5 times
+gets the same redacted value all 5 times).  `--dry-run` prints the
+substitution table for operator review before writing output.
+
+Known limitations are listed in
+[`BUG_REPORTING.md`](BUG_REPORTING.md) — IP-typed redaction covers both
+IPv4 and IPv6, FQDN-form NTP / syslog / SNMP-trap / RADIUS host targets
+are redacted to a `host-N.example.test` placeholder, and banner / comment
+text is parse-and-ignored rather than redacted.
+
+---
+
+## Template Security
+
+All Jinja2 templates use **automatic HTML escaping** (the default for HTML
+templates).  No `| safe` filter is applied to any user-controlled value.
+XSS via template injection is not possible under the current design.
+
+---
+
+## Content-Security-Policy (SEC-9)
+
+Every response carries a `Content-Security-Policy` header (set in the
+middleware in `netcanon/main.py`) as defense-in-depth on top of Jinja2
+autoescape.  Two policies are served:
+
+- **Default** (`_CSP_DEFAULT`, every UI page + JSON API route):
+  `default-src 'self'` with `img-src` also allowing `data:`, `object-src
+  'none'`, and `frame-ancestors 'none'` (the modern companion to the
+  `X-Frame-Options: DENY` header set alongside it).  It forbids loading or
+  connecting to any off-origin host.
+- **`/docs` variant** (`_CSP_DOCS`, the Swagger page only): the same base
+  policy widened to permit the `cdn.jsdelivr.net` (and `fastapi.tiangolo.com`
+  image) hosts Swagger UI needs, and nothing else.
+
+`script-src` / `style-src` carry `'unsafe-inline'`: the hand-written UI uses
+inline `<script>`/`style=` throughout, so a nonce/hash policy would require a
+full template refactor.  The origin restriction is the control that adds real,
+non-breaking value; the constants in `main.py` are the source of truth for the
+exact directive strings.
+
+---
+
+## SSH Session Output Bounds (SEC-5)
+
+The paramiko shell collector's pre-command flush (`_drain` in
+`netcanon/collectors/paramiko_collector.py`) carries absolute idle-poll,
+wall-clock, and byte caps so a device that streams output without ever pausing
+— wedged, or hostile once the connection is already trusted — cannot hang a
+worker or exhaust memory: without a hard cap the idle window never expires
+against a continuous stream.  `_drain` is a best-effort banner / menu flush,
+not the config capture, so on hitting a cap it returns what it has rather than
+failing the backup.
+
+---
+
+## Dependency Supply Chain
+
+Key dependencies and their security relevance:
+
+| Package | Role | Notes |
+|---------|------|-------|
+| `cryptography` | Fernet encryption | Well-maintained; used by Paramiko |
+| `keyring` | OS credential store access | Thin wrapper; minimal attack surface |
+| `paramiko` | SSH transport | Keep updated; historical key-handling CVEs |
+| `netmiko` | SSH device abstraction | Wraps Paramiko |
+| `pyyaml` | Definition file parsing | Uses `safe_load()` exclusively |
+| `fastapi` | Web framework | Actively maintained |
+| `pydantic` | Input validation | v2; strict validation model |
+| `defusedxml` | Safe XML parsing for operator-uploaded input | Added v0.1.2. Drop-in replacement for `xml.etree.ElementTree.fromstring` at the OPNsense + Cisco IOS-XE NETCONF parse sites; rejects entity-bomb / billion-laughs / quadratic-blowup payloads.  Stdlib ET expands internal entities by default on Python 3.x (verified empirically on 3.14.4) — `defusedxml` closes that DoS class without altering legitimate-config behaviour |
+
+Run `pip-audit` or `safety check` regularly to detect known CVEs.
+Dependabot is also configured (`.github/dependabot.yml`) with a 7-day
+cooldown across all 3 ecosystems (pip / github-actions / docker) to
+let upstream yank windows close before bumps land automatically.
+
+---
+
+## Supply-Chain Integrity
+
+Phase 6 of the public release plan shipped the following supply-chain
+integrity controls.  Operators in environments that require attested
+provenance can verify each:
+
+- **Multi-stage Docker builds.**  `Dockerfile` separates a `builder`
+  stage (compiles wheels with `build-essential`) from a `runtime`
+  stage that installs prebuilt wheels with `pip install --no-index`.
+  No compilers in the runtime layer; no network during the runtime
+  install.
+- **No build cache on the release path.**  The tag-triggered publish
+  builds clean from source with no `cache-from` / `cache-to`.  A
+  writable shared cache (e.g. `type=gha`) could otherwise launder a
+  poisoned layer into a signed, attested release before the SBOM and
+  signature are produced, so the release build deliberately forgoes it.
+- **Cosign signatures via Sigstore (GHCR only).**  Published GHCR
+  images (`ghcr.io/netcanon/netcanon`) are signed with keyless cosign
+  through GitHub Actions OIDC.  Verify against the **immutable digest**,
+  not a mutable tag — a tag can be repointed after you read it, and
+  because the build sets `provenance: true` the published reference is a
+  multi-arch manifest-list whose digest is what cosign signs.  Resolve
+  the digest first (the GHCR package page, `docker buildx imagetools
+  inspect ghcr.io/netcanon/netcanon:<tag>`, or `crane digest`), then
+  verify the digest:
+  ```
+  cosign verify ghcr.io/netcanon/netcanon@sha256:<digest> \
+      --certificate-identity 'https://github.com/netcanon/netcanon/.github/workflows/docker-publish.yml@refs/tags/vX.Y.Z' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  ```
+  Replace `vX.Y.Z` with the exact release tag you are verifying — this is
+  the full signer identity (`--certificate-identity`, not a regexp) that
+  the publish workflow pins, so the check matches the image byte-for-byte.
+  Do **not** substitute a truncated `--certificate-identity-regexp`
+  ending in `@refs/tags/v`: without a tail anchor it accepts a signature
+  minted by *any* version tag's run of this workflow, so a `vX.Y.Z`-claimed
+  digest would pass against `v0.0.1`'s legitimate signature — the
+  cross-version substitution hole the release workflow itself closed.
+- **SBOM via syft + cosign attestation (GHCR only).**  An SPDX-format
+  SBOM is generated by syft and attached to the image as a cosign
+  attestation.  Verifiable with `cosign verify-attestation`.
+- **Trusted Publishing for PyPI.**  The PyPI workflow uses
+  `pypa/gh-action-pypi-publish` with the `pypi` environment.  No
+  long-lived API tokens; OIDC-based publish.  The action is pinned by
+  commit SHA, not to the upstream `release/v1` branch — see the
+  SHA-pinning bullet below, which is the authoritative statement of the
+  pinning policy.  (This bullet named `@release/v1` until 2026-08; that
+  contradicted both the workflow and this document's own pinning
+  bullet, and understated the hardening.)
+- **Non-root container runtime.**  The image runs as `app` (uid=1000);
+  bind-mounted volumes are the only writable surface.
+
+### v0.1.2 supply-chain hardening
+
+The v0.1.2 release added a second layer of supply-chain integrity
+controls focused on the CI/workflow surface and the artifact-scan
+surface.  Triage scaffolding for handling alerts these controls
+surface lives at [`docs/security-triage/`](docs/security-triage/);
+the worked example is the 2026-05-21 cycle that produced this
+hardening.
+
+- **GitHub Code Scanning enabled.**  CodeQL default setup covers
+  Python + JavaScript/TypeScript + GitHub Actions surfaces.  Findings
+  surface in the repo's Security → Code scanning view with
+  Copilot Autofix suggestions.
+- **`zizmor` workflow security scanning.**
+  `.github/workflows/zizmor.yml` runs on every workflow-file or
+  Dependabot-config change + a weekly cron.  SARIF results upload to
+  Code scanning under the `zizmor` category.  Site config at
+  `.github/zizmor.yml` implements the hybrid action-pinning policy
+  (tag-pin allowed for `actions/*` + `github/*` first-party
+  publishers; SHA-pin required for third-party publishers).
+- **Trivy Docker image scanning.**  Runs at the END of
+  `.github/workflows/docker-publish.yml` — deliberately AFTER the image
+  is signed, SBOM-attested and signature-verified.  It scans the
+  published image by digest for OS-package + Python-package CVEs at
+  HIGH+CRITICAL severity (`ignore-unfixed: true` filters noise).  Results
+  upload to Code scanning under the `trivy-image` category.  Fires on
+  every release tag push (`v*.*.*`).
+
+  The ordering is a security property, not a preference.  `Build and
+  push` makes every tag live — `:latest` included — the instant it
+  completes, and a later step failing aborts the job with the tag still
+  moved.  Scanning used to sit between the push and `cosign sign`, so a
+  GitHub Code Scanning outage could leave GHCR serving a permanently
+  unsigned `:latest`.  Scanning is informational (`exit-code: 0`) and the
+  SARIF upload is `continue-on-error`, so neither can now cost a release
+  its signature.  Enforced by
+  `tests/unit/test_docker_publish_signing_window.py`, which asserts the
+  ordering against the PARSED workflow for **both**
+  `docker-publish.yml` and `demo-publish.yml`.  The second was added
+  after a review found the same three violations there: the cosign
+  install sat after both image pushes, the SARIF upload was
+  `if: always()` with no `continue-on-error`, and signature
+  verification sat behind the scanning steps that could abort the job.
+  The rule had always been stated generally; only the guard was
+  workflow-specific, so nothing looked.  `demo-publish.yml` signs the
+  demo warden and authz-shim, which are Trusted Computing Base
+  components, so it is the more sensitive of the two.
+- **SHA-pinned third-party actions.**  Every third-party action
+  reference in the workflow corpus
+  (`softprops/action-gh-release`, `docker/setup-buildx-action`,
+  `docker/login-action`, `docker/metadata-action`,
+  `docker/build-push-action`, `aquasecurity/trivy-action`,
+  `sigstore/cosign-installer`, `anchore/sbom-action`,
+  `pypa/gh-action-pypi-publish`, `zizmorcore/zizmor-action`) are
+  pinned to full commit SHAs with trailing tag comments
+  (`@<sha>  # <tag>`) so Dependabot can still propose bumps.  GitHub
+  first-party actions (`actions/*`, `github/*`) retain tag-pins per
+  the hybrid policy — GitHub controls those repos with force-push
+  protection.
+- **Workflow-level `permissions: contents: read` on `ci.yml`.**
+  Default-deny `GITHUB_TOKEN` scope at workflow level; every ci.yml job
+  is read-only (none override it).  Other workflow files (`docker-publish`,
+  `pypi-publish`, `desktop-msi-publish`, `zizmor`) declare narrower
+  per-job scopes where write access is required (`packages: write` /
+  `id-token: write` for publish jobs; `security-events: write` for
+  SARIF upload).
+- **`persist-credentials: false` on all `actions/checkout` calls.**
+  Closes the default behaviour of `actions/checkout@v6` writing
+  `GITHUB_TOKEN` into `.git/config` for later steps.  No netcanon
+  workflow performs a git push / fetch / tag / config write that
+  needs the persisted credential helper; registry logins use
+  explicit secrets, OIDC, or action-internal auth.
+- **Template-injection hardening on `desktop-msi-publish.yml`.**
+  Replaced inline `${{ inputs.tag || github.ref_name }}` shell
+  interpolation with `env:`-mediated indirection so a tag name with
+  shell metacharacters can't execute arbitrary code with access to
+  `DOCKERHUB_TOKEN` / signing keys.
+- **Dependabot cooldown blocks.**  All 3 ecosystems (pip /
+  github-actions / docker) wait 7 days after upstream release before
+  opening a bump PR.  Closes the rare-but-real window where a
+  briefly-hijacked release tag gets picked up automatically before
+  the upstream maintainer notices.
+- **Private vulnerability reporting + secret scanning + push
+  protection + Dependabot malware alerts.**  All enabled at the repo
+  level via GitHub's Advanced Security settings.  Researchers can
+  privately disclose at
+  `https://github.com/netcanon/netcanon/security/advisories/new`;
+  secret scanning runs on history + blocks credential pushes at
+  commit time.
+
+### Release gate — how every published artefact is tied to green tests
+
+The release pipeline gates on tests in **two independent layers**, so a
+published artefact (PyPI wheel, GHCR / Docker Hub image, Windows MSI) is
+tied to passing tests even if one layer is bypassed.
+
+1. **Gate-at-merge (branch protection).**  `main` is protected by an active
+   GitHub *ruleset* requiring a fixed set of status checks to pass on every
+   PR before merge, plus PR-required, no force-push, and no branch deletion.
+   The required checks are: `Lint (ruff)`, `Tests (Python 3.11/3.12/3.13/
+   3.14)`, `E2E (Playwright)`, `Desktop (PySide6)`, `Build sdist + wheel`,
+   `Docker build smoke test`, and `No leaked personal identifiers`.  Release
+   tags are only ever cut from `main` (a CHANGELOG PR merged to `main`, then
+   the tag pushed on `main`), and each publish workflow's **on-main ancestry
+   check** (`git merge-base --is-ancestor`) refuses any tag whose commit is
+   not an ancestor of `origin/main`.  So a release tag normally derives from
+   a commit that passed the full CI matrix.
+
+2. **Gate-at-publish (in the publish run itself).**  Each publish workflow
+   (`pypi-publish.yml`, `docker-publish.yml`, `desktop-msi-publish.yml`)
+   gates the build on tests in two ways, so the guarantee is verifiable from
+   the repository itself and holds even if layer 1 was bypassed:
+   * a `Test gate (unit + integration)` job that the build / publish jobs
+     `needs:` — it re-runs the unit + integration suite *inside the publish
+     run* on the exact ref being shipped (a fast single-Python subset; the
+     full matrix already ran at merge); and
+   * a **`Require CI success for this commit`** step that queries the Actions
+     API for the CI run of the tagged commit and refuses to publish unless it
+     concluded `success` — so the *full* CI matrix (4-Python + e2e + desktop +
+     build + docker-smoke + PII-guard), not just the in-run subset, is proven
+     green for the exact commit. It polls briefly in case the tag was pushed
+     before the on-main CI run finished, and fails closed (a missing /
+     non-`success` / never-completing CI run blocks the publish).
+
+**Residual risks (explicitly accepted).**  Layer 1 lives in GitHub
+branch-protection settings, which are not committed to the tree, and the
+repo-admin role can bypass the ruleset (`bypass_mode: always`) — a
+single-maintainer reality, not a defended boundary.  All three publish
+workflows also expose `workflow_dispatch`, which can publish a ref that
+never went through a PR (e.g. the MSI backfill path that builds an
+operator-supplied `inputs.tag`).  Layer 2 closes most of this: a manual
+dispatch or a bypassed merge still runs the publish-time test job AND must
+clear the `Require CI success` check (a commit an admin force-merged without
+a green CI run has no `success` conclusion, so the publish is refused).  What
+remains is narrow: a defect no test catches, or a commit whose CI run record
+has aged out of GitHub's retention (an old-tag `workflow_dispatch` backfill —
+re-run CI on that ref first).  See blind-audit `3ec11f3` (T0-4).
+
+### Distribution channels and what each provides
+
+| Channel | Image bytes | Cosign signature | SBOM attestation |
+|---|---|---|---|
+| GHCR — `ghcr.io/netcanon/netcanon` | ✅ canonical | ✅ keyless via Sigstore + GitHub OIDC | ✅ SPDX JSON via syft |
+| Docker Hub — `docker.io/netcanon/netcanon` | ✅ same bytes (mirror) | ❌ unsigned | ❌ no attestation |
+| PyPI — `pip install netcanon` | n/a | ✅ Trusted Publishing (OIDC) | n/a |
+
+Same image manifest is pushed to both registries from the same
+`docker/build-push-action` step; the bytes are byte-identical with
+the same digest.  Cosign signing only attaches signatures to the GHCR
+copy because Docker Hub is treated as a convenience mirror — operators
+in regulated environments should pull from GHCR to get the attested
+provenance chain.  Operators in casual environments who just want
+the image working can use either.
+
+**Shipped (v0.4.8):** a hash-pinned dependency manifest
+(`requirements.lock`).  The Docker image installs its dependencies with
+`pip --require-hashes -r requirements.lock` (see the `Dockerfile` builder
+stage), so the shipped container's dependency input set is constrained
+and integrity-verified rather than re-resolved from `pyproject.toml`
+ranges at build time.  The lock is resolved *inside* the digest-pinned
+base image (`tools/gen_requirements_lock.sh`) so its pins + hashes match
+the deploy platform, and `tests/unit/test_requirements_lock.py` fails CI
+if it drifts out of sync with `pyproject.toml`.  The PyPI sdist/wheel
+deliberately keeps `pyproject`'s version *ranges* — that artifact is a
+library and must let downstream resolvers co-install it; the lock
+constrains the *application* (the container).
+
+---
+
+## Known Limitations / Accepted Risks
+
+| Item | Risk | Accepted? | Rationale |
+|------|------|-----------|-----------|
+| No API authentication by default | Any reachable peer can call the API when exposed | Opt-in: set `NETCANON_API_KEY` to gate `/api/v1`; `netcanon serve` refuses a non-loopback bind without a key or `NETCANON_ALLOW_INSECURE_BIND=1` | Desktop binds loopback; the key gates `/api/v1` only (NOT the UI — see next row), so web operators must front the app with a reverse proxy |
+| HTML UI not covered by the API key | The server-rendered UI pages read data server-side, *not* through the key-gated `/api/v1`: the diff view (`/configs/{a}/vs/{b}`) emits full config text (secrets included) and `/configs` / `/devices` list the config + device inventory.  `NETCANON_API_KEY` does **not** protect them | Documented | The key is an `/api/v1`-only control; the UI targets the loopback / reverse-proxy-fronted posture.  For any non-loopback exposure a reverse proxy authenticating the whole surface is **required** — the key alone does not secure the UI.  A native in-app UI session/login is intentionally not implemented (would duplicate what the reverse proxy provides). |
+| Credentials over localhost HTTP | Plaintext in transit on loopback | Yes | Loopback is not a network interface; TLS on localhost adds no practical security |
+| OS keyring unavailable (container / headless Linux) | Resolved via env-var tier (recommended) or file-fallback tier (auto-bootstrap) | No (resolved) | Three-tier key resolution — `NETCANON_FERNET_KEY` for production; `$NETCANON_DATA_DIR/.fernet_key` auto-bootstrap for zero-config containers.  See "Credential Storage" above |
+| Key loss (keyring entry deleted / env var unset on restart / `.fernet_key` deleted) | Encrypted profiles become unreadable | Accepted | User must re-enter credentials; profiles are low-volume.  Operators using tier 1 / tier 3 should back the key up alongside their other infrastructure secrets |
+| SSH host-key trust-on-first-use | A MITM present on the **first** connect to a given device is trusted + pinned (the classic TOFU window) | Yes (TOFU is the default, v0.4.5+) | Default `ssh_host_key_checking=tofu`: the first key seen per device is pinned under `{data_dir}/known_hosts` and a later **changed** key is rejected (`BadHostKeyException`) — on both collectors (Paramiko inline; Netmiko via an auth-less `verify_host_key` pre-flight that reads + pins/rejects before Netmiko connects `ssh_strict`).  Eliminate the first-connect window with `reject` + a pre-seeded store.  `auto_add` (legacy trust-anything, no pinning) remains an opt-out and warns at startup.  A legitimately re-keyed device needs its line cleared from the store before the next backup. |
+| Banner / comment text not sanitised | Operator-submitted bug reports may leak banner content | Documented | Sanitiser is canonical-model-driven; banner text is parse-and-ignored.  See `BUG_REPORTING.md`; hand-redact banners before submission. |
+| DNS-name in an UNMODELLED host region | An FQDN inside a Tier-3 / banner / comment region the canonical model doesn't type as a host passes through verbatim | Documented (narrowed) | The modelled host fields (NTP / syslog / SNMP-trap / RADIUS) now redact an FQDN target to `host-N.example.test`; only hosts the model can't see (Tier-3 / banner text, itself parse-and-ignored) remain.  Hand-redact those before submission. |
+| Backup artifacts (`configs/`) stored plaintext | Fetched device configs contain device secrets (`$9$`/type-7/`$6$`, SNMP/RADIUS/IKE) written verbatim | Yes (deliberate) | A backup must be the real, complete, diffable config; recommended at-rest control is an OS-encrypted volume (covers `configs/` + the key in one layer; offline-threat only).  See "Credential Storage → Backup artifacts" |
+| Backup-engine resource exhaustion (many concurrent jobs) | The per-job worker pool caps a *single* job at `MAX_BACKUP_CONCURRENCY` (10), but several schedules firing together — or a schedule firing during a manual run — each spin up their own pool, so the total SSH/NETCONF session count was unbounded (N jobs x per-job cap), able to exhaust threads / file descriptors on the backup host | No (mitigated) | A process-wide `BoundedSemaphore` (`netcanon/services/backup_runner.py`) caps the *sum* of in-flight device collections across all concurrent jobs at `MAX_GLOBAL_BACKUP_CONCURRENCY` (defaults to the per-job cap, so single-job behaviour is unchanged); an over-limit worker blocks (back-pressure) until a slot frees, never failing.  Raise via `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`.  The 500-device per-request cap + opt-in egress allow-list bound the surface further.  (blind audit `3ec11f3`, r7) |
+
+---
+
+## Updating This Document
+
+This file must be updated when any of the following change:
+
+- A new credential field is added to any persisted model
+- A new file-access endpoint is added
+- A new input field is accepted from untrusted sources
+- A dependency with security relevance is added or removed
+- The threat model assumption (localhost-only desktop / operator-
+  responsibility web) changes
+- A new redaction category lands in `netcanon/tools/sanitize.py`
+- A new supply-chain integrity control ships (signature, attestation,
+  lock manifest, etc.)
+
+---
+
+## See also
+
+- [`README.md`](README.md) — project orientation and quickstart
+- [`BUG_REPORTING.md`](BUG_REPORTING.md) — sanitiser workflow for
+  submitting configs in public issues
+- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — per-codec capability
+  matrix and Tier-3 boundary
+- [`AGENTS.md`](AGENTS.md) — contributor directives, including the
+  "never commit real credentials" hard rule and the
+  "PII review before any push to an online repo" hard rule
+- [`docs/security-triage/`](docs/security-triage/) — process + per-run
+  evidence trail for triaging Code Scanning / Dependabot / secret-
+  scanning alert waves; the operational complement to the controls
+  documented above
+- [`docs/docs-audit/`](docs/docs-audit/) — sister process applying the
+  same cluster-scaffolded read-only-agents-then-orchestrator-fixes
+  pattern to documentation hygiene; recurring cycle that catches
+  drift between docs and code (the v0.1.2 SECURITY.md update wave
+  documented above was produced by the 2026-05-21 audit cycle)

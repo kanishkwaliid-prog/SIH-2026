@@ -1,0 +1,1988 @@
+"""
+Integration tests for ``/api/v1/migration/*`` — Phase 0 read-only routes.
+
+Covers:
+    * GET /api/v1/migration/adapters — list format, content
+    * GET /api/v1/migration/adapters/{name}/capabilities — 200 + 404
+"""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+
+from tests.conftest import OPNSENSE_FAKE_OUTPUT, FakeCollector
+
+pytestmark = pytest.mark.integration
+
+
+class TestListMigrationAdapters:
+    def test_returns_200(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        assert resp.status_code == 200
+
+    def test_returns_list(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        body = resp.json()
+        assert isinstance(body, list)
+
+    def test_excludes_hidden_mock_adapter(self, client):
+        """The internal ``mock`` reference codec is hidden from the
+        user-facing adapters list (run3 mock-codec-exposed-prod) — it is
+        still registered + reachable by exact name on the capabilities
+        detail endpoint, but never offered as a translation target."""
+        resp = client.get("/api/v1/migration/adapters")
+        names = [a["name"] for a in resp.json()]
+        assert "mock" not in names
+
+    def test_each_entry_has_required_fields(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        for entry in resp.json():
+            for field in (
+                "name", "version_range", "device_classes",
+                "supported_count", "lossy_count", "unsupported_count",
+            ):
+                assert field in entry, f"missing {field} in {entry}"
+
+    def test_device_classes_surface(self, client):
+        """A codec's device_classes come back via the API so frontend code
+        can filter the target-picker to compatible adapters.  cisco_nxos
+        declares [switch, router] (formerly asserted via the now-hidden
+        mock codec)."""
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "cisco_nxos")
+        assert "switch" in info["device_classes"]
+        assert "router" in info["device_classes"]
+
+    def test_vendor_id_surfaces_on_list_endpoint(self, client):
+        """Every codec carries vendor_id so the UI can group by vendor."""
+        resp = client.get("/api/v1/migration/adapters")
+        for entry in resp.json():
+            assert "vendor_id" in entry
+            assert isinstance(entry["vendor_id"], str)
+            assert entry["vendor_id"] != "", f"{entry['name']} has empty vendor_id"
+
+    def test_vendor_display_name_resolved(self, client):
+        """vendor_display_name is resolved from the vendor YAML at startup."""
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "cisco_iosxe")
+        assert info["vendor_display_name"] == "Cisco IOS-XE"
+
+    def test_every_codec_has_non_empty_vendor_display_name(self, client):
+        """Universal invariant — every shipped codec resolves to a
+        non-empty vendor_display_name.  Guards against adding a new
+        codec without registering its vendor YAML under
+        ``netcanon/migration/vendors/<vendor>.yaml``; without the
+        YAML the frontend's vendor dropdown would fall back to the
+        raw vendor_id string.
+
+        The mock codec is the only exception — it's a test-only
+        adapter that's allowed to have an empty display_name.
+        Remove it from the exemption list if mock.yaml ever ships
+        a real display_name."""
+        resp = client.get("/api/v1/migration/adapters")
+        exemptions = {"mock"}
+        bad = []
+        for entry in resp.json():
+            if entry["name"] in exemptions:
+                continue
+            if not entry["vendor_display_name"].strip():
+                bad.append(entry["name"])
+        assert not bad, (
+            f"Codecs without a resolvable vendor_display_name: "
+            f"{bad}.  Add ``netcanon/migration/vendors/<vendor>.yaml`` "
+            f"with a ``display_name:`` field for each."
+        )
+
+    def test_opnsense_vendor_display_name(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "opnsense")
+        assert info["vendor_display_name"] == "OPNsense"
+
+    def test_input_format_surfaces_on_list_endpoint(self, client):
+        """Every entry exposes ``input_format`` so the /migrate UI can
+        pick a matching sample + filter stored files."""
+        resp = client.get("/api/v1/migration/adapters")
+        for entry in resp.json():
+            assert "input_format" in entry
+            assert isinstance(entry["input_format"], str)
+
+    def test_unsupported_rename_categories_exposed(self, client):
+        """Codecs that don't round-trip a per-pane category declare
+        it in ``unsupported_rename_categories``.  Surfaces via the
+        adapters endpoint so the rename modal can show an amber
+        compat banner on the affected pane.
+
+        As of Option A (this commit's series), ALL shipped
+        bidirectional codecs round-trip local_users — the field
+        stays wired as an extension point but every current codec
+        ships with it empty.  Re-populate only when a new codec
+        lands with a genuine Tier-3 passthrough gap."""
+        resp = client.get("/api/v1/migration/adapters")
+        by_name = {a["name"]: a for a in resp.json()}
+        for info in by_name.values():
+            assert "unsupported_rename_categories" in info
+            assert isinstance(info["unsupported_rename_categories"], list)
+        # Every bidirectional codec round-trips local_users after
+        # Option A — nobody lists it.
+        for name in (
+            "opnsense",
+            "fortigate_cli",
+            "cisco_iosxe_cli",
+            "aruba_aoss",
+            "mikrotik_routeros",
+        ):
+            assert "local_users" not in by_name[name]["unsupported_rename_categories"], (
+                f"{name}: unexpectedly declares local_users as unsupported; "
+                f"either Option A's cleanup missed this codec or a "
+                f"genuine Tier-3 gap was introduced — if the latter, "
+                f"update this test with the reason"
+            )
+
+    def test_ui_metadata_fields_surface(self, client):
+        """R5 follow-up (UI metadata migration): every entry exposes
+        description + sample_input + output_extension so the client
+        side has no need to hard-code per-vendor metadata."""
+        resp = client.get("/api/v1/migration/adapters")
+        for entry in resp.json():
+            for field in ("description", "sample_input", "output_extension"):
+                assert field in entry, f"{entry['name']} missing {field}"
+                assert isinstance(entry[field], str)
+
+    def test_real_codecs_have_sample_input(self, client):
+        """Every real codec (cisco_iosxe*, opnsense, mikrotik_routeros)
+        should provide a non-empty sample_input for the UI's 'Load sample'
+        button."""
+        resp = client.get("/api/v1/migration/adapters")
+        for entry in resp.json():
+            if entry["name"] in ("cisco_iosxe", "cisco_iosxe_cli",
+                                 "opnsense", "mikrotik_routeros", "mock"):
+                assert entry["sample_input"], (
+                    f"{entry['name']} has no sample_input"
+                )
+
+    def test_real_codecs_have_output_extension(self, client):
+        """Every real codec declares an output_extension for downloads."""
+        resp = client.get("/api/v1/migration/adapters")
+        expected = {
+            "cisco_iosxe": "xml",
+            "cisco_iosxe_cli": "cfg",
+            "opnsense": "xml",
+            "mikrotik_routeros": "rsc",
+            "mock": "json",
+        }
+        for entry in resp.json():
+            if entry["name"] in expected:
+                assert entry["output_extension"] == expected[entry["name"]], (
+                    f"{entry['name']} output_extension mismatch"
+                )
+
+    def test_cisco_iosxe_input_format_is_xml_netconf(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "cisco_iosxe")
+        assert info["input_format"] == "xml-netconf"
+
+    def test_opnsense_input_format_is_xml_opnsense(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "opnsense")
+        assert info["input_format"] == "xml-opnsense"
+
+    def test_cisco_iosxe_adapter_registered(self, client):
+        """Phase 0.5's first real adapter must appear in the list once
+        the migration package is imported (which FastAPI's create_app
+        already does)."""
+        resp = client.get("/api/v1/migration/adapters")
+        names = [a["name"] for a in resp.json()]
+        assert "cisco_iosxe" in names
+
+    def test_cisco_iosxe_declares_router_and_switch(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "cisco_iosxe")
+        assert "router" in info["device_classes"]
+        assert "switch" in info["device_classes"]
+
+    def test_cisco_iosxe_capabilities_endpoint(self, client):
+        """The detail endpoint returns the full iosxe matrix including
+        lossy MTU and (post-GAP-EVPN-3) supported IPv6 declarations."""
+        caps = client.get(
+            "/api/v1/migration/adapters/cisco_iosxe/capabilities"
+        ).json()
+        assert caps["adapter"] == "cisco_iosxe"
+        lossy_paths = [lp["path"] for lp in caps["lossy"]]
+        assert "/interfaces/interface/config/mtu" in lossy_paths
+        supp_paths = caps["supported"]
+        assert "/interfaces/interface/ipv6/address/ip" in supp_paths
+
+    def test_summary_counts_match_capability_detail(self, client):
+        """The summary counts in the list view must match the detail view
+        (formerly asserted via the now-hidden mock codec; cisco_nxos is a
+        public codec with all three triads populated)."""
+        info = next(
+            a for a in client.get("/api/v1/migration/adapters").json()
+            if a["name"] == "cisco_nxos"
+        )
+        caps = client.get(
+            "/api/v1/migration/adapters/cisco_nxos/capabilities"
+        ).json()
+        assert info["supported_count"] == len(caps["supported"])
+        assert info["lossy_count"] == len(caps["lossy"])
+        assert info["unsupported_count"] == len(caps["unsupported"])
+
+
+class TestGetAdapterCapabilities:
+    def test_returns_200_for_known_adapter(self, client):
+        resp = client.get("/api/v1/migration/adapters/mock/capabilities")
+        assert resp.status_code == 200
+
+    def test_response_shape(self, client):
+        caps = client.get("/api/v1/migration/adapters/mock/capabilities").json()
+        assert caps["adapter"] == "mock"
+        assert "supported" in caps
+        assert "lossy" in caps
+        assert "unsupported" in caps
+        assert "device_classes" in caps
+        # Lossy entries carry path + reason + severity.
+        for lossy in caps["lossy"]:
+            assert "path" in lossy
+            assert "reason" in lossy
+            assert "severity" in lossy
+
+    def test_404_for_unknown_adapter(self, client):
+        resp = client.get(
+            "/api/v1/migration/adapters/definitely-not-registered/capabilities"
+        )
+        assert resp.status_code == 404
+        assert "No adapter registered" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/migration/plan
+# ---------------------------------------------------------------------------
+
+
+_IOSXE_SIMPLE = """<?xml version="1.0"?>
+<interfaces xmlns="http://openconfig.net/yang/interfaces">
+  <interface>
+    <name>Gi0/0/0</name>
+    <config><name>Gi0/0/0</name><enabled>true</enabled></config>
+  </interface>
+</interfaces>
+"""
+
+
+class TestPlanEndpoint:
+    """POST /api/v1/migration/plan — the first manually-testable endpoint."""
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["status"] == "completed"
+        assert job["error"] is None
+        assert job["rendered"] is not None
+        assert job["validation"]["severity"] == "ok"
+
+    def test_unrecognized_input_is_partial_not_silent_completed(self, client):
+        """Audit 65f9c01 T0-2: non-trivial input the source codec can't
+        recognize must NOT report ``completed`` via the automation contract.
+
+        Previously a permissive parser returned an empty tree, severity
+        stayed ``ok`` and the job (and ``X-Netcanon-Job-Status`` header) said
+        ``completed`` with a banner-only render — a naive CI gate saw green
+        for a translation that produced nothing. It now reports ``partial``.
+        """
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "arista_eos",
+                "raw_text": "@@@ this is not a real config @@@\nlorem ipsum\n",
+            },
+        )
+        # Still HTTP 200 (the job body is always returned) ...
+        assert resp.status_code == 200
+        job = resp.json()
+        # ... but the disposition is honest on BOTH the body and the header.
+        assert job["status"] == "partial"
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial"
+        assert job["error"] and "recognized" in job["error"].lower()
+
+    def test_422_for_unknown_source_codec(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "not_an_adapter",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 422
+        assert "source adapter" in resp.json()["detail"]
+
+    def test_422_for_unknown_target_codec(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe",
+                "target": "not_an_adapter",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 422
+        assert "target adapter" in resp.json()["detail"]
+
+    def test_422_when_both_raw_text_and_source_filename_provided(
+        self, client
+    ):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+                "source_filename": "something.cfg",
+            },
+        )
+        assert resp.status_code == 422
+        assert "Exactly one" in resp.json()["detail"]
+
+    def test_422_when_neither_raw_text_nor_source_filename(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={"source": "cisco_iosxe", "target": "cisco_iosxe"},
+        )
+        assert resp.status_code == 422
+
+    def test_404_for_unknown_source_filename(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "source_filename": "not_a_real_file.cfg",
+            },
+        )
+        assert resp.status_code == 404
+
+    def test_parse_error_returns_200_with_failed_job(self, client):
+        """A parse failure is NOT an HTTP error — it's a normal job
+        outcome.  The caller wants the error message in the job body,
+        not an HTTP 4xx/5xx."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": "<not>real</xml",
+            },
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["status"] == "failed"
+        assert "parse failed" in (job["error"] or "").lower()
+
+    def test_cross_class_refused_by_default(self, client):
+        """opnsense [firewall,router] vs cisco_iosxe [router,switch]
+        share 'router' — actually class-compatible; this test is here
+        to confirm the guard isn't overly aggressive.  The PLAIN cross-
+        class block case is covered by unit tests."""
+        xml = """<?xml version="1.0"?>
+<opnsense><system><hostname>fw</hostname></system></opnsense>"""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={"source": "opnsense", "target": "cisco_iosxe", "raw_text": xml},
+        )
+        assert resp.status_code == 200
+        # Guard did NOT refuse (intersecting classes).
+        assert "Device-class guard" not in (resp.json()["error"] or "")
+
+    def test_force_flag_round_trips(self, client):
+        """The force flag is accepted and passed through — no crash
+        even if the request would've passed without it."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+                "force": True,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_non_port_override_still_auto_translates_ports(self, client):
+        """Regression (2026-07-03 review, API-1): a request carrying only a
+        NON-port override map (here ``vlan_rename_map``) must NOT disengage
+        the port-name auto-translation.
+
+        The ``/plan`` override branch used to pass ``port_rename_map=None``
+        unless a ``target_profile`` was also present, while a bare ``/plan``
+        passed ``{}``.  ``None`` turns the translator OFF, so merely opening
+        the VLAN pane (or posting any non-port override) silently reverted
+        interface names to verbatim source-vendor form — contradicting the
+        v0.3.2 auto-translate-by-default contract.  cisco_iosxe_cli →
+        juniper_junos renames ``GigabitEthernet1/0/1`` → ``ge-1/0/1``, so the
+        regression is visible in both ``port_renames`` and the rendered text.
+        """
+        iosxe_cli = (
+            "hostname r1\n"
+            "!\n"
+            "interface GigabitEthernet1/0/1\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+        )
+        base = {
+            "source": "cisco_iosxe_cli",
+            "target": "juniper_junos",
+            "raw_text": iosxe_cli,
+        }
+        bare = client.post("/api/v1/migration/plan", json=base).json()
+        # A bare /plan auto-translates the port name (Gi… → ge-…).
+        assert bare["port_renames"] == {"GigabitEthernet1/0/1": "ge-1/0/1"}
+
+        with_vlan = client.post(
+            "/api/v1/migration/plan",
+            json={**base, "vlan_rename_map": {}},
+        ).json()
+        # Adding a vlan-only override must engage the SAME auto-translation,
+        # not disengage it — identical port_renames, translated render.
+        assert with_vlan["port_renames"] == bare["port_renames"]
+        assert "GigabitEthernet1/0/1" not in (with_vlan["rendered"] or "")
+        assert "ge-1/0/1" in (with_vlan["rendered"] or "")
+
+
+class TestPlanPortsEndpoint:
+    """``POST /api/v1/migration/plan/ports`` — first per-pane override
+    endpoint.  Establishes the pattern that future category-specific
+    endpoints (``/plan/vlans``, ``/plan/snmp``, etc.) will follow.
+
+    Exists alongside the existing ``POST /plan`` which remains the
+    "everything at once" entry; per-pane endpoints let the client
+    POST only the category that changed.  Semantically equivalent to
+    ``POST /plan`` with a ``port_rename_map`` in the body; the
+    organisational distinction is routing-by-URL vs routing-by-body-
+    field-presence.
+    """
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_engages_rename_pipeline_even_with_no_map(self, client):
+        """Hitting /plan/ports with no explicit rename map still
+        engages the rename-aware pipeline (auto-heuristic only) —
+        distinct from the legacy /plan endpoint which falls through
+        to the un-rename-aware run_plan when no map is supplied."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 200
+        # Rename pipeline sets port_renames (possibly empty dict);
+        # run_plan alone leaves it as the default empty dict.
+        # Assert the key is present and typed correctly — value is
+        # codec-dependent.
+        body = resp.json()
+        assert "port_renames" in body
+        assert isinstance(body["port_renames"], dict)
+
+    def test_port_rename_map_is_applied(self, client):
+        """User-supplied rename map should carry through end-to-end —
+        resulting MigrationJob reflects the mapping in port_renames.
+
+        Uses the actual port name present in _IOSXE_SIMPLE (Gi0/0/0)
+        so the rename has a real target to act on."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+                "port_rename_map": {"Gi0/0/0": "GigabitEthernet99"},
+            },
+        )
+        assert resp.status_code == 200
+        applied = resp.json()["port_renames"]
+        # Explicit override wins over the identity auto-heuristic.
+        assert applied.get("Gi0/0/0") == "GigabitEthernet99"
+
+    def test_422_for_unknown_source_codec(self, client):
+        """Error-path parity with /plan."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "not_an_adapter",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_plan_ports_matches_plan_with_rename_map(self, client):
+        """Regression guard: /plan/ports with a rename_map produces
+        the same outcome as /plan with the same body.  Per-pane
+        endpoints are an organisational redirection, not a behaviour
+        change."""
+        body = {
+            "source": "cisco_iosxe",
+            "target": "cisco_iosxe",
+            "raw_text": _IOSXE_SIMPLE,
+            "port_rename_map": {},   # opt into rename-aware pipeline
+        }
+        plan_resp = client.post("/api/v1/migration/plan", json=body)
+        plan_ports_resp = client.post("/api/v1/migration/plan/ports", json=body)
+        plan = plan_resp.json()
+        plan_ports = plan_ports_resp.json()
+        # Same pipeline outcome (job IDs differ, but status + rendered
+        # content match).
+        assert plan["status"] == plan_ports["status"]
+        assert plan["rendered"] == plan_ports["rendered"]
+        assert plan["port_renames"] == plan_ports["port_renames"]
+        # Automation-contract parity: the per-pane endpoint must surface the
+        # same X-Netcanon-Job-Status header as /plan, not just the same JSON
+        # body.  The prior assertion compared only .json() and so missed the
+        # header divergence (audit f92e97a #7).
+        assert (
+            plan_ports_resp.headers["X-Netcanon-Job-Status"] == plan_ports["status"]
+        )
+        assert (
+            plan_resp.headers["X-Netcanon-Job-Status"]
+            == plan_ports_resp.headers["X-Netcanon-Job-Status"]
+        )
+
+
+class TestPerPaneEndpointsSetJobStatusHeader:
+    """Every per-pane override endpoint must set ``X-Netcanon-Job-Status``,
+    matching ``/plan`` and ``/render``.
+
+    The endpoint always returns HTTP 200 with the job in the body, so the
+    header is the only signal an HTTP-only automation gate can read to tell
+    completed from partial/failed.  ``/plan`` set it but the five per-pane
+    siblings did not, and the body-only parity test never noticed (audit
+    f92e97a #7).
+    """
+
+    _PER_PANE_PATHS = [
+        "/api/v1/migration/plan/ports",
+        "/api/v1/migration/plan/vlans",
+        "/api/v1/migration/plan/local_users",
+        "/api/v1/migration/plan/snmp",
+        "/api/v1/migration/plan/snmpv3",
+    ]
+
+    @pytest.mark.parametrize("path", _PER_PANE_PATHS)
+    def test_header_present_and_matches_body_status(self, client, path):
+        resp = client.post(
+            path,
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 200
+        assert "X-Netcanon-Job-Status" in resp.headers
+        assert resp.headers["X-Netcanon-Job-Status"] == resp.json()["status"]
+
+
+class TestJobStatusHeaderInOpenAPISchema:
+    """The ``X-Netcanon-Job-Status`` automation header must be *declared* in
+    the OpenAPI schema, not only set at runtime.
+
+    The wire-header tests above prove the header is emitted; this proves it is
+    documented, so generated clients / contract tools can discover it.  All
+    seven job-running endpoints emitted the header but none declared it in the
+    schema (``responses=`` advertised only 404 + 422) -- audit e5b77d7 #8.
+    """
+
+    _JOB_PATHS = [
+        "/api/v1/migration/plan",
+        "/api/v1/migration/plan/ports",
+        "/api/v1/migration/plan/vlans",
+        "/api/v1/migration/plan/local_users",
+        "/api/v1/migration/plan/snmp",
+        "/api/v1/migration/plan/snmpv3",
+        "/api/v1/migration/render",
+    ]
+
+    @pytest.mark.parametrize("path", _JOB_PATHS)
+    def test_header_declared_on_200_with_enum(self, client, path):
+        r200 = client.app.openapi()["paths"][path]["post"]["responses"]["200"]
+        hdr = r200.get("headers", {}).get("X-Netcanon-Job-Status")
+        assert hdr is not None, f"{path} 200 response is missing the header"
+        assert hdr["schema"]["enum"] == ["completed", "partial", "failed"]
+        # Declaring the header must NOT clobber the MigrationJob body schema.
+        assert "application/json" in r200.get("content", {})
+
+    def test_detect_endpoint_does_not_declare_the_header(self, client):
+        # /detect returns a candidate list, runs no pipeline, sets no header.
+        r200 = client.app.openapi()["paths"][
+            "/api/v1/migration/detect"
+        ]["post"]["responses"]["200"]
+        assert "X-Netcanon-Job-Status" not in r200.get("headers", {})
+
+
+class TestPlanVlansEndpoint:
+    """``POST /api/v1/migration/plan/vlans`` — second per-pane
+    override endpoint.  Exercises the ``vlan_rename_map`` surface
+    end-to-end through the integration stack.
+
+    Same structural parity with ``/plan/ports`` — each category
+    endpoint accepts the full MigrationPlanRequest body and
+    dispatches to ``run_plan_with_overrides`` with only its
+    category's map populated."""
+
+    _IOSXE_WITH_VLANS = """\
+hostname TestCisco
+!
+vlan 10
+ name USERS
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+!
+"""
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_vlan_rename_map_is_applied(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+                "vlan_rename_map": {10: 100},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Applied rewrite shows up as int → int.  Note that JSON
+        # serialisation turns dict keys into strings, so the
+        # wire-level shape is {"10": 100}; pydantic coerces back
+        # to int keys on deserialisation.
+        applied = body["vlan_renames"]
+        # Key may be "10" (string) or 10 (int) depending on serialisation.
+        if "10" in applied:
+            assert applied["10"] == 100
+        elif 10 in applied:
+            assert applied[10] == 100
+        else:
+            pytest.fail(f"vlan_renames does not contain 10: {applied!r}")
+
+    def test_vlan_drop_appears_in_vlan_drops(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+                "vlan_rename_map": {10: None},
+            },
+        )
+        assert resp.status_code == 200
+        assert 10 in resp.json()["vlan_drops"]
+
+    def test_422_for_unknown_source_codec(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "not_an_adapter",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_plan_vlans_ignores_port_rename_map(self, client):
+        """Per-pane endpoints apply their category only.  If the
+        operator sends a port_rename_map to /plan/vlans, it's
+        silently dropped — documented contract, not a bug."""
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+                "vlan_rename_map": {10: 100},
+                "port_rename_map": {
+                    "GigabitEthernet1/0/1": "GigabitEthernet99",
+                },
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # VLAN applied.  Port auto-translation IS now engaged (#16) — Gi1/0/1
+        # -> aruba 1/1 — so the render carries no invalid source-vendor name;
+        # but the EXPLICIT port map on this VLAN pane is still ignored
+        # (GigabitEthernet99 never applied).
+        vlan_renames = body["vlan_renames"]
+        assert "10" in vlan_renames or 10 in vlan_renames
+        assert body["port_renames"].get("GigabitEthernet1/0/1") == "1/1"
+        assert "GigabitEthernet99" not in body["port_renames"].values()
+        assert "GigabitEthernet1/0/1" not in (body["rendered"] or "")
+
+
+class TestPlanLocalUsersEndpoint:
+    """``POST /api/v1/migration/plan/local_users`` — third per-pane
+    override endpoint (P2C4).  Exercises the ``local_user_rename_map``
+    surface end-to-end through the integration stack."""
+
+    _IOSXE_WITH_USERS = """\
+hostname TestCisco
+!
+username admin privilege 15 secret 5 $1$abc$fake
+username operator privilege 5 secret 5 $1$def$fake
+username svc-backup-2019 privilege 1 secret 5 $1$ghi$fake
+!
+interface GigabitEthernet1/0/1
+ description uplink
+!
+"""
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_rename_is_applied(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+        # Source-shape capture still reflects the pre-rename tree.
+        assert "admin" in body["source_local_users"]
+
+    def test_drop_appears_in_local_user_drops(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+                "local_user_rename_map": {"svc-backup-2019": None},
+            },
+        )
+        assert resp.status_code == 200
+        assert "svc-backup-2019" in resp.json()["local_user_drops"]
+
+    def test_422_for_unknown_source_codec(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "not_an_adapter",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_ignores_port_and_vlan_maps(self, client):
+        """Per-pane endpoints apply their category only."""
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+                "local_user_rename_map": {"admin": "netadmin"},
+                "port_rename_map": {
+                    "GigabitEthernet1/0/1": "GigabitEthernet99",
+                },
+                "vlan_rename_map": {10: 100},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+        # VLAN map ignored; port auto-translation IS engaged (#16) — Gi1/0/1
+        # -> aruba 1/1 — but the EXPLICIT port map (GigabitEthernet99) is not
+        # applied.
+        assert body["port_renames"].get("GigabitEthernet1/0/1") == "1/1"
+        assert "GigabitEthernet99" not in body["port_renames"].values()
+        assert body["vlan_renames"] == {}
+
+
+class TestPlanMultiCategoryRouting:
+    """The top-level POST /plan endpoint accepts any combination of
+    per-category maps and engages the rename-aware pipeline when any
+    is present.  Locks in the P2C4 fix that previously saw VLAN +
+    local-user maps silently dropped unless port_rename_map was also
+    set."""
+
+    _IOSXE = """\
+hostname MultiTest
+!
+vlan 10
+ name USERS
+!
+username admin privilege 15 secret 5 $1$abc$fake
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+!
+"""
+
+    def test_plan_with_only_vlan_map_engages_vlan_transform(self, client):
+        """Pre-P2C4 bug: /plan with only vlan_rename_map silently
+        used run_plan (no overrides).  Fixed: vlan_renames populates."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE,
+                "vlan_rename_map": {10: 200},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        renames = body["vlan_renames"]
+        assert ("10" in renames and renames["10"] == 200) or (
+            10 in renames and renames[10] == 200
+        )
+
+    def test_plan_with_only_local_user_map_engages_user_transform(
+        self, client,
+    ):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE,
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+
+    def test_plan_with_all_three_maps_applies_all(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE,
+                "port_rename_map": {},
+                "vlan_rename_map": {10: 200},
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # VLAN rewrite applied.
+        vrn = body["vlan_renames"]
+        assert ("10" in vrn and vrn["10"] == 200) or (
+            10 in vrn and vrn[10] == 200
+        )
+        # Local-user rewrite applied.
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+        # Port overrides empty-map means auto-heuristic only — no
+        # user overrides applied, but source_vlans still populates.
+        assert "source_vlans" in body
+
+    def test_plan_without_any_override_still_translates_port_names(
+        self, client,
+    ):
+        """No override maps and no target profile STILL translates
+        port names: the endpoint engages the auto port-name heuristic
+        so a plain cross-vendor translation renders native target
+        interface names (GigabitEthernet1/0/1 -> aruba 1/1) instead of
+        leaving them verbatim.  VLAN / local-user categories stay
+        disengaged (their maps were None), and the source-shape
+        capture fires."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Auto port-name translation engaged even with no overrides.
+        assert body["port_renames"].get("GigabitEthernet1/0/1") == "1/1"
+        # Categories the caller didn't engage stay empty.
+        assert body["vlan_renames"] == {}
+        assert body["local_user_renames"] == {}
+        # Capture now fires (source-shape fields populate for the modal).
+        assert body["source_vlans"] == [10]
+
+
+class TestSourceShapeCapture:
+    """P2C3 M1 exposed source_vlans + source_hostname on the job so
+    the rename-modal VLAN pane can enumerate source VLANs and scope
+    localStorage persistence by device.  These tests lock in the
+    capture contract against future pipeline changes that might
+    reorder transforms."""
+
+    _IOSXE_WITH_VLANS = """\
+hostname CoreSw01
+!
+vlan 10
+ name USERS
+!
+vlan 20
+ name VOICE
+!
+vlan 99
+ name MGMT
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+!
+"""
+
+    def test_source_vlans_populated_on_ports_endpoint(self, client):
+        """Every per-pane endpoint flows through run_plan_with_overrides
+        which always runs the capture transform — so /plan/ports
+        populates source_vlans even though its pane doesn't use them."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert sorted(body["source_vlans"]) == [10, 20, 99]
+
+    def test_source_vlans_populated_on_vlans_endpoint(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert sorted(body["source_vlans"]) == [10, 20, 99]
+
+    def test_source_hostname_populated(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["source_hostname"] == "CoreSw01"
+
+    def test_source_hostname_empty_when_not_declared(self, client):
+        """Cisco config with no hostname line → hostname field empty."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": "vlan 10\n name FOO\n!\n",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["source_hostname"] == ""
+
+    def test_source_vlans_captured_before_rename_transform(self, client):
+        """Capture runs AHEAD of rename transforms (first in the
+        override_transforms list).  Renaming VLAN 10 → 100 mutates
+        the tree, but source_vlans still reflects the pre-mutation
+        state so the UI enumerates what the operator had originally."""
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+                "vlan_rename_map": {10: 100},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Pre-rename ids: 10 remains in source_vlans even though the
+        # vlan_renames map shows 10 → 100.
+        assert 10 in body["source_vlans"]
+        assert sorted(body["source_vlans"]) == [10, 20, 99]
+
+    def test_source_local_users_populated(self, client):
+        """P2C4 extends the capture to include local_users names."""
+        cfg_with_users = (
+            "hostname CoreSw01\n!\n"
+            "username admin privilege 15 secret 5 $1$abc$fake\n"
+            "username backup privilege 1 secret 5 $1$def$fake\n"
+            "!\n"
+        )
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg_with_users,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert sorted(body["source_local_users"]) == ["admin", "backup"]
+
+    def test_source_local_users_captured_before_rename(self, client):
+        """Same pre-mutation contract as source_vlans — the UI pane
+        should see 'admin' even after a rename rewrites it."""
+        cfg = (
+            "hostname CoreSw01\n!\n"
+            "username admin privilege 15 secret 5 $1$abc$fake\n!\n"
+        )
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg,
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "admin" in body["source_local_users"]
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+
+    def test_source_snmp_community_populated(self, client):
+        """P2C5 M1 added source_snmp_community for the SNMP pane.
+        Matches source_vlans / source_local_users pre-mutation contract."""
+        cfg = (
+            "hostname CoreSw01\n!\n"
+            "snmp-server community public RO\n"
+            "snmp-server location HQ\n!\n"
+        )
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg,
+                "snmp_community_rename_map": {},  # engage capture
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["source_snmp_community"] == "public"
+
+    def test_source_snmp_community_empty_when_no_snmp(self, client):
+        """Source config has no SNMP block → empty string (not null).
+        Matches the string-default convention used by source_hostname."""
+        cfg = "hostname NoSnmp\n!\n"
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg,
+                "snmp_community_rename_map": {},
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["source_snmp_community"] == ""
+
+    def test_source_snmp_community_captured_before_rename(self, client):
+        """Pre-mutation snapshot: the rename modal still sees the
+        original community after the pipeline rewrites it."""
+        cfg = (
+            "hostname CoreSw01\n!\n"
+            "snmp-server community public RO\n!\n"
+        )
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["source_snmp_community"] == "public"
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+
+
+class TestPlanSnmpEndpoint:
+    """``POST /api/v1/migration/plan/snmp`` — fourth per-pane
+    override endpoint (P2C5).  Exercises the
+    ``snmp_community_rename_map`` surface end-to-end.
+
+    Structural shape parallels ``/plan/local_users`` etc., but the
+    SNMP canonical surface is scalar (single community string) so
+    collision tests don't apply.
+    """
+
+    _IOSXE_WITH_SNMP = """\
+hostname TestCisco
+!
+snmp-server community public RO
+snmp-server location HQ
+snmp-server contact netops@example.com
+!
+"""
+
+    _IOSXE_WITHOUT_SNMP = """\
+hostname TestCisco
+!
+interface GigabitEthernet1/0/1
+ description uplink
+!
+"""
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_community_rename_is_applied(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+
+    def test_community_clear_appears_in_drops(self, client):
+        """Map value None clears the community — drop semantics."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "snmp_community_rename_map": {"public": None},
+            },
+        )
+        assert resp.status_code == 200
+        assert "public" in resp.json()["snmp_community_drops"]
+
+    def test_no_snmp_block_surfaces_warning(self, client):
+        """Source config has no SNMP block; operator override produces
+        an advisory warning and no rewrite."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITHOUT_SNMP,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["snmp_community_renames"] == {}
+        warnings_text = "\n".join(body["warnings"])
+        assert "no SNMP block" in warnings_text
+
+    def test_422_for_unknown_source_codec(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "not_an_adapter",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_ignores_other_category_maps(self, client):
+        """Per-pane endpoints apply their category only.  If the
+        operator sends port_rename_map / vlan_rename_map /
+        local_user_rename_map to /plan/snmp, they're silently dropped
+        — documented contract, same shape as /plan/ports + siblings."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+                "port_rename_map": {"GigabitEthernet1/0/1": "X1"},
+                "vlan_rename_map": {10: 100},
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+        # Other categories NOT engaged from this endpoint.
+        assert body["port_renames"] == {}
+        assert body["vlan_renames"] == {}
+        assert body["local_user_renames"] == {}
+
+
+class TestPlanMultiCategoryRoutingSnmp:
+    """Extension of TestPlanMultiCategoryRouting: /plan dispatches to
+    run_plan_with_overrides when snmp_community_rename_map is set,
+    exactly the same way it does for the three pre-P2C5 maps.  Guards
+    against a future refactor that might miss the SNMP fork in the
+    routing predicate."""
+
+    _IOSXE_WITH_SNMP = """\
+hostname MultiTest
+!
+vlan 10
+ name USERS
+!
+snmp-server community public RO
+!
+username admin privilege 15 secret 5 $1$abc$fake
+!
+"""
+
+    def test_plan_with_only_snmp_map_engages_snmp_transform(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+        # Capture still fires (source_snmp_community populated).
+        assert body["source_snmp_community"] == "public"
+
+    def test_plan_with_all_four_maps_applies_all(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "port_rename_map": {},
+                "vlan_rename_map": {10: 200},
+                "local_user_rename_map": {"admin": "netadmin"},
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # All four categories surface populated responses.
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+        vrn = body["vlan_renames"]
+        assert ("10" in vrn and vrn["10"] == 200) or (
+            10 in vrn and vrn[10] == 200
+        )
+
+
+class TestPlanSnmpV3Endpoint:
+    """``POST /api/v1/migration/plan/snmpv3`` — fifth per-pane
+    override endpoint (P2C6).  Exercises the
+    ``snmpv3_user_rename_map`` surface end-to-end.
+
+    Structural shape parallels ``/plan/local_users`` (list-oriented
+    canonical surface with collision first-wins semantics).  Covers
+    the dominant cross-mesh source pair: Cisco IOS-XE CLI → Aruba
+    AOS-S, plus representative edge cases.
+    """
+
+    _IOSXE_WITH_V3 = """\
+hostname TestCisco
+!
+snmp-server community public RO
+snmp-server user netadmin adminGroup v3 auth sha SHApass priv aes 128 AESpass
+snmp-server user monitor roGroup v3 auth md5 MDpass
+!
+"""
+
+    _IOSXE_WITHOUT_V3 = """\
+hostname TestCisco
+!
+snmp-server community public RO
+!
+"""
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_source_v3_users_captured_on_response(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+            },
+        )
+        body = resp.json()
+        assert "netadmin" in body["source_snmpv3_users"]
+        assert "monitor" in body["source_snmpv3_users"]
+
+    def test_v3_user_rename_is_applied(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+                "snmpv3_user_rename_map": {
+                    "netadmin": "platform-snmpro",
+                },
+            },
+        )
+        body = resp.json()
+        assert body["snmpv3_user_renames"] == {
+            "netadmin": "platform-snmpro",
+        }
+
+    def test_v3_user_drop_appears_in_drops(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+                "snmpv3_user_rename_map": {"monitor": None},
+            },
+        )
+        body = resp.json()
+        assert "monitor" in body["snmpv3_user_drops"]
+
+    def test_no_v3_users_surfaces_warning(self, client):
+        """Source has v2c community but no v3 users → rename override
+        produces advisory warning and no rewrite."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITHOUT_V3,
+                "snmpv3_user_rename_map": {"netadmin": "new-name"},
+            },
+        )
+        body = resp.json()
+        assert body["snmpv3_user_renames"] == {}
+        warnings_text = "\n".join(body["warnings"])
+        assert "no SNMPv3 users" in warnings_text
+
+    def test_ignores_other_category_maps(self, client):
+        """/plan/snmpv3 dispatches ONLY the v3 category.  Other
+        maps in the body are silently ignored — endpoint discipline."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+                "snmpv3_user_rename_map": {"netadmin": "new-v3"},
+                "snmp_community_rename_map": {"public": "new-community"},
+                "local_user_rename_map": {"admin": "netadmin-cli"},
+            },
+        )
+        body = resp.json()
+        assert body["snmpv3_user_renames"] == {"netadmin": "new-v3"}
+        # Other categories NOT engaged from this endpoint.
+        assert body["snmp_community_renames"] == {}
+        assert body["local_user_renames"] == {}
+
+
+class TestPlanMultiCategoryRoutingSnmpV3:
+    """``/plan`` dispatches to run_plan_with_overrides when
+    ``snmpv3_user_rename_map`` is set, exactly like the four
+    pre-P2C6 maps.  Guards against refactors that might miss the
+    v3 fork in the routing predicate."""
+
+    _IOSXE_V3_CORPUS = """\
+hostname MultiTestV3
+!
+vlan 10
+ name USERS
+!
+snmp-server community public RO
+snmp-server user netadmin adminGroup v3 auth sha SHApass priv aes 128 AESpass
+!
+username admin privilege 15 secret 5 $1$abc$fake
+!
+"""
+
+    def test_plan_with_only_v3_map_engages_v3_transform(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_V3_CORPUS,
+                "snmpv3_user_rename_map": {
+                    "netadmin": "platform-snmpro",
+                },
+            },
+        )
+        body = resp.json()
+        assert body["snmpv3_user_renames"] == {
+            "netadmin": "platform-snmpro",
+        }
+        assert "netadmin" in body["source_snmpv3_users"]
+
+    def test_plan_with_all_five_maps_applies_all(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_V3_CORPUS,
+                "port_rename_map": {},
+                "vlan_rename_map": {10: 200},
+                "local_user_rename_map": {"admin": "netadmin-cli"},
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+                "snmpv3_user_rename_map": {
+                    "netadmin": "platform-snmpro",
+                },
+            },
+        )
+        body = resp.json()
+        # All five categories surface populated responses.
+        assert body["local_user_renames"] == {"admin": "netadmin-cli"}
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+        assert body["snmpv3_user_renames"] == {
+            "netadmin": "platform-snmpro",
+        }
+        vrn = body["vlan_renames"]
+        assert ("10" in vrn and vrn["10"] == 200) or (
+            10 in vrn and vrn[10] == 200
+        )
+
+
+class TestRenderEndpoint:
+    """/render is currently an alias for /plan.  These tests lock that
+    fact in so a future split gets a visible PR."""
+
+    def test_render_matches_plan_for_same_body(self, client):
+        body = {
+            "source": "cisco_iosxe",
+            "target": "cisco_iosxe",
+            "raw_text": _IOSXE_SIMPLE,
+        }
+        plan = client.post("/api/v1/migration/plan", json=body).json()
+        render = client.post("/api/v1/migration/render", json=body).json()
+        # Same pipeline outcome; only the job ID differs.
+        assert plan["status"] == render["status"]
+        assert plan["rendered"] == render["rendered"]
+
+
+class TestSourceFilenameIntegration:
+    """The source_filename shorthand loads from the backup store that
+    the config diff feature already uses — proving the translator
+    integrates cleanly with the existing storage layer."""
+
+    def test_plan_reads_stored_config_by_filename(self, client):
+        """Create a backup first, then migrate that stored config."""
+        # Step 1: use FakeCollector (wired by the integration fixture)
+        # to produce a real stored config on disk.
+        devices = [
+            {
+                "type_key": "Cisco",
+                "host": "10.77.77.77",
+                "credentials": {"username": "admin", "password": "x"},
+            }
+        ]
+        client.post("/api/v1/backups", json={"devices": devices})
+        # Step 2: find its filename via the existing list endpoint.
+        configs = client.get("/api/v1/configs/").json()
+        assert configs, "FakeCollector should have produced a config"
+        filename = configs[0]["filename"]
+
+        # Step 3: hand that filename to /plan.  The Cisco FakeCollector
+        # returns a plaintext IOS snippet, NOT OpenConfig XML, so the
+        # iosxe parser will fail — but that's the point: we prove the
+        # file WAS loaded (parse got a chance to run).
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "source_filename": filename,
+            },
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        # Parse failed because the FakeCollector output isn't XML.
+        assert job["status"] == "failed"
+        assert "parse failed" in (job["error"] or "").lower()
+
+
+class TestOpnsenseParamikoShellEchoRescue:
+    """Regression guard for the user-reported bug where OPNsense
+    backups collected via the paramiko-shell collector (pre-fix)
+    landed on disk with a literal ``cat /conf/config.xml\\r\\r\\n``
+    preamble before the ``<?xml`` prolog.  ``ET.fromstring`` refused
+    that shape with ``syntax error: line 1, column 0`` even though
+    the detection probe happily reported 98% confidence.
+
+    Fix has two layers:
+
+    1. **Collector-side** (`paramiko_collector._strip_command_echo`)
+       — prevents NEW backups from landing with the preamble.
+       Covered by ``tests/unit/test_paramiko_collector.py``.
+    2. **Parser-side** (`opnsense.codec._trim_xml_prologue`) —
+       rescues LEGACY backups already on disk that were written by
+       the pre-fix collector.  This test drops such a file directly
+       into the TestClient's configs dir (simulating a legacy
+       backup) and asserts `/plan` succeeds.
+    """
+
+    _OPNSENSE_MIN_VALID = (
+        '<?xml version="1.0"?>\n'
+        "<opnsense>\n"
+        "  <system>\n"
+        "    <hostname>fw-rescued</hostname>\n"
+        "    <domain>example.test</domain>\n"
+        "  </system>\n"
+        "</opnsense>\n"
+    )
+    _CORRUPT_PREAMBLE = "cat /conf/config.xml\r\r\n"
+
+    def test_plan_rescues_legacy_corrupt_backup(
+        self, client, test_settings,
+    ):
+        """Drop a file that mimics what the pre-fix collector wrote
+        and verify ``POST /plan`` completes instead of failing."""
+        corrupt = self._CORRUPT_PREAMBLE + self._OPNSENSE_MIN_VALID
+        fname = "OPNsense_192-0-2-42_20260101_000000.xml"
+        (test_settings.configs_dir / fname).write_text(
+            corrupt, encoding="utf-8",
+        )
+
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "opnsense",
+                "target": "opnsense",
+                "source_filename": fname,
+            },
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["status"] == "completed", (
+            f"parser-side rescue failed — job {job.get('error')!r}"
+        )
+        assert "parse failed" not in (job.get("error") or "").lower()
+
+    def test_plan_still_fails_on_truly_malformed_xml(
+        self, client, test_settings,
+    ):
+        """The rescue must NOT swallow real errors — a file with no
+        ``<?xml`` or ``<opnsense`` marker anywhere must still fail
+        parse cleanly, surfacing the error to the operator."""
+        fname = "OPNsense_broken_20260101_000000.xml"
+        (test_settings.configs_dir / fname).write_text(
+            "this is not xml at all\njust plain text",
+            encoding="utf-8",
+        )
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "opnsense",
+                "target": "opnsense",
+                "source_filename": fname,
+            },
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["status"] == "failed"
+        assert "malformed XML" in (job.get("error") or "")
+
+    def test_plan_rescues_head_and_tail_noise_simultaneously(
+        self, client, test_settings,
+    ):
+        """The user's real file had BOTH a leading command echo AND
+        a trailing shell prompt.  Once both strips are active, the
+        file parses cleanly and the full opnsense → fortigate_cli
+        translation completes — not just opnsense → opnsense
+        (which only exercises the parser side)."""
+        corrupt = (
+            self._CORRUPT_PREAMBLE
+            + self._OPNSENSE_MIN_VALID.rstrip()
+            + "\nroot@supergate:~ # "
+        )
+        fname = "OPNsense_192-0-2-43_20260101_000001.xml"
+        (test_settings.configs_dir / fname).write_text(
+            corrupt, encoding="utf-8",
+        )
+
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "opnsense",
+                "target": "fortigate_cli",  # cross-vendor, matches user scenario
+                "source_filename": fname,
+            },
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["status"] == "completed", (
+            f"head+tail rescue failed — job error: {job.get('error')!r}"
+        )
+        # Rendered FortiGate config should contain the hostname
+        # from the source OPNsense config (fw-rescued).
+        rendered = job.get("rendered") or ""
+        assert "fw-rescued" in rendered, (
+            "translated FortiGate config should carry the source "
+            "hostname through the canonical tree"
+        )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/migration/detect (R5 — auto-detection)
+# ---------------------------------------------------------------------------
+
+
+class TestDetectEndpoint:
+    def test_detect_oversized_raw_text_rejected_422(self, client):
+        """SEC-10 (2026-07-03 review): /detect must cap raw_text at 10 MB
+        like /plan, so it can't be used to buffer an unbounded body."""
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": "x" * 10_000_001},
+        )
+        assert resp.status_code == 422
+
+    def test_detect_opnsense_xml(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={
+                "raw_text": "<opnsense><system><hostname>x</hostname></system></opnsense>",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["codec"] == "opnsense"
+        assert body[0]["confidence"] >= 95
+        assert "reason" in body[0]
+
+    def test_detect_mikrotik_export(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={
+                "raw_text": (
+                    "# by RouterOS 7.13\n"
+                    "/system identity\nset name=r1\n"
+                ),
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body[0]["codec"] == "mikrotik_routeros"
+
+    def test_detect_ios_cli(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={
+                "raw_text": (
+                    "!\ninterface GigabitEthernet0/0/0\n"
+                    " ip address 10.0.0.1 255.255.255.0\n"
+                    " no shutdown\n!\n"
+                ),
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body[0]["codec"] == "cisco_iosxe_cli"
+
+    def test_detect_empty_input(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": ""},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_detect_both_fields_set_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": "x", "source_filename": "foo"},
+        )
+        assert resp.status_code == 422
+
+    def test_detect_neither_field_set_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={},
+        )
+        assert resp.status_code == 422
+
+    def test_detect_missing_stored_file_returns_404(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"source_filename": "does_not_exist.xml"},
+        )
+        assert resp.status_code == 404
+
+    def test_detect_sorted_descending_by_confidence(self, client):
+        """When multiple codecs match, API must return them sorted."""
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={
+                "raw_text": (
+                    "hostname r1\n!\ninterface Loopback0\n"
+                    " ip address 1.1.1.1 255.255.255.255\n!\n"
+                ),
+            },
+        )
+        body = resp.json()
+        confidences = [c["confidence"] for c in body]
+        assert confidences == sorted(confidences, reverse=True)
+
+    def test_detect_min_confidence_filters(self, client):
+        """Passing min_confidence=80 should drop weak matches."""
+        weak = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": "hostname r1\n!\n", "min_confidence": 1},
+        ).json()
+        strict = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": "hostname r1\n!\n", "min_confidence": 80},
+        ).json()
+        # Weak threshold gets the hostname+! low-confidence match;
+        # strict threshold drops it.
+        assert len(weak) >= 1
+        assert all(c["confidence"] >= 80 for c in strict)
+
+    def test_detect_stored_config_end_to_end(self, client):
+        """User-flow: back up an OPNsense device, then /detect on the stored
+        config — opnsense must rank as the top candidate.
+
+        TEST-1 (2026-07-03 review): this test used to self-skip forever
+        because it compared the backup status against 200, but
+        ``POST /api/v1/backups`` returns **202 Accepted** — so ``202 != 200``
+        skipped before any assertion ran.  It also stored *Cisco* content
+        (the shared client fixture wires a Cisco-emitting FakeCollector for
+        every device), so the opnsense assertion could never have held.
+        Both are fixed: assert 202, and re-patch the collector locally so
+        this backup stores real OPNsense XML for /detect to recognise.
+        """
+        devices = [
+            {
+                "type_key": "OPNsense",
+                "host": "10.88.88.88",
+                "credentials": {"username": "admin", "password": "x"},
+            }
+        ]
+        # The shared `client` fixture returns CISCO_FAKE_OUTPUT for every
+        # device; override locally so THIS backup stores OPNsense XML —
+        # otherwise /detect would (correctly) rank cisco on Cisco content.
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=FakeCollector(output=OPNSENSE_FAKE_OUTPUT),
+        ):
+            backup_resp = client.post(
+                "/api/v1/backups", json={"devices": devices}
+            )
+        # POST /api/v1/backups returns 202 Accepted; TestClient runs the
+        # BackgroundTask synchronously, so the config is already stored.
+        assert backup_resp.status_code == 202, backup_resp.text
+
+        configs = client.get("/api/v1/configs/").json()
+        assert configs, "backup should have produced a stored config"
+        opn_cfg = next(
+            (c for c in configs if "opnsense" in c["filename"].lower()),
+            configs[0],
+        )
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"source_filename": opn_cfg["filename"]},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) >= 1
+        # Detect resolves by CONTENT: the stored OPNsense config.xml ranks
+        # opnsense top.
+        assert body[0]["codec"] == "opnsense"
+
+
+class TestDroppedTier3SectionsWireThrough:
+    """Verify the migration response surfaces the parser-detected
+    Tier-3 stanza headers via :attr:`MigrationJob.dropped_tier3_sections`.
+
+    Notification surface — no transform / render side-effect should
+    react to this field.  Tests pin both the populated case (input
+    contains an ACL) and the empty case (clean Tier-1 input).
+    """
+
+    _IOSXE_WITH_ACL = (
+        "hostname r1\n"
+        "ip access-list extended OUTSIDE_IN\n"
+        " permit tcp any any eq 22\n"
+        "interface GigabitEthernet0/0\n"
+        " ip address 10.0.0.1 255.255.255.0\n"
+        "!\n"
+    )
+
+    _IOSXE_CLEAN = (
+        "hostname r1\n"
+        "interface GigabitEthernet0/0\n"
+        " ip address 10.0.0.1 255.255.255.0\n"
+        "!\n"
+    )
+
+    def test_acl_in_source_surfaces_in_response(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "cisco_iosxe_cli",
+                "raw_text": self._IOSXE_WITH_ACL,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "dropped_tier3_sections" in body
+        sections = body["dropped_tier3_sections"]
+        assert any(
+            s.startswith("ip access-list extended OUTSIDE_IN")
+            for s in sections
+        ), f"expected ACL header in {sections}"
+
+    def test_clean_source_yields_empty_list(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "cisco_iosxe_cli",
+                "raw_text": self._IOSXE_CLEAN,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Field is always present (default_factory=list); never null.
+        assert body["dropped_tier3_sections"] == []
+
+    def test_field_does_not_alter_render(self, client):
+        """Pin that the field is notification-only — render output
+        for the Tier-3-laden source should be the same as a clean
+        run plus whatever Tier-1 content exists.  In other words,
+        no ACL bytes leak into job.rendered."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "cisco_iosxe_cli",
+                "raw_text": self._IOSXE_WITH_ACL,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        rendered = body.get("rendered") or ""
+        # ACL header is in dropped_tier3_sections (notification),
+        # NOT in rendered (would mean we accidentally translated it).
+        assert "access-list extended OUTSIDE_IN" not in rendered
+
+
+class TestPerPanePortNameParity:
+    """(#16) Every per-pane endpoint must engage auto port-name translation
+    like /plan, so a cross-vendor render never leaks an invalid source-vendor
+    interface name — even when the pane's own category map is empty.  Before
+    the fix, /plan/{vlans,local_users,snmp,snmpv3} left port_rename_map=None,
+    disengaging the translator and rendering ``GigabitEthernet1/0/1`` verbatim
+    into a Junos config."""
+
+    _IOSXE = (
+        "hostname r1\n!\n"
+        "interface GigabitEthernet1/0/1\n"
+        " description uplink\n"
+        "!\n"
+        "vlan 10\n name DATA\n!\n"
+    )
+
+    @pytest.mark.parametrize(
+        "endpoint",
+        ["plan/vlans", "plan/local_users", "plan/snmp", "plan/snmpv3"],
+    )
+    def test_per_pane_translates_port_names(self, client, endpoint):
+        resp = client.post(
+            f"/api/v1/migration/{endpoint}",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "juniper_junos",
+                "raw_text": self._IOSXE,
+            },
+        )
+        assert resp.status_code == 200
+        rendered = resp.json().get("rendered") or ""
+        # Source-vendor name must NOT survive; the Junos-format name must.
+        assert "GigabitEthernet1/0/1" not in rendered
+        assert "ge-1/0/1" in rendered
