@@ -1,0 +1,842 @@
+# Netcanon Capabilities + Known Limitations
+
+Netcanon is a multi-vendor network device configuration translator
+with two co-hosted concerns:
+
+1. **Backup** — pull `running-config` (or vendor equivalent) from
+   devices over SSH / NETCONF / REST and store in
+   `configs/<host>.<ext>`.
+2. **Migration** — translate a stored backup from one vendor's native
+   config grammar into another, via a shared canonical intent tree.
+
+This document is the operator-facing source of truth for **what the
+program does and does not do**.  Internal architecture lives in
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md); contributor rules live in
+[`../AGENTS.md`](../AGENTS.md).  Per-codec live certification status
+lives in [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md).
+
+---
+
+## Supported vendors
+
+The migration codecs listed below ship today, plus a `_mock` adapter
+used in tests.  Backup-side device definitions are listed under
+[`../netcanon/definitions/library/`](../netcanon/definitions/library/) (one YAML per vendor/OS family).
+
+**Platform fit.**  The canonical model covers the shared network-function
+layer.  On a switch or router that is most of the device's configuration;
+on a firewall appliance it is a minority of it.  The policy table, NAT, VPN
+and UTM profiles are Tier 3 and are out of scope **in either direction** —
+when a firewall is the *source* they are detected and listed by name; when a
+firewall is the *target*, nothing is emitted for them at all and the migrate
+page raises a **scope advisory** saying so (see § Scope advisories below).
+If your migration's centre of gravity is policy, Netcanon is the wrong tool —
+see [`COMPARISON.md`](COMPARISON.md).
+
+A codec's **primary device class** — the `Primary class` column below, and
+the first entry in its `device_classes` — is the authoritative scope
+declaration for that platform: `firewall`-primary codecs are translated at
+the L2/L3 layer only.  The two-clause test for setting it lives in
+[`../AGENTS.md`](../AGENTS.md) § Hard Rules; the term is defined in
+[`glossary.md`](glossary.md); the boundary is guarded by
+[`../tests/unit/migration/test_scope_boundary.py`](../tests/unit/migration/test_scope_boundary.py).
+
+| Codec | Vendor | Primary class | Wire format | Direction | Certainty |
+|---|---|---|---|---|---|
+| `cisco_iosxe_cli` | Cisco IOS-XE | router | `show running-config` text | bidirectional | certified |
+| `cisco_iosxe`     | Cisco IOS-XE | router | NETCONF / OpenConfig XML  | bidirectional | best_effort (Phase 0.5 stub render) |
+| `cisco_nxos`      | Cisco NX-OS  | switch | `show running-config` text | bidirectional | certified (all 4 phases — L1/L3 + L2 switchport/LAG + SNMP/users + HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed Anycast Gateway; round-trip-validated against a 6-config `batfish/lab-validation` corpus across 4 NX-OS 9.x scenarios; IPv6 anycast, plus a documented set of Tier-2/Tier-3 surfaces, remain unsupported — see the live matrix / §A) |
+| `cisco_iosxr`     | Cisco IOS-XR | router | `show running-config` text | bidirectional | certified (all 4 phases — interfaces (4-segment) + VRF + RT + RD-from-`router bgp` + per-iface VRF + Bundle-Ether LAGs + local users + per-VRF static + dot1q→VLAN; SP-routing/route-policy/MPLS/IS-IS surfaced via the Tier-3 banner; round-trip-validated against a 10-config corpus from two sources — `batfish/lab-validation` + `ios-xr/xrd-tools` SR/SRv6/IS-IS) |
+| `arista_eos`      | Arista EOS    | switch | EOS CLI text              | bidirectional | certified |
+| `aruba_aoss`      | Aruba AOS-S   | switch | AOS-S CLI banner + positional port lists | bidirectional | certified |
+| `aruba_aoscx`     | Aruba AOS-CX  | switch | `show running-config` text | bidirectional | certified (all 4 phases — hostname + interfaces (multi-token names `interface vlan 11` / `lag 1` / `1/1/1`; L3 + L2 switchport `no routing` / `vlan access` / `vlan trunk`) + VLANs (id/name/description + port projection) + LAGs (`interface lag` + `lacp mode`) + local users + SNMP (community / system-location / system-contact / v3 USM) + `active-gateway` anycast (VSX/EVPN distributed gateway) + top-level `vrf` + default-VRF static + VXLAN L2 VLAN↔VNI binding (`interface vxlan` / `vni` / `vlan`); round-trip-validated against a 4-config `aruba/aoscx-ansible-dcn-workflows` corpus (VXLAN leaves + active-gateway cores) on AOS-CX 10.04 / 10.13; per-VLAN L2VNI RD/RT + symmetric-IRB L3VNI + VSX + VRRP remain unsupported) |
+| `juniper_junos`   | Juniper Junos | switch | `set`-form CLI            | bidirectional | certified |
+| `fortigate_cli`   | Fortinet FortiGate | firewall | nested `config / edit / set / next / end` CLI | bidirectional | certified |
+| `mikrotik_routeros` | MikroTik RouterOS | router | `/path` slash-prefixed CLI export | bidirectional | certified |
+| `opnsense`        | OPNsense      | firewall | `config.xml`              | bidirectional | certified |
+| `vyos`            | VyOS          | router | `config.boot` curly-brace **or** `set`-form text | bidirectional | certified (Phases 1-6 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`) + `protocols static` routes + `system login` local users + `system`/`service` ntp servers (bare + 1.4 block form) + `bonding` LAGs (`mode 802.3ad` LACP + both member forms) + `service snmp` (v1/v2c community / location / contact + v3 USM users) + VRF (`vrf name` routing-instances + per-interface `vrf` binding) + `interfaces vxlan` netdevs (one VNI each — vni / source / mcast or remote / port); round-trip-validated against a 10-config real corpus from 4 sources spanning VyOS 1.3/1.4/1.5 (`cisagov/prescup-challenges` MIT IPv4/OSPF + IPv6/BGP, `zhouleyan/wcni-kind` Apache-2.0 VXLAN pair, `scottlaird/vyos-parser` + `rapid7/metasploit-framework` for `service snmp`); accepts BOTH the native curly-brace `config.boot` AND `set`-form input (`show configuration commands`, converted to curly-brace up front; the probe disambiguates VyOS set-form from the `set`-form `juniper_junos` codec); per-VRF static routes + symmetric-IRB L3VNI remain later phases) |
+
+Backup-side device-definition YAMLs ship for every codec family above
+(plus per-OS-version overlays).  Cisco and Aruba each span two NOSes with
+separate definitions — `Cisco` (IOS-XE) + `CiscoNXOS` + `CiscoIOSXR`, and
+`Aruba` (AOS-S) + `ArubaCX` (AOS-CX) — keyed distinctly because `type_key`
+must be unique.  **`CiscoNXOS`, `CiscoIOSXR`, and `ArubaCX` are
+provisional**: their backup wiring is verified in code and against sample
+`show version` output, but has not yet been run against a live device —
+the `/definitions` Notes column flags each with a "NOT YET VALIDATED"
+warning.  (`VyOS` was provisional too until it was live-validated against a
+real VyOS rolling instance — backup run end-to-end — and graduated.)  See
+[`../netcanon/definitions/library/README.md`](../netcanon/definitions/library/README.md) for the
+authoring guide and the live `/definitions` page in the running app
+for the per-vendor inventory.  RESULTS.md is the source of truth for
+current certification — this table summarises but does not gate.
+
+> **Certified ≠ deploy-ready.**  The `certainty` label rates *round-trip
+> fidelity* (how reliably a config survives parse → render), not deploy
+> automation.  Netcanon has no deploy path today — rendered output is for
+> manual review and apply; the deploy endpoints remain on the roadmap.
+
+---
+
+## Translation tiers
+
+The canonical intent model classifies every field by semantic
+stability across vendors.  This drives both the validation report and
+the UI's notification banners.
+
+### Tier 1 — auto-translatable (cross-vendor stable)
+
+Modelled and wired across the shipped bidirectional codecs.  Most leaves
+round-trip cleanly on every codec; a few carry documented per-codec
+exceptions (e.g. `tunnel_type` is **lossy** on FortiGate — FortiOS expresses
+tunnels in separate top-level sections, not as an encap discriminator on a
+tunnel interface; `mtu` is unsupported on Aruba AOS-S, which has no per-port
+MTU concept).  The per-codec tables under
+[§A](#a-capability-matrix-unsupported--lossy-panels) are the source of
+truth for which leaves are lossy/unsupported on which codec; this list
+names the canonical surface, not a blanket guarantee.
+
+* `hostname`, `domain`
+* `interfaces` — `name`, `description`, `enabled`, IPv4 + IPv6
+  addresses, `vrf` binding, `kind` (physical / mgmt / loopback /
+  uplink), `mtu`, `lag_member_of`, `dhcp_client_v6` (IPv6 DHCPv6 /
+  SLAAC mode discriminator), `tunnel_type` (GRE / EoIP / IPIP /
+  IPSEC / VXLAN encap discriminator)
+* `vlans` — `id`, `name`, `tagged_ports`, `untagged_ports`, SVI L3
+  (via VLAN-centric projection)
+* `static_routes` — `destination`, `gateway`, `interface`, `metric`,
+  `description`; plus per-VRF `vrf` discriminator (v0.2.0 Wave A —
+  see Tier 2 ship-before-wire note below)
+* `dns_servers`, `ntp_servers` — wired on most codecs (the two Cisco
+  SP/DC codecs cisco_nxos and cisco_iosxr, which historically render-
+  dropped the management plane, now wire it — promotions #4/#13); plus
+  `syslog_servers` and `timezone`, which are wired on only a **subset**
+  of codecs: `timezone` on none as of this release; `syslog_servers` on
+  juniper_junos, cisco_iosxe_cli, arista_eos (`logging host <ip>`,
+  promotions #1/#11), cisco_nxos (`logging server <ip>`, #4) and
+  cisco_iosxr (bare `logging <ip>`, #13).  These are
+  Tier-1 by data shape but NOT yet a cross-vendor guarantee — the §A
+  per-codec panels are authoritative.  An unwired field is dropped on
+  parse and surfaces the cross-vendor banner where the codec declares it
+  unsupported; for `syslog_servers` and `timezone` every codec declares
+  the path (`syslog_servers` 5 supported + 7 unsupported, `timezone`
+  unsupported on all 12), so those drops are always bannered, never silent.
+* `interfaces[].vrrp_groups` (v0.2.0 Wave B — classic FHRP
+  redundancy, mode discriminator `vrrp` / `hsrp` / `carp`) — wired
+  across the bidirectional codecs.  See
+  [`v0.2.0-planning/01-vrrp-canonical/`](v0.2.0-planning/01-vrrp-canonical/)
+  for the design rationale and the
+  [Cross-vendor L3-redundancy grammar reference](#cross-vendor-l3-redundancy-grammar-reference)
+  section below for the per-vendor mapping table.
+
+### Tier 2 — translatable with caveats
+
+Modelled and wired across most codecs; cross-vendor mappings can be
+lossy where vendors disagree on representation.
+
+* `snmp` — community, contact, location, trap-host, plus SNMPv3 USM
+  users (auth/priv/group/engine — see per-codec notes below)
+* `lags` — name, mode (LACP / static), members; vendor-native names
+  reconciled via the LAG name-equivalence helper (`Po1` /
+  `Port-channel1` / `ae1` / `trk1` are recognised as the same bundle)
+* `local_users` — name, privilege, role, hashed_password.  Hashes
+  that the target's CLI cannot consume surface as comment-form
+  review lines (see "Hash-portability policy" below) — **never** as
+  a plaintext fallback
+* `radius_servers`
+* `dhcp_servers` (per-pool — network, gateway, range, options)
+* `vxlan_vnis`, `evpn_type5_routes` (shipped schema-first; `vxlan_vnis`
+  is now wired `supported` on `arista_eos`, `cisco_nxos`,
+  `aruba_aoscx`, `vyos`, `cisco_iosxe_cli` — the per-codec §A tables
+  are authoritative; `evpn_type5_routes` stays lossy-by-default on
+  every codec)
+* `routing_instances` + per-interface `vrf` (cross-vendor VRF
+  primitive — schema-first, now wired on multiple codecs; see the
+  per-codec §A tables)
+* `static_routes[].vrf` (v0.2.0 Wave A — per-VRF route
+  discriminator; wired `supported` on `juniper_junos`, `arista_eos`,
+  `cisco_iosxe_cli`, `cisco_nxos`, `cisco_iosxr`)
+* `interfaces[].ipv4_addresses[].virtual_gateway_address` /
+  `virtual_gateway_mac` / `is_secondary` and the matching IPv6
+  fields (v0.2.0 Wave C — anycast-gateway companion to the primary
+  IP).  Distinct from VRRP: anycast is an IP-address property, not
+  a router-group election.  Wired as `supported` on Junos
+  (`virtual-gateway-address`), Arista EOS (VARP `ip address
+  virtual`), and Cisco IOS-XE CLI (SD-Access `fabric forwarding
+  mode anycast-gateway`, IPv4 only).  IPv6 anycast on IOS-XE
+  remains `unsupported` (parses-and-ignores; no fixture coverage
+  today).  See
+  [`v0.2.0-planning/02-anycast-gateway/`](v0.2.0-planning/02-anycast-gateway/)
+* `anycast_gateway_mac` (v0.2.0 Wave C — chassis-wide system MAC
+  for Arista `ip virtual-router mac-address`, Cisco SD-Access
+  `fabric forwarding anycast-gateway-mac`).  Junos `unsupported`
+  by design (per-IRB-unit MAC overrides flow through the per-
+  address `virtual_gateway_mac` field instead).
+* `apply_groups` + `group_content` (Junos-specific; preserved
+  byte-for-byte through round-trip)
+
+### Tier 3 — opaque carry / not auto-rendered
+
+These are present in source devices but **never auto-translated**.
+The codec parsers deliberately drop them; the
+[`_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)
+heuristic surfaces what was dropped via the migrate page banner so
+operators see the gap.
+
+* `firewall_rules` — vendor-specific stateful policy; cross-vendor
+  semantics don't translate cleanly (zone-pair vs interface ACL vs
+  table-driven rule sets)
+* `nat_rules` — tightly coupled to interface zone designations
+* `vpn` — IPsec / SSL-VPN / WireGuard / OpenVPN; key material and
+  peer-specific knobs aren't safely auto-portable
+* `routing_protocols` — BGP / OSPF / EIGRP / IS-IS;
+  protocol-internal state belongs to the operator, not the
+  translator
+* QoS — class-maps / policy-maps / shapers / queues
+* PKI / crypto — certificate chains, IKE policies, key blobs
+* Route-maps / policy-statements / prefix-lists
+
+This is an architectural decision, not a backlog item.  See the
+"Architectural decision (Cluster E.X deferred)" entry in
+[`../CHANGELOG.md`](../CHANGELOG.md) for the rationale.
+
+---
+
+## Notification mechanisms operators see
+
+The UI surfaces every place the translator can't faithfully cross
+the vendor boundary.  Each surface is named so operators can grep
+the rendered output or screen-grab the panel.
+
+### A. Capability matrix "Unsupported" / "Lossy" panels
+
+The migrate page renders three lists under **Validation details**:
+Supported / Lossy / Unsupported.  Each codec declares its own matrix
+in `netcanon/migration/codecs/<vendor>/codec.py`.
+
+> **Authoritative source:** the live capability matrices in
+> `netcanon/migration/codecs/<vendor>/codec.py` (surfaced verbatim by the
+> `/api/v1/definitions` endpoint and the migrate page's Validation panel)
+> are the single source of truth.  The per-codec tables below are a
+> hand-maintained **illustrative digest** of the most operator-relevant
+> lossy / unsupported paths with their rationale — they are NOT a complete
+> enumeration and may lag the code between releases.  When a table and the
+> live matrix disagree, the live matrix wins.
+
+#### `cisco_iosxe_cli` (Cisco IOS-XE CLI, bidirectional)
+
+| Path | Class | Reason summary |
+|---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses the `vrrp <vrid> ip|ipv6|priority|preempt|description|authentication|track|timers` family inside `interface` stanzas; renders the classic single-line per-attribute form (broadest IOS-XE compatibility, 15.x onward). |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Lossy (Wave C) | SD-Access anycast-gateway (`virtual_gateway_address == the interface primary IP`) round-trips via `fabric forwarding mode anycast-gateway`, but a SEPARATE cross-vendor VARP virtual IP (the Arista/Junos shape, `virtual_gateway_address != the interface IP`) has no IOS-XE equivalent and drops on render (review comment only).  Demoted from supported to **lossy** so the separate-VIP loss surfaces instead of reporting `severity:ok` (silent-loss guard). |
+| `/anycast-gateway-mac` | Supported (Wave C) | Top-level `fabric forwarding anycast-gateway-mac <MAC>` round-trips between Cisco dotted-triplet wire form (`0001.c73a.0000`) and canonical colon-hex. |
+| `/interfaces/interface/vrrp-groups/group/address-family` | Lossy (Wave B) | IOS-XE 17.12+ modern multi-line `vrrp <VRID> address-family ipv4` nested block is detected (so lossiness is visible) but not deep-populated; render always emits the classic single-line form (accepted by every IOS-XE 15.x+).  A config that uses ONLY the modern AF form round-trips as an empty group shell — the lossiness is intentional and operator-visible. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | IPv6 SD-Access anycast parses-and-ignores in v1.  Corpus has zero fixtures exercising it; wire-up deferred until demand arrives.  IPv4 SD-Access anycast IS supported (row above). |
+| `/routing/static-route/vrf` | Supported (v0.2.0) | Per-VRF static routes: `ip route vrf <NAME> <dest> <mask> <gw>` round-trips through parse + render onto `CanonicalStaticRoute.vrf`.  Administrative-distance is harvested onto `metric` (and re-emitted) and a trailing `name <X>` onto `description`; only the `global` route-leak / `tag` / `track` tokens are not modelled and parse-and-ignore. |
+| `/interfaces/interface/config/type` | Lossy | CLI parser infers IANA type from name prefix (GigabitEthernet → ethernetCsmacd, Loopback → softwareLoopback) but cannot detect all IANA types. |
+| `/evpn-type5-routes/route` | Lossy | Per-prefix EVPN Type-5 records are a VRF property; no codec populates them today (lossy-by-default extension point). |
+| `/interfaces/interface/subinterfaces/subinterface/ipv6` | Unsupported | Phase 0.5 scope — IPv4 only. |
+| `/vxlan-vnis/{vni,source-interface,mcast-group}` | Supported (#351) | IOS-XE VXLAN-EVPN L2 VNI: `interface nve1` VTEP + `member vni <V>` + `vlan configuration` VLAN↔VNI binding round-trips through parse + render; `/routing-instances/instance/l3-vni` is supported too. |
+| `/vxlan-vnis/{udp-port,flood-list}` | Lossy | The nve1 render keeps the VNI identity but normalizes the UDP port and drops head-end static ingress-replication flood peers (no IOS-XE grammar in v1). |
+| `/routing-instances/instance` | Lossy | VRF declarations parse and render bidirectionally (`parse._parse_routing_instances` → `vrf definition` emit loop; cross-vendor confirmed via Wave 10β-B / commit `40de39c`).  Lossy because `address-family ipv6` / EVPN `l2vpn evpn` sub-stanzas inside `vrf definition` are parse-and-ignore in v1.  (Per-VRF static-route membership now round-trips via the supported `/routing/static-route/vrf` surface above.) |
+| `/access-list/{extended,standard,ipv6}` | Unsupported | Tier 3 — auto-translating ACL semantics across vendors risks shipping subtly-permissive rules. |
+| `/firewall` | Unsupported | Zone-based firewall (zone-pair / policy-map type inspect) is Tier 3. |
+| `/nat` | Unsupported | NAT is Tier 3 — semantics are tightly coupled to interface zone designations. |
+
+#### `cisco_iosxe` (NETCONF / OpenConfig, bidirectional Phase 0.5 stub)
+
+This codec is an experimental stub — its `_render_canonical()`
+emits **only the `openconfig-interfaces` subtree**.  Every other
+canonical surface is declared `unsupported` so the cross-mesh audit
+matrix flags the gap honestly rather than masquerading as drift.
+
+| Path (granular) | Class |
+|---|---|
+| `/interfaces/interface/config/mtu` | Lossy (YANG MTU drops platform-specific IP-vs-link distinction) |
+| `/system/{hostname,dns-server,ntp-server}` | Unsupported |
+| `/vlans/vlan/{id,name}` | Unsupported |
+| `/routing/static-route` | Unsupported |
+| `/routing/static-route/vrf` | Unsupported (ship-before-wire v0.2.0; schema present but stub renders interfaces only) |
+| `/snmp/{community,location,contact,trap-host,v3-user}` | Unsupported |
+| `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported |
+| `/routing-instances/instance` | Unsupported |
+| `/evpn-type5-routes/route` | Unsupported |
+| `/interfaces/interface/vrrp-groups/group` | Unsupported (ship-before-wire v0.2.0 Wave B; stub renders interfaces only) |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported (ship-before-wire v0.2.0 Wave C) |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported (ship-before-wire v0.2.0 Wave C) |
+| `/anycast-gateway-mac` | Unsupported (ship-before-wire v0.2.0 Wave C) |
+| `/access-list`, `/firewall` | Unsupported (Tier 3) |
+
+Top-level field markers (`/hostname`, `/domain`, `/dns_servers`,
+`/ntp_servers`, `/timezone`, `/syslog_servers`, `/vlans`,
+`/static_routes`, `/snmp`, `/lags`, `/local_users`, `/radius_servers`,
+`/dhcp_servers`, `/routing_instances`, `/vxlan_vnis`,
+`/evpn_type5_routes`) are also declared unsupported so the cross-mesh
+audit's `f"/{field}"` shape match flips correctly.  Operators
+selecting this codec as a target should expect interfaces-only
+output.
+
+#### `arista_eos` (bidirectional)
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Classic VRRP parses `vrrp <N> ipv4 <VIP>` + multi-line modern `vrrp <N> { ip address, priority, preempt, advertisement-interval }` and renders the multi-line modern form. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Supported (Wave C) | VARP: `ip address virtual X/M` populates the address record's `virtual_gateway_address`; secondary trailer preserved via `is_secondary` flag. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Supported (Wave C) | IPv6 VARP: `ipv6 address virtual` parses to the IPv6 address record. |
+| `/anycast-gateway-mac` | Supported (Wave C) | Chassis-wide `ip virtual-router mac-address <MAC>` round-trips to `CanonicalIntent.anycast_gateway_mac`. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-mac` | Lossy (Wave C) | EOS only supports one chassis-wide virtual-router MAC; per-IP MAC overrides (Junos `virtual-gateway-v4-mac`) drop on render — cross-vendor sources carrying per-IP MACs surface a review banner so the operator can either consolidate to a single system-wide MAC or pick a vendor target that preserves per-IP overrides. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-mac` | Lossy (Wave C) | Mirror of the IPv4 case — EOS shares one system-wide MAC across IPv4 and IPv6 anycast. |
+| `/routing/static-route/vrf` | Supported (#340) | Per-VRF static routes (`ip route vrf <NAME> …`) round-trip onto `CanonicalStaticRoute.vrf`; interface-nexthop (`… <iface>`, e.g. `Null0`) is supported too (#342). |
+| `/interfaces/interface/config/type` | Lossy | EOS interface names don't encode speed; parser defaults `Ethernet<N>` to a `gig` speed-hint and target codecs that care about speed (e.g. Cisco's GigabitEthernet vs TenGigabitEthernet distinction) may emit less-specific prefixes. |
+| `/evpn-type5-routes/route` | Lossy | Per-prefix records are a lossy-by-default extension point — no codec populates them today (would require route-map / policy-statement parsing). |
+| `/routing/bgp` | Unsupported | BGP neighbour tables / redistribution / address-families parse-and-ignore in v1. |
+| `/routing/ospf` | Unsupported | OSPF areas / redistribution / per-interface cost tuning parse-and-ignore in v1. |
+| `/access-list/{extended,standard,ipv6}` | Unsupported | Tier 3 — auto-translating ACL semantics across vendors risks shipping subtly-permissive rules. |
+
+#### `aruba_aoss` (bidirectional)
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders a global `router vrrp` enable + `vrrp vrid <N> / owner\|priority / virtual-ip-address <Y> / preempt / enable` inside `vlan N` stanzas (AOS-S binds VRRP to the SVI's VLAN, not the L3 interface). The `vrrp vrid` header carries **no** `ip` prefix per the AOS-S 16.10 CLI reference; the legacy `ip vrrp vrid` form is still accepted on parse. `owner` maps to the canonical priority 255 (the RFC 5798 address-owner value — the full 0-255 range is now representable, and render inverts 255 back to `owner`). |
+| `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | AOS-S `virtual-ip-address` accepts only ONE address per vrid; cross-vendor migration from Cisco IOS-XE secondaries or Junos `virtual-address [ list ]` drops the tail with a review comment. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | AOS-S has no anycast-gateway grammar (campus L2/L3 codec). |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
+| `/anycast-gateway-mac` | Unsupported | AOS-S has no chassis-wide anycast MAC concept. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
+| `/interfaces/interface/config/type` | Lossy | AOS-S does not declare IANA `ifType`; codec infers type from interface-name shape (bare number → ethernet, `Trk` → port-channel, `Vlan` → l3ipvlan). |
+| `/filter/rule` | Unsupported | AOS-S access-lists are Tier 3 (informational) and not yet auto-rendered. |
+| `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — AOS-S is a campus L2/L3 codec. |
+
+#### `juniper_junos` (bidirectional)
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders `set interfaces irb unit N family inet address X vrrp-group <N> { virtual-address Y, priority, preempt }`.  Both classic IPv4 and IPv6 (`vrrp-inet6-group`) wire-up landed. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Supported (Wave C) | One-line `set interfaces irb unit N family inet address X virtual-gateway-address Y` stores both pieces on the same `CanonicalIPv4Address` record. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-mac` | Supported (Wave C) | Per-IRB-unit `virtual-gateway-v4-mac M` populates the per-address MAC override. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Supported (Wave C) | IPv6 form: `family inet6 address X virtual-gateway-address Y`. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-mac` | Supported (Wave C) | `virtual-gateway-v6-mac M`. |
+| `/routing/static-route/vrf` | Supported (v0.2.0) | `set routing-instances <NAME> routing-options static route <dest> next-hop <gw>` harvests onto `CanonicalStaticRoute.vrf` and renders back out (the routing-instances dispatcher now descends into `routing-options static`).  Top-level `set routing-options static route` lines round-trip with `vrf=""`.  next-hop form only — `discard` / `reject` blackhole routes and the explicit `rib <name>` form (e.g. IPv6 `inet6.0`) are not modelled, same as the global table; a VRF implied solely by a static route does not materialise an empty routing-instance. |
+| `/anycast-gateway-mac` | Unsupported | Junos has no chassis-wide anycast-gateway MAC; per-IRB-unit overrides live on `CanonicalIPv4Address.virtual_gateway_mac` (the `virtual-gateway-v4-mac` / `-v6-mac` grammar) and round-trip through the supported per-address surface instead.  Cross-vendor migration from a source carrying a system-wide MAC (Arista, NX-OS) must distribute the value across every IRB unit's per-address MAC on the receiving Junos side. |
+| `/interfaces/interface/subinterfaces/subinterface` | Lossy | Unit 0 collapses into the parent; units 1+ materialise as distinct `<parent>.<unit>` interfaces, and per-unit 802.1Q tagging (`unit N vlan-id`) is captured on `/interfaces/interface/dot1q-vlan` (GAP 7 — round-trips). Per-unit subinterface attributes beyond the address + 802.1Q tag remain unmodelled. |
+| `/groups` | Lossy | Apply-groups inheritance is wired for the dispatch surface (system / login / interfaces / protocols / SNMP / routing-options / routing-instances / vlans); group bodies for unsupported surfaces (policy-options, firewall filters, RADIUS server options) parse-and-ignore. |
+| `/evpn-type5-routes/route` | Lossy | Per-prefix records lossy-by-default — VRF-property model uses `CanonicalRoutingInstance.l3_vni`; explicit per-prefix lists not populated by any codec today. |
+| `/routing/bgp` | Unsupported | BGP / IS-IS / OSPF / MPLS stanzas parse-and-ignore in v1; Junos routing-options grammar warrants a dedicated follow-up. |
+| `/firewall/filter` | Unsupported | Junos firewall filters (family / term / from / then) are Tier 3 — distinct from ACL models in other codecs. |
+
+#### `fortigate_cli` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Nested-edit form: `config system interface / edit X / config vrrp / edit <N> / set vrip Y / set priority / set preempt enable / set vrdst <iface>`. |
+| `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | FortiOS `config vrrp / edit N` accepts a single `set vrip` per group.  Multi-IP canonical groups (IOS-XE repeated `vrrp N ip X`, Junos `virtual-address [ X Y Z ]`) emit the first VIP and drop the tail with a `# review:` line — operator must split into multiple groups manually. |
+| `/interfaces/interface/vrrp-groups/group/virtual-mac` | Lossy (Wave B) | FortiOS uses `set vrrp-virtual-mac enable/disable` as an interface-wide toggle (defaults to disable, meaning FortiOS uses its own NPU MAC instead of `00:00:5E:00:01:VRID`).  The canonical `virtual_mac` per-group override has no FortiOS equivalent and is silently dropped — cross-vendor renders into FortiGate cannot pin a custom VRID MAC at the group level. |
+| `/interfaces/interface/vrrp-groups/group/track-interfaces` | Lossy (Wave B) | FortiOS `set vrdst <iface>` accepts a single destination-tracking entry per group.  Multi-track canonical groups (IOS-XE `track` objects, Arista `vrrp N track Ethernet1 decrement 10`) emit the first and drop the rest.  The decrement value is also lossy — FortiOS vrdst is a binary up/down trigger, not a priority-decrement scheme. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | FortiGate is an edge firewall with no native anycast surface (HA is delivered via VRRP groups, not anycast-MAC fabrics).  **Cross-vendor consequence:** Junos→FortiGate anycast translation DROPS the data with a review banner. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — FortiGate has no anycast grammar. |
+| `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
+| `/interfaces/interface/config/description` | Lossy | FortiOS limits the interface alias to 25 characters; longer descriptions from other vendors are truncated. |
+| `/interfaces/interface/config/type` | Lossy | FortiOS has no IANA `ifType`; inferred from `type vlan` sub-setting or name shape. |
+| `/filter/rule` | Unsupported | `config firewall policy` is Tier 3 — session-based, zone-aware, UTM-enabled semantics don't translate cleanly. |
+| `/nat/rule` | Unsupported | FortiGate NAT lives inside firewall policy and address / VIP objects — not auto-translatable. |
+| `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — FortiGate is a firewall codec. |
+
+#### `mikrotik_routeros` (bidirectional)
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Top-level section dispatcher: `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` + `/ip address add address=Y/24 interface=vrrp10`.  Cross-vendor tracking and authentication surfaces emit review comments rather than dropping silently. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | RouterOS has no anycast-gateway grammar. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
+| `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
+| `/interfaces/interface/config/type` | Lossy | RouterOS does not expose IANA `ifType`; codec infers it from interface-name prefix (`etherN` → ethernetCsmacd, `vlanN` → l3ipvlan). |
+| `/vlans/vlan/name` | Lossy | MikroTik stores a VLAN's name as the L3 interface name (e.g. `vlan10`), not a separate descriptive name field; cross-vendor rendering may conflate the two. |
+| `/vlans/vlan/description` | Lossy | RouterOS exposes a single per-VLAN `comment` field, which the parser maps to the VLAN name; a separate description collides with it on render. |
+| `/filter/rule` | Unsupported | Firewall filter rules are Tier 3 (informational) and not auto-rendered. |
+| `/nat/rule` | Unsupported | NAT rules are Tier 3 — informational only. |
+| `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | RouterOS VXLAN exists but is rare in canonical scope and not modelled in v1. |
+
+#### `opnsense` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Lossy (Wave B, CARP variant) | Hosts CARP-only HA groups via `<virtualip><vip><mode>carp</mode><vhid>N</vhid>…</vip></virtualip>` with a `mode="carp"` discriminator on the canonical record.  Lossy because `CanonicalVRRPGroup` records with `mode="vrrp"` or `mode="hsrp"` are SKIPPED on render — OPNsense has no native HSRP wire protocol, and its pure-VRRP mode under `<virtualip>` is rarely deployed and not yet emitted; only `mode="carp"` round-trips.  Additionally, the `advskew`↔`priority` mapping (`priority = 254 - advskew`) preserves relative HA-pair ordering but not exact election timing. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | OPNsense uses CARP for HA (distinct semantics); no anycast-gateway grammar. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
+| `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
+| `/routing/static-route` (and `gateway` / `metric` / `description` / `interface`) | Unsupported | The parser harvests routes from `<gateways>` + `<staticroutes>`, so OPNsense-as-**source** translates outward fine — but the `config.xml` renderer emits neither block, so a route translated **into** OPNsense does not survive at all.  A record that vanishes is unsupported, not lossy: validation reports `block`, and an X→OPNsense plan tells the operator to re-create routing on the target rather than warning them past it. |
+| `/routing/static-route/vrf` | Unsupported | Separate rationale from the render gap above: OPNsense's `config.xml` has no VRF model at all, so a per-VRF binding parses-and-ignores and stays unsupported even once `<staticroutes>` rendering lands. |
+| `/interfaces/interface/config/description` | Lossy | OPNsense imposes no length limit on description text; other vendors (Cisco 240 chars, Juniper 900) may truncate on render. |
+| `/filter/rule` | Unsupported | `<filter>` is Tier 3. |
+| `/nat/outbound` | Unsupported | `<nat>` is Tier 3. |
+| `/snmp/v3-user` | Unsupported | OPNsense's SNMPv3 lives in raw `snmpd.conf` — Tier 3. |
+| `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — OPNsense is a firewall codec. |
+
+#### `cisco_nxos` (Cisco NX-OS, bidirectional, certified)
+
+Broad supported surface (L1/L3 + L2 switchport/LAG + SNMP/local-users +
+HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed
+Anycast Gateway).  The lossy / unsupported exceptions:
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/config/type` | Lossy | Interface-type inferred from the name prefix (Ethernet → ethernetCsmacd, loopback → softwareLoopback, Vlan → l3ipvlan, port-channel → ieee8023adLag, nve → tunnel, mgmt → ethernetCsmacd).  Best-effort; may not catch every IANA type. |
+| `/system/raw-sections/vdc` | Lossy | `vdc <name> id N / limit-resource …` (N7K virtualisation) has no canonical primitive; the source block is discarded and a default single-VDC `vdc <hostname> id 1` wrapper is synthesised on render. |
+| `/system/raw-sections/features` | Lossy | `feature <name>` lines are derived on render from the canonical-tree shape (any SVI → `feature interface-vlan`, etc).  Source features not motivated by a canonical surface (`feature scp-server`, `feature telnet`) are dropped; re-authorise on the target. |
+| `/local-users/user/privilege-level` | Lossy | NX-OS uses a named `role` (network-admin / network-operator / custom), not a numeric privilege.  network-admin / vdc-admin → 15, everything else → 1.  The named role round-trips losslessly same-vendor. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | NX-OS 10.x `localizedV2key` digest is normalised to the older `localizedkey` form on render; re-key SNMPv3 users on the target across OS-version / vendor boundaries. |
+| `/snmp/v3-user/engine-id` | Lossy | engineID emitted colon-decimal (`128:0:0:9:…`); cross-vendor sources typically use hex.  Preserved verbatim same-vendor; cross-vendor render may need re-keying. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy | FHRP is expressed as HSRP (`interface VlanN / hsrp N / ip <vip> / priority / preempt`).  EVERY `CanonicalVRRPGroup` renders as an `hsrp` block regardless of source `mode` — the virtual-IP redundancy intent survives but the wire protocol changes.  Same-vendor HSRP round-trips losslessly; sub-second timers / virtual-MAC / track objects are not modelled. |
+| `/routing-instances/instance/route-distinguisher` | Lossy | `rd auto` is preserved verbatim as a sentinel; cross-vendor renderers that don't recognise it must synthesise an explicit RD.  An explicit `rd <asn>:<nn>` round-trips losslessly. |
+| `/routing-instances/instance/rt-imports` | Lossy | `route-target both <rt> evpn` advertises in both IPv4-unicast and L2VPN-EVPN; the `evpn` address-family scope does not round-trip cross-vendor (RT value preserved, scope reverts to IPv4 unicast).  Same-vendor round-trips. |
+| `/vxlan-vnis/vni` | Lossy | `interface nve1 / member vni N` per-VNI sub-flags (`suppress-arp`, alternate ingress-replication) do not round-trip — render always emits the modern BGP-EVPN head-end shape (`host-reachability protocol bgp`).  The VLAN↔VNI binding round-trips via `vlan N / vn-segment`. |
+| `/evpn-type5-routes/route` | Lossy | EVPN Type-5 is modelled as a VRF property via `CanonicalRoutingInstance.l3_vni` (`vrf context X / vni N` + `member vni N associate-vrf`), not per-prefix records; no route-map / prefix-filter parsing in v1. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | IPv4 Distributed Anycast Gateway IS supported; the IPv6 companion parses-and-ignores in v1 (no fixture coverage; parity with the IOS-XE IPv6-anycast deferral). |
+| `/routing-protocols/bgp` | Unsupported | `router bgp <asn>` is Tier-3 — captured for the dropped-Tier-3 banner, never auto-rendered cross-vendor. |
+| `/routing-protocols/ospf` | Unsupported | Tier-3. |
+| `/routing-protocols/eigrp` | Unsupported | Tier-3. |
+| `/routing-protocols/isis` | Unsupported | Tier-3. |
+| `/access-list/{extended,standard,ipv6}` | Unsupported | ACLs are Tier-3 — auto-translating ACL semantics across vendors risks subtly-permissive rules.  Operator authors firewall policy manually (mirrors cisco_iosxe_cli). |
+| `/firewall` | Unsupported | NX-OS hosts no stateful firewall; declared unsupported for cross-vendor surface consistency. |
+| `/nat` | Unsupported | NX-OS hosts no typical edge NAT. |
+| `/qos` | Unsupported | `class-map / policy-map type qos / service-policy` is Tier-3 — DC-grade QoS is too platform-specific to auto-translate. |
+
+#### `cisco_iosxr` (Cisco IOS-XR, bidirectional, certified)
+
+Broad supported surface (Tier-1 + VRF + RT + per-interface VRF + LAG +
+local users + per-VRF static + dot1q sub-interfaces).  The lossy /
+unsupported exceptions:
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/config/type` | Lossy | Type inferred from the name prefix (GigabitEthernet → ethernetCsmacd, Loopback → softwareLoopback, Bundle-Ether → ieee8023adLag, MgmtEth → ethernetCsmacd, tunnel-ip/te → tunnel); sub-interfaces with vendor-specific encapsulation classify as `other`. |
+| `/interfaces/interface/4th-port-segment` | Lossy | IOS-XR port names use 4 segments (rack/slot/instance/port); the cross-vendor `PortIdentity` supports 3.  The 4th segment round-trips via `PortIdentity.meta['iosxr_port_index']` same-vendor but DROPS to `0` when renaming to a 3-segment target (IOS-XE / Arista) — verify via the rename modal. |
+| `/routing-instances/instance` | Lossy | `vrf <name>` + `address-family ipv4 unicast` / `import\|export route-target` + per-interface `vrf <name>` membership round-trip, but `route_distinguisher` must be read from / rendered to the BGP block (`router bgp <asn> / vrf <name> / rd <rd>`).  A minimal BGP-RD carrier is synthesised on render with ASN derived from the RD administrator field; a config whose BGP ASN differs re-emits the normalised ASN (cosmetic — the RD round-trips).  No `router bgp` ⇒ `route_distinguisher=''`.  `l3_vni` (EVPN Type-5) is not modelled. |
+| `/snmp/community` | Unsupported | SNMP parse + render is out of the v1 XR scope. |
+| `/routing/bgp` | Unsupported | `router bgp <asn>` is Tier-3 (a minimal per-VRF RD harvest aside); full BGP modelling stays unsupported. |
+| `/routing/ospf` | Unsupported | `router ospf <pid>` parse-and-ignore (Tier-3). |
+| `/routing/isis` | Unsupported | `router isis <name>` parse-and-ignore (Tier-3). |
+| `/mpls` | Unsupported | `mpls ldp` / `mpls traffic-eng` / `mpls oam` are SP-platform fundamentals with no canonical model; Tier-3 banner notes the dropped surface. |
+| `/policy/{route-policy,prefix-set,community-set,as-path-set}` | Unsupported | The IOS-XR RPL `… end-policy` / `… end-set` set-form DSL is structurally distinct from IOS-XE `route-map` sequence form; Tier-3 by design (parity with Junos `policy-options`). |
+| `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | IOS-XR VXLAN (NCS 5500 / 540 `nve`) is rare in the SP corpus; no canonical demand surfaced.  Parse-and-ignore in v1. |
+| `/evpn-type5-routes/route` | Unsupported | IOS-XR EVPN runs under top-level `l2vpn` + `evpn` + `bridge group` — grammatically distant from the IOS-XE / Arista / NX-OS model.  No canonical mapping in v1. |
+| `/access-list/{extended,ipv6}` | Unsupported | `ipv4 access-list NAME / N permit …` is Tier-3 — auto-translating ACL semantics risks subtly-permissive rules (parity with IOS-XE). |
+| `/firewall` | Unsupported | IOS-XR firewall features are Tier-3 stateful surfaces (parity with IOS-XE). |
+| `/nat` | Unsupported | IOS-XR NAT (`nat64` / `cgnat`) is Tier-3. |
+
+#### `aruba_aoscx` (Aruba AOS-CX, bidirectional, certified)
+
+Broad supported surface (Tier-1 + L2 switchport/LAG + local users + SNMP
+v2c/v3 + IPv4 active-gateway anycast + VXLAN L2VNI VLAN↔VNI binding).
+Distinct from the campus `aruba_aoss` (AOS-S) codec.  The lossy /
+unsupported exceptions:
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/config/type` | Lossy | No IANA ifType is declared; inferred from the name shape (`1/1/1` → ethernetCsmacd, `vlan N` → l3ipvlan, `lag N` → ieee8023adLag, `loopback N` → softwareLoopback, `mgmt` → ethernetCsmacd, `vxlan N` → tunnel).  Best-effort. |
+| `/system/raw-sections/version-banner` | Lossy | The `!Version ArubaOS-CX <release>` banner + service footer lines (`ssh server`, `https-server`, `clock`, `ntp`, `spanning-tree`, `system interface-group`) are discarded on parse and a synthesised banner is emitted on render; re-apply management-plane services on the target. |
+| `/local-users/user/privilege-level` | Lossy | Named `group` (administrators / operators / auditors / custom), not numeric: administrators → 15, everything else → 1.  The `password ciphertext` blob is AES-encrypted with the device key (portable same-device only); cross-vendor migration requires re-keying. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | SNMPv3 auth/priv keys are `ciphertext` blobs encrypted with the device key (portable same-device only); cross-vendor / cross-device migration emits the blob verbatim but the operator must re-key.  The `plaintext` key form is normalised to `ciphertext` on render. |
+| `/vxlan-vnis/source-interface` | Lossy | AOS-CX states the VTEP source as an IPv4 *address* (`interface vxlan 1 / source ip <X>`), not an interface name (NX-OS / Arista `source-interface loopbackN`).  Stored verbatim in the opaque `source_interface` field; a cross-vendor source carrying an interface *name* has no `source ip` form so the line is omitted on render (VLAN↔VNI bindings still emit).  Set the loopback→IP mapping on the target manually. |
+| `/snmp/trap-host` | Unsupported | The `snmp-server host … trap …` trap-receiver grammar is deferred; v2c community + system-location / system-contact + v3 USM users are supported. |
+| `/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports}` | Unsupported | The `vrf <name>` stanza is a bare name in v1; descriptions / RD / route-targets live under the deferred `evpn` / `router bgp` blocks. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in Phase 1; only default-VRF `ip route` is wired. |
+| `/interfaces/interface/vrrp-groups/group` | Unsupported | AOS-CX VRRP (`vrrp <vrid> address-family` under an SVI) is a later phase; the `active-gateway` distributed-gateway anycast surface IS supported. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | IPv4 active-gateway is supported; the IPv6 anycast companion parses-and-ignores in v1 (parity with NX-OS / IOS-XE). |
+| `/vxlan-vnis/l2vni-route-target` | Unsupported | The per-VLAN L2VNI RD/RT (`evpn / vlan N / rd auto / route-target …`) is almost always `auto`-derived and has no cross-vendor canonical home; the VLAN↔VNI binding IS translated, the RD/RT is re-derived on the target. |
+| `/routing-instances/instance/l3-vni` | Unsupported | EVPN symmetric-IRB L3VNI (`vni N / vrf <name>` under the VTEP + `router bgp / vrf`) is a later phase; the L2VNI binding IS supported. |
+| `/routing-protocols/bgp` | Unsupported | `router bgp <asn>` (incl. the EVPN address-family) is Tier-3 — captured for the dropped-Tier-3 banner, never auto-rendered cross-vendor. |
+| `/routing-protocols/ospf` | Unsupported | Tier-3. |
+| `/access-list/{extended,standard}` | Unsupported | ACLs are Tier-3 — auto-translating risks subtly-permissive rules (mirrors cisco_nxos). |
+| `/qos` | Unsupported | QoS (`class` / `policy` / `apply qos`) is Tier-3 — too platform-specific to auto-translate. |
+| `/nat` | Unsupported | AOS-CX hosts no typical edge NAT. |
+
+#### `vyos` (VyOS, bidirectional, certified)
+
+Broad supported surface (curly-brace `config.boot` **and** set-form
+`show configuration commands` input; Tier-1 + local users + NTP +
+bonding LAGs + SNMP + VRF + VXLAN L2VNI).  Render always emits the
+curly-brace form.  The lossy / unsupported exceptions:
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/config/type` | Lossy | No IANA ifType; inferred from the name shape (`ethN` → ethernetCsmacd, `lo`/`dumN` → softwareLoopback, `bondN` → ieee8023adLag).  Best-effort. |
+| `/system/raw-sections/version-banner` | Lossy | The `// vyos-config-version` trailer + not-yet-modelled `service` / `system` management blocks (SSH / syslog / DNS) are discarded on parse and a synthesised trailer is emitted on render; re-apply those services on the target. |
+| `/local-users/user/privilege-level` | Lossy | `system login user` accounts have no numeric privilege in the common case; every login user maps to privilege 15 / role `admin`.  The `encrypted-password` hash round-trips verbatim same-vendor; cross-vendor migration requires re-keying. |
+| `/lags/lag/mode` | Lossy | Bonding `mode 802.3ad` (LACP) → `active`; the non-LACP modes (`active-backup` / `balance-rr` / `balance-xor` / …) collapse to `static` (the balancing algorithm is dropped — re-select on the target). |
+| `/snmp/v3-user/auth-passphrase` | Lossy | v3 USM auth/privacy keys are an opaque `encrypted-password` blob; round-trips verbatim same-vendor but cross-vendor migration requires re-keying (vendor-specific salts).  Plaintext keys are never accepted. |
+| `/snmp/v3-user/engine-id` | Lossy | VyOS declares a single config-wide `engineid` for the whole agent; the canonical model carries it per-user, so the one value maps onto every v3 user (and a single `engineid` is emitted when the users share one). |
+| `/routing-instances/instance/table` | Lossy | VyOS requires a numeric `table <id>` on every `vrf name <X>`; the canonical RoutingInstance carries no table number, so a deterministic id (`100 + sort-index`) is synthesised on render.  The original table id is not preserved. |
+| `/vxlan-vnis/source-interface` | Lossy | The VTEP source is `source-address <ip>` (or `source-interface <if>`) on the vxlan netdev; the opaque string round-trips same-vendor but a cross-vendor source (e.g. `Loopback0`) is re-emitted verbatim and may need an operator port-rename. |
+| `/vxlan-vnis/vlan-id` | Lossy | VyOS models ONE VNI per `vxlan vxlanN` netdev with no on-device VLAN (the L2 binding lives on a separate `bridge`); the required canonical `vlan_id` is synthesised from the VNI and the netdev name regenerated `vxlan<index>` on render — both deterministic (stable same-vendor, advisory cross-vendor). |
+| `/vlans/vlan/id` | Unsupported | VyOS has no top-level VLAN database; 802.1Q VLANs are `vif <vid>` sub-interfaces (rendered as `ethN.<vid>` interfaces), which ARE supported. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static routes (`vrf name <X> { protocols static route … }`) are deferred past the Phase-3 VRF wire-up; the `vrf name` instances + per-interface binding ARE supported. |
+| `/vxlan-vnis/l2vni-route-target` | Unsupported | EVPN per-VNI RD/RT lives under `protocols bgp … address-family l2vpn-evpn` (Tier-3, dropped); the L2 VLAN↔VNI binding is supported but the control-plane RD/RT is not auto-translated. |
+| `/routing-instances/instance/l3-vni` | Unsupported | Symmetric-IRB L3VNI (a VNI bound to a VRF for inter-subnet routing) is out of scope for the Phase-5 per-netdev L2-VNI model. |
+| `/routing-protocols/bgp` | Unsupported | `protocols bgp` is Tier-3 — captured for the dropped-Tier-3 banner, never auto-rendered cross-vendor. |
+| `/routing-protocols/ospf` | Unsupported | Tier-3. |
+| `/nat` | Unsupported | `nat source` / `nat destination` is Tier-3 — too platform-specific to auto-translate. |
+| `/firewall` | Unsupported | `firewall` rule-sets are Tier-3 — auto-translating risks subtly-permissive rules. |
+| `/access-list/extended` | Unsupported | VyOS `policy` route-maps / prefix-lists are Tier-3. |
+
+### B. Tier-3 sections detected banner
+
+When a source codec parses a config that contains stanzas it
+deliberately drops (firewall, NAT, QoS, route-maps, IPsec, etc.),
+the parser's per-vendor heuristic detector populates
+`CanonicalIntent.dropped_tier3_sections` with the matching
+stanza headers.  The migrate page renders these as a warning banner:
+
+> ⚠ Tier-3 sections detected in source — The source config contains
+> N section(s) this tool does not translate (firewall rules, NAT,
+> QoS, route-maps, IPsec, etc.).  These will NOT appear in the
+> rendered output.  Operator must apply them manually on the target
+> device.
+
+Per-vendor detection patterns
+([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):
+
+| Source codec | Patterns matched (excerpt) |
+|---|---|
+| `cisco_iosxe_cli` / `arista_eos` / `aruba_aoss` (IOS-style CLI heuristic) | `ip access-list extended/standard <name>`, `ipv6 access-list <name>`, numbered `access-list N permit/deny`, `ip nat inside/outside/pool`, `class-map`, `policy-map`, `route-map <name>`, `crypto isakmp/ipsec/map/pki`, `zone-pair security` |
+| `juniper_junos` (set form) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
+| `fortigate_cli` | `config firewall {policy\|policy6\|vip\|vip6\|central-snat-map\|address\|addrgrp\|service\|shaper}`, `config vpn {ipsec\|ssl}`, `config {webfilter\|antivirus\|ips\|dlp\|application}`, `config router {policy\|route-map}` |
+| `mikrotik_routeros` | `/ip firewall {filter\|nat\|mangle\|raw\|address-list}`, `/ipv6 firewall …`, `/queue`, `/ip ipsec`, `/routing {filter\|bgp\|ospf}` |
+| `opnsense` | XML elements: `<filter>`, `<nat>`, `<ipsec>`, `<openvpn>`, `<wireguard>`, `<shaper>`, `<load_balancer>`, `<captiveportal>` |
+| `cisco_iosxe` (NETCONF) | No-op (NETCONF input rarely carries Tier-3 stanzas — retained for codec-hook symmetry) |
+
+Detection is intentionally heuristic on stanza headers — not a
+parse.  False positives are preferred to false negatives.  The
+output is **notification-only**: it never feeds the renderer or any
+transform.
+
+### C. Render-time review comments
+
+When a render path can't faithfully emit a piece of canonical
+state, it emits a comment in the target's native syntax instead of
+guessing or silently dropping.  Operators searching for `review:`
+in rendered output find every such site.
+
+* **Hash-portability policy**
+  ([`netcanon/migration/_user_secrets.py`](../netcanon/migration/_user_secrets.py)).
+  Every render path that emits a local user calls
+  `is_migratable(hash, target_vendor)` first; on a miss, it emits a
+  vendor-correct comment of the form:
+
+      password manager user-name "X" -- review: <alg> hash from
+      source vendor cannot be re-used on <target>; reset this user
+      password manually
+
+  Comment delimiter varies by vendor: Aruba uses `;`, Cisco IOS-XE
+  CLI / Arista EOS use `!`, Junos / FortiGate / MikroTik use `#`,
+  OPNsense uses `<!-- … -->` (with `--` collapsed to `-` per XML
+  1.0).  Per-target accepted-algorithm sets live in
+  `_TARGET_ACCEPTS`.  A foreign hash NEVER falls back to plaintext
+  (that would leak the hash literal as the password — a severe
+  security bug).
+
+* **Aruba AOS-S DHCP comment block**
+  ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
+  AOS-S is a DHCP-relay platform on most SKUs — it doesn't run a
+  DHCP server.  When canonical carries DHCP pools, the renderer
+  emits a header comment block:
+
+      ; DHCP pools from source codec are not supported
+      ; by AOS-S (AOS-S is a DHCP relay platform, not a
+      ; DHCP server).  Reconfigure on a sibling server.
+
+  …followed by one summary comment line per pool.
+
+* **Aruba AOS-S OOBM IPv6**.  AOS-S has documented `oobm` IPv4
+  syntax but unverified IPv6 syntax; the renderer emits the IPv6
+  address as a comment-form review line rather than guessing.
+
+* **MikroTik IPsec tunnel placeholders**.  When the canonical
+  carries an IPsec peer with an empty/placeholder address, the
+  renderer emits the line plus `comment="review: tunnel endpoint
+  placeholder -- set local-address/remote-address"`.
+
+* **Junos `apply-groups` round-trip**.  Group bodies are emitted
+  verbatim before their `apply-groups` reference so the operator
+  can audit; cross-vendor renderers do not include them.
+
+* **Foreign port names** (Cisco IOS-XE CLI render path).  When the
+  port-rename mesh hands a foreign port name to a target whose
+  `classify_port_name` can't place it, the renderer emits
+  `! interface <name> -- review: foreign port` rather than
+  emitting an interface stanza for an unknown chassis position.
+
+### D. Validation severity (`ok` / `warn` / `block`)
+
+Every `MigrationJob` carries a validation severity computed from the
+target's capability matrix vs. the canonical tree's actually-populated
+fields.  The migrate page reflects this in the status banner and
+`POST /api/v1/migration/plan` returns it on `job.validation`:
+
+* `ok` — every populated canonical leaf maps to a `supported` xpath
+  on the target.
+* `warn` — at least one leaf hits a `lossy` xpath; render proceeds.
+* `block` — at least one leaf hits an `unsupported` xpath; the job's
+  status flips to `partial` (rendered output exists but should be
+  reviewed before deploy).
+
+Job status reaches `failed` only when a stage actually raises;
+validation alone never fails the job.
+
+### D2. Scope advisories (target-platform notices)
+
+Separate from the severity ladder above, and deliberately so: that ladder
+grades **per-xpath** loss for fields the source actually carried, whereas a
+scope advisory reports something about the **target platform** that no field
+can express — the absence of a whole configuration plane.
+
+`job.scope_advisories` is populated by `run_plan` when the target's *primary
+device class* is `firewall` and the source's is not (see § Platform fit).  It
+is a notice, never a gate: `job.status` and `job.validation.severity` are
+untouched, the render proceeds, and the operator may ignore it.
+
+It exists because that direction was otherwise unreported.  The Tier-3 banner
+reads the **source** config, so it says nothing when the source is a switch;
+and `/filter/rule` / `/nat/rule` are declared `unsupported` but no canonical
+field walks to them, so `validate_against` — which is a *loss* detector, not
+an *absence* detector — cannot fire on them either.  Building a canonical
+firewall surface would not change that: with `firewall_rules == []` the walker
+still yields nothing.  So the notice is stated where it can be stated at all.
+
+Firewall→firewall pairs deliberately raise no advisory: there the source
+codec's Tier-3 detector already names the lost policy stanzas.
+
+Rendered on the migrate page as `migrate-scope-advisory-banner`, beneath the
+Tier-3 banner.
+
+### E. Compatibility-banner per rename pane
+
+The rename modal (Tier-3 rename) shows an amber banner on a pane
+when the active target codec declares that pane's category in
+`unsupported_rename_categories`.  Today only the
+`cisco_iosxe` (NETCONF) and `opnsense` codecs declare anything —
+both list `"snmpv3"` (their SNMPv3 render paths are unsupported), and
+`cisco_iosxe` additionally lists `"ports"` (its port-name translation
+is an inherited no-op stub, so a port-rename pane against it warns
+up-front rather than emitting N per-port warnings).  The banner
+prevents the ghost-success
+bug where rename overrides apply to canonical but vanish from
+rendered output.
+
+---
+
+## Backup-side limitations
+
+The backup concern is architecturally simpler — connection happens
+via SSH (Netmiko) / NETCONF / REST with vendor-specific paging
+controls.  Operator-visible failure modes:
+
+* **`422 Unknown type_key(s)`** — `POST /api/v1/backups` validates
+  every device's `type_key` against the loaded definitions; unknown
+  keys reject with a 422 listing both the offenders and the loaded
+  set.
+* **`type_key` filename grammar** — definition load-time validator
+  in [`netcanon/definitions/schema.py`](../netcanon/definitions/schema.py)
+  rejects any `type_key` containing `_` or `.`.  The file-store
+  filename grammar is `{type_key}_{safe_host}_{timestamp}.{ext}`
+  and underscores or dots inside `type_key` make round-trip
+  parsing ambiguous.
+* **Connection failures** — surfaced on the per-device row of the
+  backup-job result with the exception class name and message.
+  Mocking is at one factory: `get_collector` (AGENTS.md hard rule).
+* **Probe non-match** — backup-side code does not auto-detect
+  vendors; the operator declares `type_key` per device.  Migration
+  has its own auto-detect probe (see
+  [`migration_detect.py`](../netcanon/services/migration_detect.py)).
+* **Cisco paging** — Cisco devices use SPACE-injection via
+  `connection.cisco_more_paging: true` in the YAML definition.
+  AGENTS.md hard rule: never replace this with `terminal length 0`.
+
+---
+
+## Round-trip vs. cross-vendor
+
+Two distinct fidelity surfaces, often confused:
+
+* **Round-trip** — `parse(render(parse(raw))) == parse(raw)` for the
+  **same** vendor codec.  The cert harness's primary invariant.
+  Per-codec status in
+  [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md).
+* **Cross-vendor / cross-mesh** — every-source by every-target pass
+  through the canonical bridge.  The audit matrix lives at
+  [`../tests/fixtures/real/CROSS_MESH_RESULTS.md`](../tests/fixtures/real/CROSS_MESH_RESULTS.md)
+  (Phase 1: mechanical drift) and
+  [`../tests/fixtures/real/PHASE4_RECONCILIATION.md`](../tests/fixtures/real/PHASE4_RECONCILIATION.md)
+  (Phase 4: classified into ALIGNED / CODEC_BUG /
+  EXPECTED_LOSSY / EXPECTED_UNSUPPORTED / METHODOLOGY_ISSUE_under /
+  METHODOLOGY_ISSUE_over / STRUCTURAL_ONLY / TRIVIAL_EMPTY).
+
+A codec can be round-trip clean and still drop fields cross-vendor
+(`/snmp/v3-user` is valid SNMPv3 on Cisco CLI source, but the
+NETCONF target codec doesn't implement render).  Both numbers
+matter; the matrix is honest about both.
+
+---
+
+## Cross-paradigm exceptions
+
+* **`cisco_iosxe` (NETCONF) is a Phase 0.5 stub.**  The render path
+  emits ONLY `openconfig-interfaces`.  Its capability matrix
+  declares the gap — every non-interface canonical surface is
+  `unsupported`.  Operators who need full NETCONF output should use
+  the CLI sibling (`cisco_iosxe_cli`) which renders complete config
+  text.
+* **OPNsense SNMPv3 is Tier 3.**  OPNsense stores SNMPv3 in raw
+  `snmpd.conf` snippets, not its config.xml schema; the codec
+  declares `/snmp/v3-user` unsupported and lists `"snmpv3"` in
+  `unsupported_rename_categories`.
+* **MikroTik does not accept foreign hashes.**  RouterOS rehashes
+  the supplied password itself, so `_user_secrets._TARGET_ACCEPTS`
+  permits only `plaintext` for `mikrotik_routeros`.  Cross-vendor
+  hashes always trigger a review comment.
+* **Aruba AOS-S as DHCP target.**  AOS-S is a DHCP relay platform
+  (`ip helper-address`) — it is not a DHCP server.  Source DHCP
+  pools surface as a comment block, not as `dhcp-server pool`
+  syntax.
+
+---
+
+## Cross-vendor L3-redundancy grammar reference
+
+Classic FHRP and anycast-gateway are sibling surfaces in canonical —
+operators searching for "where does my vendor's X land?" use this
+table to find the corresponding canonical field.  Full per-vendor
+grammar deep-dive lives in
+[`v0.2.0-planning/01-vrrp-canonical/02-per-vendor-grammar.md`](v0.2.0-planning/01-vrrp-canonical/02-per-vendor-grammar.md)
+and
+[`v0.2.0-planning/02-anycast-gateway/02-per-vendor-grammar.md`](v0.2.0-planning/02-anycast-gateway/02-per-vendor-grammar.md).
+
+### Classic FHRP (VRRP / HSRP / CARP) — `CanonicalVRRPGroup`
+
+Wire-protocol discriminator lives in `CanonicalVRRPGroup.mode`
+(`"vrrp"` default, `"hsrp"`, `"carp"`).  Same canonical record;
+different bytes on the wire.
+
+| Vendor | Native grammar (canonical mapping) | Canonical `mode` |
+|---|---|---|
+| Cisco IOS-XE | `interface X / vrrp 10 ip 192.168.1.254 / vrrp 10 priority 110 / vrrp 10 preempt` | `vrrp` (HSRP via `standby` grammar parses but renders as VRRP) |
+| Arista EOS | `interface VlanN / vrrp 10 ipv4 192.168.1.254 / vrrp 10 priority 110` (modern multi-line) | `vrrp` |
+| Juniper Junos | `set interfaces irb unit N family inet address X vrrp-group 10 virtual-address Y / priority 110 / preempt` | `vrrp` (IPv6 via `vrrp-inet6-group`) |
+| Aruba AOS-S | `router vrrp` + `vlan N / vrrp vrid 10 / virtual-ip-address Y / priority 110 / preempt / enable` | `vrrp` |
+| FortiGate | `config system interface / edit X / config vrrp / edit 10 / set vrip Y / set priority 110 / set preempt enable / next / end` | `vrrp` |
+| MikroTik RouterOS | `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` | `vrrp` |
+| OPNsense (BSD CARP) | `<virtualip><vip><mode>carp</mode><vhid>10</vhid><advskew>0</advskew><password>…</password><subnet>Y</subnet></vip></virtualip>` | `carp` (priority ↔ `254 − advskew`) |
+
+### Anycast-gateway — IP-address property, not a group election
+
+Lives on `CanonicalIPv4Address.virtual_gateway_address` /
+`virtual_gateway_mac` (and the IPv6 mirror).  Chassis-wide MAC lives
+on `CanonicalIntent.anycast_gateway_mac`.
+
+| Vendor | Per-SVI virtual IP grammar | System-wide MAC grammar | Per-SVI MAC override |
+|---|---|---|---|
+| Arista EOS (VARP) | `interface VlanN / ip address virtual X/M` (`secondary` trailer permitted) | `ip virtual-router mac-address MAC` | none (chassis-wide only) |
+| Juniper Junos | `set interfaces irb unit N family inet address X virtual-gateway-address Y` | none (per-unit only) | `set interfaces irb unit N virtual-gateway-v4-mac M` / `-v6-mac M` |
+| Cisco IOS-XE SD-Access | `interface VlanN / fabric forwarding mode anycast-gateway` (binds the SVI's primary IP) | `fabric forwarding anycast-gateway-mac MAC` | none |
+| Aruba AOS-S / FortiGate / MikroTik / OPNsense | **none native** (declare `unsupported`) | — | — |
+
+### Cross-vendor migration consequences
+
+The cross-vendor story is asymmetric.  Some examples operators run
+into routinely:
+
+* **Junos → Arista anycast.**  Translates cleanly: Junos
+  `virtual-gateway-address` populates the canonical record, Arista
+  renders `ip address virtual`.  Junos per-unit
+  `virtual-gateway-v4-mac` collapses to Arista's chassis-wide
+  `ip virtual-router mac-address` (review banner if multiple
+  distinct per-unit MACs appear in the source).
+* **Junos → FortiGate anycast.**  DROPS the data with a review
+  banner.  FortiGate has no anycast grammar; the canonical
+  `virtual_gateway_address` field is declared `unsupported` on
+  `fortigate_cli`, so the migrate-page Unsupported panel fires for
+  every IRB unit carrying a virtual gateway address.  Operator must
+  rebuild HA via VRRP on the FortiGate side.
+* **Arista VARP → IOS-XE.**  IPv4 translates via SD-Access
+  (`fabric forwarding mode anycast-gateway`); IPv6 VARP DROPS
+  because `/interfaces/interface/ipv6/address/virtual-gateway-address`
+  is `unsupported` on `cisco_iosxe_cli` (no fixture coverage today).
+* **IOS-XE HSRP → any non-Cisco target.**  The IOS-XE parser folds
+  HSRP grammar into the canonical record; targets render VRRP.
+  Election timing is operator-equivalent but the wire protocol
+  flips — operator must verify both ends agree on VRID / virtual-IP
+  on a per-VLAN basis before deploy.
+* **OPNsense CARP ↔ VRRP devices.**  The `mode="carp"`
+  discriminator carries through.  OPNsense as target renders only
+  `mode="carp"` records (`mode="vrrp"` / `"hsrp"` records are
+  SKIPPED with a review banner).  Cross-vendor migration *toward*
+  OPNsense from VRRP devices currently requires the operator to
+  flip `mode` manually, or accept the silent skip.
+
+---
+
+## What is auto-tested
+
+The cross-mesh fidelity audit harness
+([`tools/run_full_mesh.py`](../tools/run_full_mesh.py),
+[`tools/run_phase4_reconciliation.py`](../tools/run_phase4_reconciliation.py))
+runs every `(source codec, target codec, fixture)` triple and
+classifies per-canonical-field drift.  Outputs commit as
+`tests/fixtures/real/CROSS_MESH_RESULTS.md` and
+`tests/fixtures/real/PHASE4_RECONCILIATION.md`.  Per-vendor
+investigation reports (`phase4_findings_<vendor>.md`) carry the
+triage decisions.
+
+The unit-tier real-capture harness
+([`tests/unit/migration/test_real_captures.py`](../tests/unit/migration/test_real_captures.py))
+asserts three invariants per fixture: parse doesn't crash, parse
+populates at least one canonical field, and (for bidirectional
+codecs) `canonical(parse(render(parse(raw))))` matches
+`canonical(parse(raw))`.
+
+For the live numbers on either matrix, consult the markdown files
+named above.  This document deliberately omits hard-coded counts
+(per AGENTS.md hard rule on prose-rot).
+
+---
+
+## What this document is NOT
+
+* It is **not** a roadmap.  See
+  [`../translator-plans.txt`](../translator-plans.txt).
+* It is **not** a contributor guide.  See
+  [`../AGENTS.md`](../AGENTS.md).
+* It is **not** a security model.  See
+  [`../SECURITY.md`](../SECURITY.md).
+* It is **not** a per-fixture certification matrix.  See
+  [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md).
+
+---
+
+## Reporting issues / feature requests
+
+Bugs and feature requests welcome via the project's issue tracker.
+For codec authoring, start at
+[`../netcanon/migration/codecs/README.md`](../netcanon/migration/codecs/README.md).
+
+When reporting a translation bug, include:
+
+1. Source codec + target codec.
+2. The shortest source snippet that reproduces.
+3. Expected vs. actual rendered output.
+4. Any review comments / Tier-3 banner contents the UI showed.
+
+---
+
+## See also
+
+- [`../README.md`](../README.md) — quickstart
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — internal four-layer design
+- [`../AGENTS.md`](../AGENTS.md) — contributor directives
+- [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md) — per-codec certification state (live)
+- [`../tests/fixtures/real/PHASE4_RECONCILIATION.md`](../tests/fixtures/real/PHASE4_RECONCILIATION.md) — cross-mesh audit matrix (live)
+- [`./glossary.md`](./glossary.md) — project vocabulary (Tier 1/2/3, TRIVIAL_EMPTY, ship-before-wire, etc.)
+- [`./v0.2.0-planning/01-vrrp-canonical/`](./v0.2.0-planning/01-vrrp-canonical/) — VRRP / HSRP / CARP canonical-model design (Wave B)
+- [`./v0.2.0-planning/02-anycast-gateway/`](./v0.2.0-planning/02-anycast-gateway/) — anycast-gateway canonical-surface design (Wave C)

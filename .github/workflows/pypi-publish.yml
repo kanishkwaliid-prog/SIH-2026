@@ -1,0 +1,240 @@
+name: PyPI — build & publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'    # rc / alpha / beta pre-release tags
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # `actions: read` (for the CI-success + PII-guard run-conclusion polls) is
+  # scoped to the `build` job below — NOT here at the workflow level — so the
+  # `test` gate job doesn't carry a scope it never uses (PKG-4 symmetry with
+  # docker-publish.yml / desktop-msi-publish.yml) (P11).
+
+# Serialise release runs for a given ref so a re-pushed tag (or a
+# workflow_dispatch racing the tag push) can't double-publish.  Never
+# cancel an in-flight publish mid-upload — queue the second run instead
+# (run3 no-concurrency-guard-publish).
+concurrency:
+  group: pypi-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Opt-in to Node.js 24 for JavaScript actions ahead of the June 2026
+  # forced cutover (https://github.blog/changelog/2025-09-19-deprecation-
+  # of-node-20-on-github-actions-runners/).  Surfaces any Node 24
+  # incompatibility now rather than at the cutover deadline.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  # ── Publish-time test gate (blind-audit 3ec11f3 T0-4) ──
+  # The release pipeline is gate-at-merge: `main` is ruleset-protected with a
+  # required-check set (unit/integration/e2e/desktop/build/docker-smoke/PII),
+  # release tags are only cut from `main`, and the ancestry check in `build`
+  # refuses any off-main tag — so every published artefact normally derives
+  # from a commit that already passed the full CI matrix.  But that guarantee
+  # lives in branch protection (off-tree, admin-bypassable) and
+  # `workflow_dispatch` can publish a ref that never went through a PR.  This
+  # job re-runs the unit + integration suite *inside the publish run* so the
+  # gate is in the artefact an auditor can read and holds even if the merge
+  # gate was bypassed.  It is a fast subset (single Python, no e2e/desktop
+  # matrix) — the full matrix already ran at merge; this is defense-in-depth,
+  # not a re-run of CI.  No pip cache (single-shot publish job — same
+  # cache-poisoning-surface reasoning as the build job below).
+  test:
+    name: Test gate (unit + integration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # setuptools_scm needs full history/tags or `pip install -e .`
+          # falls back to a 0.0.0 version (matches the build job).
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run unit tests
+        run: pytest tests/unit -q --no-header
+      - name: Run integration tests
+        run: pytest tests/integration -q --no-header
+
+  build:
+    name: Build sdist + wheel
+    needs: [test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read    # read the CI + pii-guard run conclusions for the gate polls
+
+    steps:
+      # Refuse to publish from anything but a version tag.  A bare
+      # `workflow_dispatch` selects a git ref in the UI; if that ref is a
+      # branch (e.g. main) rather than a tag, setuptools_scm derives a
+      # `X.Y.Z.devN` version and `no-local-version` (pyproject.toml)
+      # strips the `+g<sha>` local segment PyPI would otherwise reject —
+      # making that accidental dev build a PyPI-legal upload.  The on-main
+      # ancestry check below passes trivially for a branch on main, so it
+      # does NOT catch this.  Tag pushes always satisfy the guard; a
+      # workflow_dispatch backfill must select a tag in the ref picker
+      # (PKG-5).  Uses $GITHUB_REF (a default env var), not a `${{ }}`
+      # template, so there is no injection surface.
+      - name: Refuse a non-tag ref (workflow_dispatch footgun guard)
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" != refs/tags/v* ]]; then
+            echo "::error::Refusing to publish from '${GITHUB_REF}' — the PyPI publish must run from a version tag (refs/tags/v*), not a branch. A workflow_dispatch on a branch would build a .devN version."
+            exit 1
+          fi
+          echo "OK: publishing from tag '${GITHUB_REF}'."
+
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Full history + tags for setuptools_scm to derive the package
+          # version from the triggering tag.  Without this, the wheel
+          # builds with the fallback_version (`0.0.0`) and PyPI gets a
+          # garbage version string.
+          fetch-depth: 0
+          # PyPI publish uses OIDC Trusted Publishing (no token to
+          # persist); no git push from this job either.
+          persist-credentials: false
+
+      # Refuse to publish a tag that isn't on main.  "Tag = publish" with
+      # no ancestry check means a `v9.9.9` tag on any commit would push an
+      # immutable release to PyPI.  Releases are cut as a CHANGELOG PR
+      # merged to main and then tagged on main, so the tagged commit is
+      # always an ancestor of origin/main; an off-main tag fails here.
+      - name: Verify the build commit is on main
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$head_sha" FETCH_HEAD; then
+            echo "::error::Build commit $head_sha is not an ancestor of origin/main — refusing to publish."
+            exit 1
+          fi
+          echo "OK: build commit $head_sha is on origin/main."
+
+      # The ancestry check proves the commit is on main; this proves the full CI
+      # matrix actually concluded 'success' for it (closes audit T0-4: ancestry
+      # != CI success — admin-bypass / a check required only after merge / a
+      # workflow_dispatch on a never-PR'd ref). The in-run Test gate job covers
+      # unit+integration; this covers the surfaces it omits (e2e/desktop/4-Python/
+      # build/docker-smoke) without re-running them. Polls in case the tag was
+      # pushed before the on-main CI run finished. Needs `actions: read`.
+      - name: Require CI success for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          for attempt in $(seq 1 30); do
+            out="$(gh api \
+              "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$head_sha&event=push&per_page=1" \
+              --jq '(.workflow_runs[0].status // "none") + " " + (.workflow_runs[0].conclusion // "none")' \
+              2>/dev/null || true)"
+            status="${out%% *}"; conclusion="${out##* }"
+            if [ "$conclusion" = "success" ]; then
+              echo "CI concluded success for $head_sha."; exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "::error::CI for $head_sha concluded '$conclusion' (not success) — refusing to publish."
+              exit 1
+            fi
+            echo "CI for $head_sha is '${status:-unknown}' (attempt $attempt/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for CI to complete for $head_sha — refusing to publish."
+          exit 1
+
+      # Belt-and-suspenders for the one check whose failure already cost a
+      # history rewrite: the gate above covers ci.yml, but pii-guard is a
+      # SEPARATE workflow with no publish-time backstop (review #54 — the T0-4
+      # "holds even if the merge gate was bypassed" property was false for it).
+      # Poll its run for this commit the same fail-closed way. Needs actions:read.
+      - name: Require PII-guard success for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          for attempt in $(seq 1 30); do
+            out="$(gh api \
+              "repos/$REPO/actions/workflows/pii-guard.yml/runs?head_sha=$head_sha&event=push&per_page=1" \
+              --jq '(.workflow_runs[0].status // "none") + " " + (.workflow_runs[0].conclusion // "none")' \
+              2>/dev/null || true)"
+            status="${out%% *}"; conclusion="${out##* }"
+            if [ "$conclusion" = "success" ]; then
+              echo "PII-guard concluded success for $head_sha."; exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "::error::PII-guard for $head_sha concluded '$conclusion' (not success) — refusing to publish."
+              exit 1
+            fi
+            echo "PII-guard for $head_sha is '${status:-unknown}' (attempt $attempt/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for PII-guard to complete for $head_sha — refusing to publish."
+          exit 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+          # No `cache: "pip"` -- this is a single-shot publish job
+          # (runs once per release tag with a cold dep tree); the
+          # cache buys nothing and would otherwise expand the
+          # cache-poisoning attack surface flagged by zizmor #77.
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Validate distribution metadata via twine
+        run: python -m twine check dist/*
+
+      - name: Upload distribution artefacts
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish to PyPI (Trusted Publishing — OIDC, no API token)
+    needs: [build]
+    runs-on: ubuntu-latest
+    # GitHub Actions environment for the OIDC binding to PyPI.  Operator
+    # creates the `pypi` environment in repo settings; PyPI's trusted
+    # publisher must reference this exact name.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/netcanon
+    permissions:
+      id-token: write     # mandatory for Trusted Publishing
+
+    steps:
+      - name: Download distribution
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        # No `with:` block needed — Trusted Publishing infers everything
+        # from the OIDC token + the environment configured on PyPI.

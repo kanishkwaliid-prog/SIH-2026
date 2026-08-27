@@ -1,0 +1,884 @@
+"""
+Integration tests for ``/api/v1/backups/`` endpoints.
+
+Dispatch model (#27): backup jobs run on a dedicated background executor, so
+a ``POST /api/v1/backups`` returns while the job is still ``pending`` — the
+job is NOT run synchronously before the response.  These tests use the
+auto-waiting client (``TestClient`` here is aliased to
+``tests.conftest.AutoWaitTestClient``, which polls each created job to
+completion after the POST), so the POST-then-GET assertions read the terminal
+state without an explicit ``wait_for_job`` call.
+"""
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from unittest.mock import patch
+
+import pytest
+
+from netcanon.models.backup import BackupJob, JobStatus
+
+pytestmark = pytest.mark.integration
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _device_payload(
+    type_key: str = "Cisco",
+    host: str = "192.168.1.1",
+    username: str = "admin",
+    password: str = "testpass",
+) -> dict:
+    return {
+        "type_key": type_key,
+        "host": host,
+        "credentials": {"username": username, "password": password},
+    }
+
+
+def _post_backup(client, devices: list[dict] | None = None) -> dict:
+    if devices is None:
+        devices = [_device_payload()]
+    resp = client.post("/api/v1/backups", json={"devices": devices})
+    return resp
+
+
+def _post_and_get(client, devices: list[dict] | None = None) -> dict:
+    """POST a backup job and return the final job state via GET.
+
+    The POST response always shows ``status: pending`` (the job runs in the
+    background on a dedicated executor, #27).  With the auto-waiting client,
+    the POST blocks until the job is terminal, so the subsequent GET reflects
+    the completed state.
+    """
+    post_resp = _post_backup(client, devices)
+    assert post_resp.status_code == 202
+    job_id = post_resp.json()["id"]
+    return client.get(f"/api/v1/backups/{job_id}").json()
+
+
+def _inject_jobs(client, count: int, status: JobStatus) -> None:
+    """Insert *count* jobs of *status* directly into the app's registry."""
+    for i in range(count):
+        job_id = f"conc-f4-{status.value}-{i}"
+        client.app.state.jobs[job_id] = BackupJob(
+            id=job_id,
+            status=status,
+            created_at=datetime.now(UTC),
+            total_devices=1,
+        )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/backups
+# ---------------------------------------------------------------------------
+
+
+class TestIntakeCap:
+    """HEAD-review Conc-F4: POST /backups sheds a runaway intake flood with a
+    429 once the in-flight (pending/running) job count hits the cap."""
+
+    def test_rejects_with_429_at_cap(self, client):
+        with patch(
+            "netcanon.api.routes.backups.MAX_PENDING_BACKUP_JOBS", 2
+        ):
+            _inject_jobs(client, 2, JobStatus.pending)
+            resp = _post_backup(client)
+        assert resp.status_code == 429
+
+    def test_429_carries_retry_after_header(self, client):
+        with patch(
+            "netcanon.api.routes.backups.MAX_PENDING_BACKUP_JOBS", 2
+        ):
+            _inject_jobs(client, 2, JobStatus.running)
+            resp = _post_backup(client)
+        assert resp.status_code == 429
+        assert "retry-after" in {k.lower() for k in resp.headers}
+
+    def test_under_cap_still_accepts(self, client):
+        # 1 in-flight, cap 3 → the new job (making 2) is under the cap.
+        with patch(
+            "netcanon.api.routes.backups.MAX_PENDING_BACKUP_JOBS", 3
+        ):
+            _inject_jobs(client, 1, JobStatus.pending)
+            resp = _post_backup(client)
+        assert resp.status_code == 202
+
+    def test_terminal_jobs_do_not_count_toward_cap(self, client):
+        # 5 COMPLETED jobs resident, cap 2 → active count is 0, POST accepted.
+        with patch(
+            "netcanon.api.routes.backups.MAX_PENDING_BACKUP_JOBS", 2
+        ):
+            _inject_jobs(client, 5, JobStatus.completed)
+            resp = _post_backup(client)
+        assert resp.status_code == 202
+
+
+class TestCreateBackup:
+    def test_returns_202(self, client):
+        resp = _post_backup(client)
+        assert resp.status_code == 202
+
+    def test_response_has_job_id(self, client):
+        resp = _post_backup(client)
+        assert "id" in resp.json()
+
+    def test_post_returns_pending(self, client):
+        """POST body is a frozen pending snapshot (#27) — the live job runs in
+        the background, but the response is always ``pending``."""
+        resp = _post_backup(client)
+        assert resp.json()["status"] == "pending"
+
+    def test_job_completed_after_get(self, client):
+        """Job runs in the background; after the auto-wait, GET is completed."""
+        job = _post_and_get(client)
+        assert job["status"] == "completed"
+
+    def test_total_devices_matches_request(self, client):
+        job = _post_and_get(
+            client,
+            devices=[_device_payload(host="1.1.1.1"), _device_payload(host="2.2.2.2")],
+        )
+        assert job["total_devices"] == 2
+
+    def test_results_populated(self, client):
+        job = _post_and_get(client)
+        assert len(job["results"]) == 1
+
+    def test_result_status_success(self, client):
+        job = _post_and_get(client)
+        assert job["results"][0]["status"] == "success"
+
+    def test_result_has_config_record(self, client):
+        job = _post_and_get(client)
+        result = job["results"][0]
+        assert result["config_record"] is not None
+        assert "filename" in result["config_record"]
+
+    def test_result_host_matches_request(self, client):
+        job = _post_and_get(client, devices=[_device_payload(host="10.0.0.1")])
+        assert job["results"][0]["host"] == "10.0.0.1"
+
+    def test_unknown_type_key_returns_422(self, client):
+        resp = _post_backup(client, devices=[_device_payload(type_key="Unknown")])
+        assert resp.status_code == 422
+
+    def test_422_detail_mentions_unknown_key(self, client):
+        resp = _post_backup(client, devices=[_device_payload(type_key="NOPE")])
+        assert "NOPE" in resp.json()["detail"]
+
+    def test_empty_devices_returns_422(self, client):
+        resp = client.post("/api/v1/backups", json={"devices": []})
+        assert resp.status_code == 422
+
+    def test_multiple_devices_all_backed_up(self, client):
+        job = _post_and_get(
+            client,
+            devices=[
+                _device_payload(host="1.1.1.1"),
+                _device_payload(host="2.2.2.2"),
+                _device_payload(host="3.3.3.3"),
+            ],
+        )
+        assert job["total_devices"] == 3
+        assert len(job["results"]) == 3
+        assert all(r["status"] == "success" for r in job["results"])
+
+    def test_opnsense_type_key(self, client):
+        resp = _post_backup(client, devices=[_device_payload(type_key="OPNsense")])
+        assert resp.status_code == 202
+        job = _post_and_get(client, devices=[_device_payload(type_key="OPNsense")])
+        assert job["status"] == "completed"
+
+    def test_backup_creates_config_file(self, client):
+        """After a successful backup, the config appears in GET /api/v1/configs/."""
+        _post_and_get(client)
+        configs = client.get("/api/v1/configs/").json()
+        assert len(configs) >= 1
+
+    def test_completed_at_set_after_completion(self, client):
+        job = _post_and_get(client)
+        assert job["completed_at"] is not None
+
+    def test_port_field_respected(self, client):
+        """Non-default port in request is accepted (FakeCollector ignores it)."""
+        device = _device_payload()
+        device["port"] = 2222
+        resp = _post_backup(client, devices=[device])
+        assert resp.status_code == 202
+
+
+# ---------------------------------------------------------------------------
+# Terminal-state logic: completed / partial / failed
+# ---------------------------------------------------------------------------
+
+
+class _SelectiveFailCollector:
+    """Collector that raises for hosts in ``fail_hosts`` and succeeds otherwise."""
+
+    def __init__(self, fail_hosts: set[str]) -> None:
+        self._fail_hosts = fail_hosts
+
+    def collect(self, device, definition):
+        if device.host in self._fail_hosts:
+            raise RuntimeError(f"Simulated failure for {device.host}")
+        return "! config for " + device.host
+
+
+class TestJobTerminalStatus:
+    """Verify the three-way terminal status: completed / partial / failed."""
+
+    def _run(self, test_app, fail_hosts: set[str], hosts: list[str]) -> dict:
+        from unittest.mock import patch
+
+        from tests.conftest import AutoWaitTestClient as TestClient
+
+        collector = _SelectiveFailCollector(fail_hosts)
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=collector,
+        ), TestClient(test_app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host=h) for h in hosts]},
+            )
+            assert resp.status_code == 202
+            return c.get(f"/api/v1/backups/{resp.json()['id']}").json()
+
+    def test_all_success_marks_job_completed(self, test_app):
+        job = self._run(test_app, fail_hosts=set(), hosts=["1.1.1.1", "2.2.2.2"])
+        assert job["status"] == "completed"
+
+    def test_all_failure_marks_job_failed(self, test_app):
+        job = self._run(
+            test_app, fail_hosts={"1.1.1.1", "2.2.2.2"}, hosts=["1.1.1.1", "2.2.2.2"]
+        )
+        assert job["status"] == "failed"
+        assert all(r["status"] == "failed" for r in job["results"])
+
+    def test_mixed_results_mark_job_partial(self, test_app):
+        job = self._run(
+            test_app, fail_hosts={"2.2.2.2"}, hosts=["1.1.1.1", "2.2.2.2", "3.3.3.3"]
+        )
+        assert job["status"] == "partial"
+        statuses = [r["status"] for r in job["results"]]
+        assert statuses.count("success") == 2
+        assert statuses.count("failed") == 1
+
+    def test_single_device_failure_is_failed_not_partial(self, test_app):
+        job = self._run(test_app, fail_hosts={"1.1.1.1"}, hosts=["1.1.1.1"])
+        assert job["status"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# Per-device status lifecycle: queued -> running -> success/failed
+# ---------------------------------------------------------------------------
+
+
+class _ObservingCollector:
+    """Collector that snapshots the full job-results list on each call.
+
+    Snapshots are taken at the *start* of ``collect()`` (i.e. while the
+    collector is the current device's ``running`` state, and every other
+    device is still ``queued``) so we can assert the lifecycle from a
+    single completed run without threading or timing.
+
+    The app reference is lazy-resolved — ``app.state.jobs`` doesn't exist
+    until the FastAPI lifespan runs, which happens inside the TestClient
+    context manager, so we can't capture the dict at construction time.
+    """
+
+    def __init__(self, app, fail_hosts: set[str] | None = None) -> None:
+        self._app = app
+        self._fail = fail_hosts or set()
+        self.snapshots: list[list[dict]] = []
+
+    def collect(self, device, definition):
+        # capture the only in-progress job's results verbatim
+        running_job = next(iter(self._app.state.jobs.values()))
+        self.snapshots.append(
+            [{"host": r.host, "status": r.status} for r in running_job.results]
+        )
+        if device.host in self._fail:
+            raise RuntimeError("simulated")
+        return "! config"
+
+
+class TestDeviceStatusLifecycle:
+    """queued -> running -> success|failed, per-device, in order."""
+
+    def test_first_device_is_running_others_queued_mid_flight(self, test_app):
+        """While device N is being collected, N is 'running' and N+1..end are 'queued'."""
+        from unittest.mock import patch
+
+        from tests.conftest import AutoWaitTestClient as TestClient
+
+        collector = _ObservingCollector(test_app)
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=collector,
+        ), TestClient(test_app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={
+                    "devices": [
+                        _device_payload(host="1.1.1.1"),
+                        _device_payload(host="2.2.2.2"),
+                        _device_payload(host="3.3.3.3"),
+                    ]
+                },
+            )
+            assert resp.status_code == 202
+
+        # 3 devices → 3 snapshots, one taken at the start of each collect.
+        assert len(collector.snapshots) == 3
+        # Snapshot 0: device 1 running, 2 & 3 queued
+        snap0 = collector.snapshots[0]
+        assert [r["host"] for r in snap0] == ["1.1.1.1", "2.2.2.2", "3.3.3.3"]
+        assert snap0[0]["status"] == "running"
+        assert snap0[1]["status"] == "queued"
+        assert snap0[2]["status"] == "queued"
+        # Snapshot 1: device 1 success (already completed), 2 running, 3 queued
+        snap1 = collector.snapshots[1]
+        assert snap1[0]["status"] == "success"
+        assert snap1[1]["status"] == "running"
+        assert snap1[2]["status"] == "queued"
+        # Snapshot 2: device 1 & 2 success, 3 running
+        snap2 = collector.snapshots[2]
+        assert snap2[0]["status"] == "success"
+        assert snap2[1]["status"] == "success"
+        assert snap2[2]["status"] == "running"
+
+    def test_results_preserve_device_order(self, test_app, client):
+        """results[i].host must match request.devices[i].host for all i."""
+        hosts = ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
+        resp = _post_backup(client, devices=[_device_payload(host=h) for h in hosts])
+        job = client.get(f"/api/v1/backups/{resp.json()['id']}").json()
+        assert [r["host"] for r in job["results"]] == hosts
+
+    def test_final_result_count_matches_total_devices(self, client):
+        job = _post_and_get(
+            client,
+            devices=[_device_payload(host=f"10.0.0.{i}") for i in range(1, 6)],
+        )
+        assert len(job["results"]) == job["total_devices"] == 5
+        # After completion, no result is still queued/running.
+        assert all(r["status"] in ("success", "failed") for r in job["results"])
+
+
+# ---------------------------------------------------------------------------
+# Bounded per-job parallelism (ThreadPoolExecutor, cap of 10)
+# ---------------------------------------------------------------------------
+
+
+class _BarrierCollector:
+    """Block in ``collect()`` until *parties* workers all reach the barrier.
+
+    If execution were serial, only the first worker would ever arrive at
+    ``barrier.wait()``; the others would never start.  The barrier's
+    timeout therefore doubles as a proof that *parties* devices were being
+    processed concurrently.
+    """
+
+    def __init__(self, parties: int) -> None:
+        import threading
+        self._barrier = threading.Barrier(parties, timeout=5)
+        self.max_observed_concurrent: int = 0
+        self._active = 0
+        self._lock = threading.Lock()
+
+    def collect(self, device, definition):
+        with self._lock:
+            self._active += 1
+            if self._active > self.max_observed_concurrent:
+                self.max_observed_concurrent = self._active
+        try:
+            self._barrier.wait()
+        finally:
+            with self._lock:
+                self._active -= 1
+        return "! config for " + device.host
+
+
+def _build_parallel_app(test_settings, concurrency: int):
+    """Return a fresh FastAPI app with ``backup_concurrency=concurrency``."""
+    from netcanon.main import create_app
+
+    parallel = test_settings.model_copy(update={"backup_concurrency": concurrency})
+    return create_app(parallel)
+
+
+class TestBackupConcurrency:
+    """Exercise the ThreadPoolExecutor path + 10-at-a-time batching."""
+
+    def test_three_devices_run_concurrently_when_concurrency_3(self, test_settings):
+        """Barrier(3) only opens if 3 workers arrive simultaneously."""
+        from unittest.mock import patch
+
+        from tests.conftest import AutoWaitTestClient as TestClient
+
+        app = _build_parallel_app(test_settings, concurrency=3)
+        collector = _BarrierCollector(parties=3)
+
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=collector,
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [
+                    _device_payload(host="1.1.1.1"),
+                    _device_payload(host="2.2.2.2"),
+                    _device_payload(host="3.3.3.3"),
+                ]},
+            )
+            assert resp.status_code == 202
+            job = c.get(f"/api/v1/backups/{resp.json()['id']}").json()
+
+        # All devices succeeded (barrier opened, no timeout).
+        assert job["status"] == "completed"
+        # Peak concurrency must equal the configured limit.
+        assert collector.max_observed_concurrent == 3
+
+    def test_concurrency_clamped_to_hard_max_of_10(self, test_settings):
+        """Even if Settings allowed higher, 10 is the ceiling."""
+        from netcanon.config import MAX_BACKUP_CONCURRENCY
+        assert MAX_BACKUP_CONCURRENCY == 10
+        # Pydantic rejects out-of-range values at Settings construction.
+        import pytest
+
+        from netcanon.config import Settings
+        with pytest.raises(Exception):  # ValidationError
+            Settings(
+                definitions_dir=test_settings.definitions_dir,
+                configs_dir=test_settings.configs_dir,
+                backup_concurrency=MAX_BACKUP_CONCURRENCY + 1,
+            )
+
+    def test_batching_caps_concurrency_and_processes_all_devices(
+        self, test_settings
+    ):
+        """With 12 devices and concurrency=5, peak concurrency must be 5 (not 12)
+        AND every device must still be processed successfully."""
+        import threading
+        import time
+        from unittest.mock import patch
+
+        from tests.conftest import AutoWaitTestClient as TestClient
+
+        app = _build_parallel_app(test_settings, concurrency=5)
+
+        class _CountingCollector:
+            """Tracks peak concurrency without deadlocking on batch boundaries.
+
+            Each call briefly sleeps so workers have real overlap — without
+            this the collector would complete instantly and peak concurrency
+            would depend on scheduler timing rather than the pool size.
+            """
+            def __init__(self) -> None:
+                self.lock = threading.Lock()
+                self.active = 0
+                self.peak = 0
+
+            def collect(self, device, definition):
+                with self.lock:
+                    self.active += 1
+                    if self.active > self.peak:
+                        self.peak = self.active
+                try:
+                    time.sleep(0.05)  # keep workers overlapping
+                finally:
+                    with self.lock:
+                        self.active -= 1
+                return "! config"
+
+        collector = _CountingCollector()
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=collector,
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [
+                    _device_payload(host=f"10.0.0.{i}") for i in range(1, 13)
+                ]},
+            )
+            assert resp.status_code == 202
+            job = c.get(f"/api/v1/backups/{resp.json()['id']}").json()
+
+        assert job["status"] == "completed"
+        assert len(job["results"]) == 12
+        assert all(r["status"] == "success" for r in job["results"])
+        # Hard cap: concurrency must never have exceeded the configured limit.
+        assert collector.peak <= 5
+        # Evidence of actual parallelism: >1 device was in flight at once.
+        assert collector.peak >= 2
+
+    def test_single_device_job_uses_serial_fast_path(self, test_settings):
+        """Single-device jobs skip the pool entirely (no thread overhead)."""
+        # Sentinel collector: records the name of the thread that called it.
+        import threading
+        from unittest.mock import patch
+
+        from tests.conftest import AutoWaitTestClient as TestClient
+        thread_names: list[str] = []
+
+        class ThreadNameCollector:
+            def collect(self, device, definition):
+                thread_names.append(threading.current_thread().name)
+                return "! config"
+
+        app = _build_parallel_app(test_settings, concurrency=10)
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=ThreadNameCollector(),
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host="1.1.1.1")]},
+            )
+
+        assert len(thread_names) == 1
+        # #27: the job runs on the dedicated backup-job executor, and a
+        # single-device job takes the serial fast-path — the collect runs
+        # directly on that job-executor thread ("backup-job_N"), NOT in a
+        # per-job sub-pool worker (which would be named "backup-<jobid8>_N").
+        assert thread_names[0].startswith("backup-job"), thread_names[0]
+
+
+# ---------------------------------------------------------------------------
+# #27 — background dispatch contract (POST returns before the job finishes)
+# ---------------------------------------------------------------------------
+
+
+class TestBackgroundDispatchContract:
+    """The manual POST dispatches to the dedicated backup-job executor, not
+    FastAPI ``BackgroundTasks``: it returns a frozen ``pending`` snapshot while
+    the job is *still running* in the background (#27)."""
+
+    def test_post_returns_while_job_still_running_on_dedicated_executor(
+        self, test_app
+    ):
+        """POST returns 202 + ``pending`` while a deliberately-blocked collector
+        is mid-run — proof the dispatch is async, not synchronous.  The collect
+        also runs on a ``backup-job`` executor thread.
+
+        Negative control: under the pre-#27 ``BackgroundTasks`` dispatch this
+        POST blocked until the whole job finished, so it could not return while
+        the collector was still gated, the body serialised as ``completed`` /
+        ``running`` (not a frozen ``pending``), and the collector ran on an
+        anyio worker thread — every assertion below would fail.
+        """
+        import threading
+        from unittest.mock import patch
+
+        # Plain client: do NOT auto-wait — we assert on the in-flight state.
+        from fastapi.testclient import TestClient
+
+        from tests.conftest import wait_for_job
+
+        started = threading.Event()
+        release = threading.Event()
+        thread_names: list[str] = []
+
+        class _GatedCollector:
+            def collect(self, device, definition):
+                thread_names.append(threading.current_thread().name)
+                started.set()
+                # Block so the job is unambiguously mid-run when POST returns.
+                release.wait(timeout=10)
+                return "! config"
+
+        try:
+            with patch(
+                "netcanon.api.routes.backups.get_collector",
+                return_value=_GatedCollector(),
+            ), TestClient(test_app, raise_server_exceptions=True) as c:
+                resp = c.post(
+                    "/api/v1/backups",
+                    json={"devices": [_device_payload(host="1.1.1.1")]},
+                )
+                assert resp.status_code == 202
+                # Frozen pending snapshot — not the racy live status.
+                assert resp.json()["status"] == "pending"
+                # The job started on the executor while POST already returned.
+                assert started.wait(timeout=10), "job never started"
+                assert thread_names[0].startswith("backup-job"), thread_names[0]
+                # Let the job finish, then confirm terminal state.
+                release.set()
+                job = wait_for_job(c, resp.json()["id"])
+                assert job["status"] == "completed"
+        finally:
+            # Ensure the gated collector is always released (even on assert
+            # failure) so the executor thread can exit and teardown is clean.
+            release.set()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/backups/
+# ---------------------------------------------------------------------------
+
+
+class TestListJobs:
+    def test_empty_registry_returns_200(self, client):
+        resp = client.get("/api/v1/backups/")
+        assert resp.status_code == 200
+
+    def test_empty_registry_returns_empty_list(self, client):
+        resp = client.get("/api/v1/backups/")
+        assert resp.json() == []
+
+    def test_after_backup_job_listed(self, client):
+        _post_backup(client)
+        resp = client.get("/api/v1/backups/")
+        assert len(resp.json()) == 1
+
+    def test_multiple_jobs_all_listed(self, client):
+        _post_backup(client)
+        _post_backup(client)
+        resp = client.get("/api/v1/backups/")
+        assert len(resp.json()) == 2
+
+    def test_list_sorted_newest_first(self, client):
+        _post_backup(client)
+        _post_backup(client)
+        resp = client.get("/api/v1/backups/")
+        items = resp.json()
+        ts = [item["created_at"] for item in items]
+        assert ts == sorted(ts, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/backups/{job_id}
+# ---------------------------------------------------------------------------
+
+
+class TestGetJob:
+    def test_get_existing_job_returns_200(self, client):
+        job_id = _post_backup(client).json()["id"]
+        resp = client.get(f"/api/v1/backups/{job_id}")
+        assert resp.status_code == 200
+
+    def test_get_job_returns_correct_id(self, client):
+        job_id = _post_backup(client).json()["id"]
+        resp = client.get(f"/api/v1/backups/{job_id}")
+        assert resp.json()["id"] == job_id
+
+    def test_get_job_status_completed(self, client):
+        job_id = _post_backup(client).json()["id"]
+        resp = client.get(f"/api/v1/backups/{job_id}")
+        assert resp.json()["status"] == "completed"
+
+    def test_get_nonexistent_job_returns_404(self, client):
+        # A well-formed-but-unknown UUID reaches the handler and 404s.
+        resp = client.get(
+            "/api/v1/backups/00000000-0000-0000-0000-000000000000"
+        )
+        assert resp.status_code == 404
+
+    def test_404_detail_mentions_job_id(self, client):
+        missing = "11111111-2222-3333-4444-555555555555"
+        resp = client.get(f"/api/v1/backups/{missing}")
+        assert missing in resp.json()["detail"]
+
+    def test_malformed_job_id_rejected_422_not_reaching_store(self, client):
+        """SEC-3 (2026-07-03 review): a non-UUID job_id must be rejected by
+        the route's UUID pattern (422) before it can reach the file-store
+        path join as a traversal or existence-oracle vector. (A payload
+        containing an encoded separator decodes to a multi-segment path and
+        never matches the single-segment route at all — also safe.)"""
+        for bad in (
+            "nonexistent-id",
+            "a" * 40,                                   # right-ish length, non-hex
+            "..%5C..%5Cwindows",                        # encoded backslash, single seg
+            "11111111-2222-3333-4444-55555555555",      # 35 hex — one short
+        ):
+            resp = client.get(f"/api/v1/backups/{bad}")
+            assert resp.status_code == 422, (bad, resp.status_code)
+
+    def test_job_has_results(self, client):
+        job_id = _post_backup(client).json()["id"]
+        resp = client.get(f"/api/v1/backups/{job_id}")
+        assert len(resp.json()["results"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Server-side credential resolution (2026-06 review finding #1)
+# ---------------------------------------------------------------------------
+
+
+class _CredCapturingCollector:
+    """Collector that records the resolved credentials it was handed."""
+
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, str, str | None]] = []
+
+    def collect(self, device, definition):
+        c = device.credentials
+        self.seen.append(
+            (
+                c.username,
+                c.password.get_secret_value(),
+                c.enable_password.get_secret_value()
+                if c.enable_password
+                else None,
+            )
+        )
+        return "! config for " + device.host
+
+
+class TestServerSideCredentialResolution:
+    """A backup may omit inline credentials and reference a stored profile;
+    the endpoint resolves the password server-side so the plaintext value
+    never has to be sent from (or returned to) the client."""
+
+    def test_profile_backup_resolves_credentials_server_side(self, test_app):
+        from unittest.mock import patch
+
+        from tests.conftest import AutoWaitTestClient as TestClient
+
+        collector = _CredCapturingCollector()
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=collector,
+        ), TestClient(test_app, raise_server_exceptions=True) as c:
+            profile = c.post(
+                "/api/v1/devices/",
+                json={
+                    "name": "Core",
+                    "type_key": "Cisco",
+                    "host": "10.9.9.9",
+                    "username": "netops",
+                    "password": "s3cr3t",
+                    "enable_password": "en4ble",
+                },
+            ).json()
+            # No inline credentials — only the profile reference.
+            resp = c.post(
+                "/api/v1/backups",
+                json={
+                    "devices": [
+                        {
+                            "type_key": "Cisco",
+                            "host": "10.9.9.9",
+                            "port": 22,
+                            "device_profile_id": profile["id"],
+                        }
+                    ]
+                },
+            )
+            assert resp.status_code == 202
+
+        # The collector was handed the profile's stored credentials,
+        # resolved entirely server-side.
+        assert collector.seen == [("netops", "s3cr3t", "en4ble")]
+
+    def test_no_credentials_and_no_profile_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/backups",
+            json={
+                "devices": [{"type_key": "Cisco", "host": "10.0.0.1", "port": 22}]
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_unknown_profile_id_without_credentials_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/backups",
+            json={
+                "devices": [
+                    {
+                        "type_key": "Cisco",
+                        "host": "10.0.0.1",
+                        "port": 22,
+                        "device_profile_id": "does-not-exist",
+                    }
+                ]
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_inline_credentials_still_accepted(self, client):
+        """The ad-hoc path (inline credentials, no profile) is unchanged."""
+        job = _post_and_get(client)
+        assert job["status"] == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Egress allow-list (2026-06 review finding #3) — opt-in, default off
+# ---------------------------------------------------------------------------
+
+
+class _OkCollector:
+    def collect(self, device, definition):
+        return "! config for " + device.host
+
+
+class TestEgressAllowlist:
+    """With `block_private_egress` enabled, backups to loopback / link-local
+    targets are refused (400) before any connection; default-off keeps the
+    legacy behaviour (no egress check)."""
+
+    @staticmethod
+    def _strict_app(test_settings):
+        from netcanon.main import create_app
+
+        strict = test_settings.model_copy(update={"block_private_egress": True})
+        return create_app(strict)
+
+    def test_loopback_target_rejected_when_enabled(self, test_settings):
+        from unittest.mock import patch
+
+        from tests.conftest import AutoWaitTestClient as TestClient
+
+        app = self._strict_app(test_settings)
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=_OkCollector(),
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host="127.0.0.1")]},
+            )
+        assert resp.status_code == 400
+        assert "block" in resp.json()["detail"].lower()
+
+    def test_metadata_endpoint_rejected_when_enabled(self, test_settings):
+        from unittest.mock import patch
+
+        from tests.conftest import AutoWaitTestClient as TestClient
+
+        app = self._strict_app(test_settings)
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=_OkCollector(),
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host="169.254.169.254")]},
+            )
+        assert resp.status_code == 400
+
+    def test_public_target_allowed_when_enabled(self, test_settings):
+        from unittest.mock import patch
+
+        from tests.conftest import AutoWaitTestClient as TestClient
+
+        app = self._strict_app(test_settings)
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=_OkCollector(),
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host="8.8.8.8")]},
+            )
+        assert resp.status_code == 202
+
+    def test_loopback_allowed_when_disabled(self, client):
+        """Default-off: no egress check, so loopback targets still enqueue."""
+        resp = _post_backup(client, devices=[_device_payload(host="127.0.0.1")])
+        assert resp.status_code == 202

@@ -1,0 +1,39 @@
+# OPNsense on Microsoft Hyper-V — Hyper-V synthetic NICs
+# FreeBSD driver: hn(4) — Hyper-V Network Virtual Service Client
+# Default BSD iface names: hn0, hn1, hn2, hn3
+#
+# Covers the common 4-port Hyper-V guest configuration on Windows
+# Server Hyper-V hosts, Azure VM deployments, or Windows 10/11
+# Pro/Enterprise with Hyper-V enabled.
+#
+# Hyper-V-specific notes:
+#   * hn(4) implements the NetVSC / VMBus protocol; appears to the
+#     guest as a synthetic 10G interface.
+#   * Some Hyper-V deployments use SR-IOV to pass a physical NIC
+#     directly to the guest; in that case the guest sees the real
+#     driver name (em/igb/ix/etc.) instead of hn.  Operators with
+#     SR-IOV setups should use the appropriate physical-chassis
+#     profile or Generic OPNsense.
+#
+# Validation: FreeBSD driver-convention grounded.  hn(4) is the
+# canonical Hyper-V synthetic NIC driver in FreeBSD 10.3+ /
+# OPNsense 22+.
+vendor: opnsense
+model: HyperV
+display_name: "OPNsense Hyper-V guest (4x synthetic)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "hn0-3", kind: physical, speed: 10gig, notes: "Hyper-V synthetic NIC (reports 10G)"}
+lags: {max: 8, prefix: lagg}
+
+# OPNsense runs FreeBSD's netgraph VLAN stack; the only hard limit
+# on VLAN IDs is the 802.1Q protocol ceiling (1-4094).
+# max_local_users intentionally unset — OPNsense user config is
+# software-unbounded in practice and not a useful fit-check
+# signal.  (Post-Option-A note: the OPNsense codec DOES round-
+# trip CanonicalLocalUser via <system><user> blocks, so renames
+# reach rendered output cleanly — the earlier compat-banner
+# rationale for leaving this unset no longer applies.  Current
+# rationale is unbounded-limit only.)
+max_vlans: 4094

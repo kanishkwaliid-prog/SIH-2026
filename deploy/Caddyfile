@@ -1,0 +1,58 @@
+# netcanon demo — TLS termination + static landing + warden reverse proxy.
+# TLS terminates HERE (DNS-only Cloudflare → Caddy is the sole terminator; no
+# third party sees plaintext, so the whitepaper TCB stays our own stack).
+{
+	email {env.ACME_EMAIL}
+
+	# A request whose Host does not match the site block below never enters it,
+	# so that block's `log { output discard }` does not apply and Caddy's DEFAULT
+	# logger writes the entry — client IP included — to the container log, which
+	# the `local` driver persists to disk. A public IP is scanned constantly, and
+	# the first bot to reach this host arrived within a minute of Caddy starting.
+	# Drop access logs at the default logger too; runtime and ACME logs, which
+	# carry no visitor data and are needed to debug issuance, still flow.
+	log {
+		exclude http.log.access
+	}
+
+	# Per-request HTTP metrics, off by default. These are counters aggregated by
+	# {server, handler, code, method} — there is no client-IP, path, user-agent
+	# or referrer label, so this is traffic volume without a visitor dimension
+	# and does not weaken claim 4. Exposed only on the admin endpoint (:2019),
+	# which is bound inside the container and never published to the host.
+	servers {
+		metrics
+	}
+}
+
+demo.netcanon.net {
+	request_body {
+		max_size 2MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	# I2: no request logging on any demo path (the warden never logs bodies either).
+	log {
+		output discard
+	}
+
+	# Static landing page + whitepaper, served by Caddy directly.
+	@static path / /index.html /whitepaper /whitepaper.html /favicon.ico
+	handle @static {
+		root * /srv/frontend
+		try_files {path} {path}.html /index.html
+		file_server
+	}
+
+	# Everything else → the warden: session API (/session/*), the iframe (/i/*),
+	# and the cookie-routed absolute app paths (/migrate, /api/v1/migration/*, …).
+	handle {
+		reverse_proxy warden:8080
+	}
+}

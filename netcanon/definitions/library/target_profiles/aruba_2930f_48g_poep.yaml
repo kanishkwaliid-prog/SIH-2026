@@ -1,0 +1,24 @@
+# Aruba 2930F-48G-PoEP (JL256A)
+# 48 × 10/100/1000 BASE-T RJ45 + PoE+ (30W/port, 370W budget)
+# 2 × 1G/10G SFP+ uplink (cages A1 and A2 on the stack-member)
+# VSF-capable (up to 10-member stack), 24 trunks max prefix Trk
+vendor: aruba_aoss
+model: 2930F-48G-PoEP
+display_name: "Aruba 2930F-48G-PoEP (JL256A)"
+device_class: switch
+stacking: vsf-capable
+# Port ids use the stacked-form "1/N" that the aruba_aoss codec emits
+# (assumes stack member 1).  Multi-member stacks should author a
+# variant profile with the correct stack-member numbers.
+ports:
+  - {range: "1/1-1/48", kind: physical, speed: gig, poe: true}
+  - {id: "1/A1", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A1"}
+  - {id: "1/A2", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A2"}
+lags: {max: 24, prefix: Trk}
+# Datasheet capacity limits — drive the per-pane fit-check banners
+# in the Tier-3 rename modal.  Values from the AOS-S 16.11 datasheet:
+#   * 2048 active VLANs (``show vlans summary`` cap)
+#   * 16 local manager+operator accounts combined (``aaa password-*``
+#     + ``password manager user-name``)
+max_vlans: 2048
+max_local_users: 16

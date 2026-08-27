@@ -1,0 +1,430 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Opt-in to Node.js 24 for JavaScript actions ahead of the June 2026
+  # forced cutover (https://github.blog/changelog/2025-09-19-deprecation-
+  # of-node-20-on-github-actions-runners/).  Surfaces any Node 24
+  # incompatibility now rather than at the cutover deadline.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+# Default-deny GITHUB_TOKEN scope.  All ci.yml jobs are read-only:
+# pytest, sdist+wheel build (artefacts stay on the runner), and a
+# Docker build smoke test (image stays on the runner).  None push
+# to registries, write to the repo, or upload to releases.  Child
+# jobs inherit; no per-job override needed.
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # No package build here (ruff only) so setuptools_scm tags
+          # aren't needed; shallow checkout is fine.  Clear the
+          # token-in-.git/config default — this job never pushes.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install ruff
+        # Read the pin out of pyproject.toml rather than repeating it.
+        #
+        # 'Keep this in sync' was the old instruction here, and it did not
+        # hold: nothing checked it, so the gate and the declared dev
+        # dependency could drift apart silently -- which is exactly why a
+        # Dependabot bump to the pyproject constraint would have been
+        # INERT (contributors move, the gate does not).  Deriving it makes
+        # divergence structurally impossible instead of merely forbidden.
+        #
+        # The pin is exact (`ruff==X.Y.Z`) so no ruff release ever reaches
+        # this gate without a reviewed PR; tests/unit/test_ruff_pin_is_exact.py
+        # enforces both that property and the absence of a literal version
+        # here.  A malformed pyproject fails this step loudly.
+        run: |
+          python -m pip install --upgrade pip
+          RUFF_PIN=$(python -c "import tomllib, pathlib; specs=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['optional-dependencies']['dev']; print(next(s for s in specs if s.replace(' ', '').startswith('ruff==')))")
+          echo "Installing pinned linter: ${RUFF_PIN}"
+          pip install "${RUFF_PIN}"
+
+      - name: Run ruff
+        # Scope: the shipping package, the desktop shell, the dev tools, the
+        # tests, and the demo warden -- all driven lint-clean (netcanon/ +
+        # tests/ in the v0.2.0 Stage-1 baseline; tools/ + netcanon_desktop/
+        # added afterward; demo/ added once the warden shipped).
+        #
+        # demo/ is here because it is the demo's TRUSTED COMPUTING BASE -- the
+        # session manager and the authz shim that stand between a visitor and
+        # the docker socket. It was lint-clean the whole time it was outside
+        # this list, which is precisely the problem: nothing was checking, so
+        # that was luck rather than a property. The warden is also the one file
+        # the whitepaper asks people to read end to end.
+        #
+        # Config (rule set, ignores, line-length) lives in pyproject.toml
+        # [tool.ruff]. Keep this list in sync with test_ci_lints_the_warden.
+        run: ruff check netcanon netcanon_desktop tools tests demo
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Full history + tags needed for setuptools_scm to derive the
+          # package version.  Default is shallow (depth=1, no tags) which
+          # would make `pip install -e .` fail with "no tags found" or
+          # produce a `0.0.0` fallback version that misleads operators.
+          fetch-depth: 0
+          # No git push from any ci.yml job; clear the token-in-.git/config
+          # default to limit the blast radius of a compromised step.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: pytest tests/unit -q --no-header
+
+      - name: Run integration tests
+        run: pytest tests/integration -q --no-header
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Full history + tags so setuptools_scm derives a real version on
+          # `pip install -e .` (matches the test job; a `0.0.0` fallback can
+          # skew version-dependent UI strings).
+          fetch-depth: 0
+          # No git push from any ci.yml job; clear the token-in-.git/config
+          # default to limit the blast radius of a compromised step.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Install Playwright Chromium + OS deps
+        # `--with-deps` pulls the apt libraries headless Chromium needs on the
+        # runner.  Only Chromium is installed (the suite is single-browser) to
+        # keep the download small.
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        # The suite starts its own session-scoped Uvicorn server in a daemon
+        # thread (tests/e2e/conftest.py) with the SSH collector mocked, so it
+        # needs no external server, display, or network — headless Chromium
+        # against 127.0.0.1.  Gating these in CI closes the gap where a
+        # UI/template regression could merge to main (and, transitively, reach
+        # a release tag) undetected; the previous policy ran e2e locally only.
+        run: pytest tests/e2e -m e2e -q --no-header
+
+  desktop:
+    name: Desktop (PySide6)
+    runs-on: ubuntu-latest
+
+    # Exercises the PySide6/pystray desktop shell (netcanon_desktop) on a
+    # headless Linux runner.  The 123-test suite mocks Qt/pystray/uvicorn via
+    # sys.modules injection so it needs no real display — except the two
+    # `TestDesktopAppShowPreferences` cases (the #159 cross-thread Preferences
+    # regression) which patch `PySide6.QtWidgets.QApplication` and assert
+    # against the real `Qt.ConnectionType.QueuedConnection` enum, so they need
+    # PySide6 genuinely installed + importable.  Running here (the previous
+    # policy ran the desktop suite locally only) closes the last untested-in-CI
+    # surface and gives real signal that the `[desktop]` extra imports on Linux
+    # — which the Windows-only MSI build can't provide.
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Full history + tags so setuptools_scm derives a real version on
+          # `pip install -e .` (matches the test/e2e jobs).
+          fetch-depth: 0
+          # No git push from any ci.yml job; clear the token-in-.git/config
+          # default to limit the blast radius of a compromised step.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install Qt runtime libraries
+        # PySide6 wheels bundle the Qt libs but link against these system
+        # shared objects; `import PySide6.QtWidgets` dlopens libQt6Gui, which
+        # needs libEGL/libGL/libxkbcommon/fontconfig/dbus present even when no
+        # display is used.  Offscreen (set below) avoids the xcb/X11 stack, so
+        # no xvfb is required.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libglib2.0-0
+
+      - name: Install dependencies
+        # The `desktop` extra adds PySide6 + pystray + Pillow; `dev` brings
+        # pytest et al.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,desktop]"
+
+      - name: Run desktop tests
+        # QT_QPA_PLATFORM=offscreen: any incidental QApplication construction
+        # uses the headless platform plugin instead of needing an X server
+        # (the suite never builds one, but this is cheap insurance).
+        # PYSTRAY_BACKEND=dummy: force pystray's no-op backend so nothing in the
+        # import graph reaches for a real system tray (pystray selects its
+        # backend lazily, and the tests mock Icon, but this keeps it explicit).
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYSTRAY_BACKEND: dummy
+        run: pytest tests/desktop -m desktop -q --no-header
+
+  build-distribution:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Full history + tags needed for setuptools_scm to derive the
+          # package version.  Default is shallow (depth=1, no tags) which
+          # would make `pip install -e .` fail with "no tags found" or
+          # produce a `0.0.0` fallback version that misleads operators.
+          fetch-depth: 0
+          # No git push from any ci.yml job; clear the token-in-.git/config
+          # default to limit the blast radius of a compromised step.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build distribution
+        run: python -m build
+
+      - name: Validate distribution metadata
+        run: python -m twine check dist/*
+
+      - name: sdist excludes the test suite (T0-5 licensing gate)
+        # tests/fixtures/real/ holds third-party device-config captures (several
+        # with no upstream LICENSE) committed purely for regression testing —
+        # fine to keep in git, but they must NOT be redistributed in the
+        # published source tarball (blind audit f92e97a, T0-5). MANIFEST.in
+        # prunes the whole tests/ tree; assert the built sdist honours it so a
+        # MANIFEST.in regression (or a setuptools_scm change that re-adds VCS
+        # files) turns this required check red instead of shipping the bytes.
+        run: |
+          set -euo pipefail
+          sdist="$(ls "${GITHUB_WORKSPACE}"/dist/*.tar.gz)"
+          echo "Inspecting sdist: ${sdist}"
+          # Capture the listing UNGUARDED first (P8): the `|| true` below is
+          # needed for grep's exit-1-on-no-match, but on `tar … | grep … || true`
+          # it ALSO swallows a `tar` failure (corrupt / unreadable sdist) under
+          # `set -euo pipefail`, vacuous-passing the licensing gate.  Splitting
+          # the steps makes a tar failure fail the step.
+          listing="$(tar tzf "${sdist}")"
+          leaked="$(grep -E '/tests/' <<<"${listing}" || true)"
+          if [ -n "${leaked}" ]; then
+            echo "FAIL: the source distribution ships test-suite files that must be excluded"
+            echo "(blind audit f92e97a, T0-5 — see MANIFEST.in 'prune tests'):"
+            echo "${leaked}" | head -20
+            exit 1
+          fi
+          echo "OK: sdist contains no tests/ entries."
+
+      - name: Clean-room wheel install boots from an empty dir (T0-3 guard)
+        # Reproduces a plain `pip install netcanon` user: install the freshly
+        # built wheel into a clean venv and boot the documented
+        # `uvicorn netcanon.main:app` path from an EMPTY working directory (no
+        # repo `definitions/` on disk).  The app loads the device-definition
+        # library at startup; if that tree isn't shipped as package-data the
+        # server crashes on boot with FileNotFoundError (the T0-3 broken-
+        # install finding).  The `test` job cannot catch this — it runs from
+        # the source tree where the library always exists regardless of
+        # packaging.  Bind loopback so the lifespan/CLI bind guard is
+        # satisfied without an opt-out.
+        run: |
+          set -euo pipefail
+          wheel="$(ls "${GITHUB_WORKSPACE}"/dist/*.whl)"
+          echo "Installing wheel into a clean venv: ${wheel}"
+          python -m venv "${RUNNER_TEMP}/clean-venv"
+          "${RUNNER_TEMP}/clean-venv/bin/pip" install --quiet --upgrade pip
+          "${RUNNER_TEMP}/clean-venv/bin/pip" install --quiet "${wheel}"
+          mkdir -p "${RUNNER_TEMP}/empty-cwd"
+          cd "${RUNNER_TEMP}/empty-cwd"
+          # 1) The packaged library must be importable + populated — this is
+          #    exactly what the app's lifespan does at startup.
+          "${RUNNER_TEMP}/clean-venv/bin/python" -c "from netcanon.definitions import LIBRARY_DIR, DefinitionLoader; assert LIBRARY_DIR.is_dir(), LIBRARY_DIR; d = DefinitionLoader(LIBRARY_DIR).load_all(); assert len(d) >= 10, sorted(d); print('packaged library OK:', len(d), 'family-base definitions')"
+          # 2) End-to-end: the documented bare-uvicorn path must boot + serve
+          #    /health from the empty dir.
+          "${RUNNER_TEMP}/clean-venv/bin/python" -m uvicorn netcanon.main:app --host 127.0.0.1 --port 8137 > "${RUNNER_TEMP}/uvicorn.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8137/health >/dev/null 2>&1; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "${ready}" -ne 1 ]; then
+            echo "FAIL: wheel-installed server never served /health from an empty dir."
+            echo "Likely cause: the definition library is not shipped as package-data"
+            echo "— check pyproject.toml [tool.setuptools.package-data]."
+            echo "--- uvicorn log ---"
+            cat "${RUNNER_TEMP}/uvicorn.log" || true
+            exit 1
+          fi
+          echo "Clean-room wheel install boots and serves /health."
+
+  docker-build-smoke:
+    name: Docker build smoke test
+    runs-on: ubuntu-latest
+
+    # Builds the published Dockerfile and verifies the resulting image
+    # boots and serves /health.  Catches Dockerfile-side regressions
+    # (base image bumps, COPY mistakes, entrypoint breakage) on PRs
+    # rather than at tag-time when docker-publish.yml fires.
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Full history + tags needed for setuptools_scm to derive the
+          # package version.  Default is shallow (depth=1, no tags) which
+          # would make `pip install -e .` fail with "no tags found" or
+          # produce a `0.0.0` fallback version that misleads operators.
+          fetch-depth: 0
+          # No git push from any ci.yml job; clear the token-in-.git/config
+          # default to limit the blast radius of a compromised step.
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build -t netcanon-smoke:pr .
+
+      # Gating CVE scan (run3): the docker-publish.yml Trivy step is
+      # informational (exit-code 0) AND runs AFTER push, so a CRITICAL CVE
+      # would already be shipped + signed.  This scan runs pre-merge on the
+      # locally-built image and FAILS the PR (exit-code 1) on a fixable
+      # CRITICAL, so a vulnerable image can never reach a release tag.
+      # ignore-unfixed drops CVEs with no upstream patch (un-actionable
+      # noise).  Pinned to the same SHA as docker-publish.yml.
+      - name: Scan image for CRITICAL CVEs (gating)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: netcanon-smoke:pr
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Boot image and check /health + dashboard renders
+        run: |
+          # SEC-01: the smoke container binds 0.0.0.0 with no API key;
+          # opt out of the fail-closed bind guard for this throwaway run.
+          docker run -d --name smoke -e NETCANON_ALLOW_INSECURE_BIND=1 -p 8000:8000 netcanon-smoke:pr
+          # Poll /health for up to 60 seconds.  HEALTHCHECK in the
+          # Dockerfile has start-period 10s, so ~12s is the typical
+          # ready time; budget extra for slow CI runners.
+          health_ready=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health; then
+              health_ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "${health_ready}" -ne 1 ]; then
+            echo "Smoke test FAILED — container never became healthy."
+            echo "--- container logs ---"
+            docker logs smoke
+            exit 1
+          fi
+          echo
+          echo "Health check passed.  Now verifying the dashboard"
+          echo "renders (catches packaging-bug class where /health"
+          echo "works but Jinja templates are missing from the wheel —"
+          echo "the v0.1.0-rc1/rc2 regression that motivated this check)."
+          if ! curl -fsS -o /dev/null http://127.0.0.1:8000/; then
+            echo "FAIL: /health returned 200 but / did not."
+            echo "Likely cause: a template file (or partial under"
+            echo "templates/_partials/) is missing from the built wheel"
+            echo "— check pyproject.toml [tool.setuptools.package-data]"
+            echo "and confirm every templates/* path the renderer needs"
+            echo "is covered by the glob list."
+            echo "--- container logs ---"
+            docker logs smoke
+            exit 1
+          fi
+          echo "Dashboard renders."
+          echo
+          echo "Now verifying the translator VENDOR REGISTRY actually loaded."
+          echo "The app boots and / renders even with ZERO vendors (empty"
+          echo "dropdown), so a bare 200 check misses the packaging-bug class"
+          echo "where netcanon/migration/vendors/*.yaml is absent from the"
+          echo "git-less wheel (the .dockerignore excludes .git, so"
+          echo "setuptools_scm's file-finder can't backfill them — only the"
+          echo "package-data globs ship). load_vendors() then logs 'Loaded 0"
+          echo "vendor(s)' and the codec<->vendor grouping is dead."
+          adapters=$(curl -fsS http://127.0.0.1:8000/api/v1/migration/adapters)
+          if echo "${adapters}" | grep -qE '"vendor_display_name" *: *"[^"]'; then
+            echo "Smoke test passed (health + dashboard + non-empty vendor registry)."
+            exit 0
+          fi
+          echo "FAIL: /api/v1/migration/adapters returned no non-empty"
+          echo "vendor_display_name — the vendor registry is EMPTY in the image."
+          echo "Fix: ensure pyproject.toml [tool.setuptools.package-data]"
+          echo "includes the 'migration/vendors/*.yaml' glob (it is NOT pulled"
+          echo "in by the setuptools_scm file-finder in the .git-less Docker"
+          echo "build context)."
+          echo "--- adapters response ---"
+          echo "${adapters}"
+          echo "--- container logs ---"
+          docker logs smoke
+          exit 1
+
+      - name: Clean up
+        if: always()
+        run: docker rm -f smoke || true
