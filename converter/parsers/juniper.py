@@ -31,6 +31,8 @@ def parse_juniper(config_text: str) -> tuple[dict, list[str]]:
 
     if "set system services ssh" in config_text:
         fields["ssh_enabled"] = True
+    elif "set system services telnet" in config_text:
+        fields["ssh_enabled"] = False
 
     if "set system services telnet" in config_text:
         fields["telnet_enabled"] = True

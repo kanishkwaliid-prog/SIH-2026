@@ -77,7 +77,12 @@ def parse_cisco(config_text: str) -> tuple[dict, list[str]]:
 
     fields["banner_configured"] = bool(re.search(r"banner (motd|login)", config_text))
 
-    weak_snmp = re.findall(r"snmp-server community (\S+)", config_text)
+    # Only flag communities from a known-weak/default list -- a custom,
+    # properly-named community string (e.g. "Rest", "Full") is not itself
+    # a finding, even though it's still configured SNMPv2c.
+    KNOWN_WEAK_COMMUNITIES = {"public", "private", "cisco", "community"}
+    all_communities = re.findall(r"snmp-server community (\S+)", config_text)
+    weak_snmp = [c for c in all_communities if c.lower() in KNOWN_WEAK_COMMUNITIES]
     if weak_snmp:
         fields["snmp_default_community"] = weak_snmp
 
