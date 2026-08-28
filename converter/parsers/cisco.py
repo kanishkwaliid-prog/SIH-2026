@@ -44,12 +44,17 @@ def parse_cisco(config_text: str) -> tuple[dict, list[str]]:
         "snmp_default_community": None,
     }
 
-    if "transport input ssh" in config_text:
-        fields["ssh_enabled"] = True
+    ssh_pattern = re.search(r"transport input (ssh|ssh telnet|telnet ssh|all)", config_text)
+    telnet_pattern = re.search(r"transport input (telnet|ssh telnet|telnet ssh|all)", config_text)
 
-    if re.search(r"transport input (telnet|ssh telnet|telnet ssh|all)", config_text):
+    if ssh_pattern:
+        fields["ssh_enabled"] = True
+    elif telnet_pattern:
+        fields["ssh_enabled"] = False
+
+    if telnet_pattern:
         fields["telnet_enabled"] = True
-    elif "transport input ssh" in config_text:
+    elif ssh_pattern:
         fields["telnet_enabled"] = False
 
     timeout_match = re.search(r"exec-timeout (\d+) (\d+)", config_text)

@@ -29,9 +29,8 @@ def parse_paloalto(config_text: str) -> tuple[dict, list[str]]:
     elif "disable-telnet no" in config_text:
         fields["telnet_enabled"] = True
 
-    # SSH is on by default on the PAN-OS mgmt interface unless explicitly
-    # disabled -- there's no "enable ssh" line to look for.
-    fields["ssh_enabled"] = True
+    # PAN-OS doesn't have a clear "enable ssh" line, so we leave this
+    # blank instead of guessing, same as the other fields.
 
     idle_match = re.search(r"idle-timeout (\d+)", config_text)
     if idle_match:
