@@ -1,0 +1,26 @@
+set system host-name MY-SRX210
+set system name-server 8.8.8.8
+set system services ssh
+set system services web-management http
+set system services web-management https system-generated-certificate
+set system services web-management https interface ge-0/0/0.0
+set system services dhcp router 192.168.200.2
+set system services dhcp router 192.168.201.1
+set system services dhcp pool 192.168.201.0/24 address-range low 192.168.201.33
+set system services dhcp pool 192.168.201.0/24 address-range high 192.168.201.95
+set system services dhcp propagate-settings ge-0/0/0.0
+set system syslog archive size 100k
+set system syslog archive files 3
+set system syslog file messages any critical
+set system syslog file messages authorization info
+set system syslog file interactive-commands interactive-commands error
+set system max-configurations-on-flash 5
+set system max-configuration-rollbacks 5
+set interfaces ge-0/0/0 description OUTSIDE
+set interfaces ge-0/0/0 unit 0 family inet dhcp
+set interfaces ge-0/0/1 description INSIDE
+set interfaces ge-0/0/1 unit 0 family inet address 192.168.100.1/24
+set routing-options static route 0.0.0.0/0 next-hop 44.44.44.44
+set security zones security-zone OUTSIDE interfaces ge-0/0/0.0 host-inbound-traffic system-services dhcp
+set security zones security-zone INSIDE host-inbound-traffic system-services all
+set security policies from-zone INSIDE to-zone OUTSIDE policy P-DENY-ALL then deny

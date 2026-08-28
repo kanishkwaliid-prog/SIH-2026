@@ -1,0 +1,20 @@
+enable
+configure terminal
+!
+hostname R1
+!
+enable secret cisco123
+service password-encryption
+!
+interface vlan 1
+ no shutdown
+ ip address 192.168.10.1 255.255.255.0
+ exit
+!
+line vty 0 15
+ password pwdTelnet
+ login
+ transport input telnet
+ exec-timeout 0 0
+!
+end
