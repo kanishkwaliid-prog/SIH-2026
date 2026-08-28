@@ -12,28 +12,40 @@ MODEL = "openai/gpt-oss-120b"   # good default Groq model, fast + capable
 
 # ---------- Prompts ----------
 
+# Fields must match shared/schema.py NormalizedConfig exactly.
+# If you need a new field, message the team first -- this is a shared contract.
 LINE_CLASSIFY_SYSTEM_PROMPT = """You are a network device configuration classifier.
 You will be given a single raw configuration line from a network device (router, switch, or firewall).
-Classify it into exactly one category and respond with ONLY valid JSON, no markdown, no extra text.
+Decide which single NormalizedConfig field (if any) this line sets, and extract its value.
+Respond with ONLY valid JSON, no markdown, no extra text.
 
-Valid categories and what they mean:
-- authentication: logins, passwords, user accounts, AAA, RADIUS/TACACS
-- logging: syslog, logging levels, audit trails
-- encryption: SSH keys, TLS/SSL, crypto commands, hashing
-- access_control: ACLs, firewall rules, permit/deny statements
-- session_management: timeouts, VTY lines, session limits
-- routing: static/dynamic routing, OSPF, BGP, interfaces
-- other: comments, banners, hostnames, SNMP, NTP, anything that doesn't clearly fit above
-
-Examples:
-Line: "aaa new-model" → {"category": "authentication", "confidence": 0.95, "reasoning": "Enables AAA authentication framework"}
-Line: "logging trap informational" → {"category": "logging", "confidence": 0.97, "reasoning": "Sets syslog trap level"}
-Line: "crypto key generate rsa" → {"category": "encryption", "confidence": 0.96, "reasoning": "Generates RSA key for SSH"}
-Line: "access-list 101 permit tcp any any eq 22" → {"category": "access_control", "confidence": 0.94, "reasoning": "Defines ACL rule"}
-Line: "exec-timeout 10 0" → {"category": "session_management", "confidence": 0.93, "reasoning": "Sets VTY session timeout"}
+Valid fields and their value types:
+- ssh_enabled (bool): line enables/disables SSH access (e.g. "ip ssh version 2", "transport input ssh")
+- telnet_enabled (bool): line enables/disables Telnet access (e.g. "transport input telnet")
+- session_timeout_seconds (int): line sets a session/exec timeout, converted to total seconds
+  (e.g. "exec-timeout 10 0" means 10 minutes 0 seconds -> 600)
+- logging_enabled (bool): line turns logging/syslog on or off (e.g. "logging trap informational" -> true,
+  "no logging on" -> false)
+- password_encryption (str): line sets a password encryption/hashing scheme -- use the short form
+  the device uses, e.g. "type7", "md5", "none", "type5"
+- banner_configured (bool): line sets a login/MOTD banner (e.g. "banner motd ^...")
+- unclear: the line is real config but doesn't clearly set any of the fields above
+  (e.g. routing, ACLs, interfaces, hostname, SNMP, NTP, comments)
 
 Output format (JSON only):
-{"category": "<one of the categories above>", "confidence": <float 0.0-1.0>, "reasoning": "<one short sentence>"}
+{"field": "<one of: ssh_enabled|telnet_enabled|session_timeout_seconds|logging_enabled|password_encryption|banner_configured|unclear>",
+ "value": <bool, int, string, or null if field is "unclear">,
+ "confidence": <float 0.0-1.0>,
+ "reasoning": "<one short sentence>"}
+
+Examples:
+Line: "transport input ssh" -> {"field": "ssh_enabled", "value": true, "confidence": 0.95, "reasoning": "Restricts VTY transport to SSH only"}
+Line: "transport input telnet ssh" -> {"field": "telnet_enabled", "value": true, "confidence": 0.9, "reasoning": "Telnet is allowed alongside SSH"}
+Line: "exec-timeout 10 0" -> {"field": "session_timeout_seconds", "value": 600, "confidence": 0.95, "reasoning": "10 minutes converted to seconds"}
+Line: "logging trap informational" -> {"field": "logging_enabled", "value": true, "confidence": 0.9, "reasoning": "Enables syslog trap output"}
+Line: "service password-encryption" -> {"field": "password_encryption", "value": "type7", "confidence": 0.9, "reasoning": "Enables Cisco type7 weak encryption"}
+Line: "banner motd ^Authorized access only^" -> {"field": "banner_configured", "value": true, "confidence": 0.95, "reasoning": "Sets a login banner"}
+Line: "router ospf 1" -> {"field": "unclear", "value": null, "confidence": 0.9, "reasoning": "Routing config, not in NormalizedConfig"}
 """
 
 VENDOR_GUESS_SYSTEM_PROMPT = """You are a network configuration vendor identifier.
@@ -46,6 +58,23 @@ Respond with ONLY valid JSON, no markdown, no extra text:
 {"vendor": "<vendor name or 'Unknown'>", "confidence": <float 0.0-1.0>, "reasoning": "<one short sentence>"}
 """
 
+# ---------- Fallback shapes ----------
+# call_with_retry needs to know which shape to fall back to, since
+# classify_unknown_line and guess_vendor return different keys.
+
+CLASSIFY_FALLBACK = {
+    "field": "unclear",
+    "value": None,
+    "confidence": 0.0,
+    "reasoning": None,  # filled in with the error message at call time
+}
+
+VENDOR_FALLBACK = {
+    "vendor": "Unknown",
+    "confidence": 0.0,
+    "reasoning": None,
+}
+
 # ---------- Helpers ----------
 
 def _safe_parse_json(raw_text: str) -> dict:
@@ -54,7 +83,8 @@ def _safe_parse_json(raw_text: str) -> dict:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         return {
-            "category": "unclassified",
+            "field": "unclear",
+            "value": None,
             "confidence": 0.0,
             "reasoning": "Failed to parse LLM response",
             "raw_response": raw_text
@@ -63,19 +93,29 @@ def _safe_parse_json(raw_text: str) -> dict:
 def needs_human_review(result: dict, threshold: float = 0.6) -> bool:
     return result.get("confidence", 0.0) < threshold
 
-def call_with_retry(func, *args, retries=2, delay=1.5, **kwargs):
+def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **kwargs):
+    """
+    Calls func(*args, **kwargs), retrying on exception.
+    fallback: the dict shape to return (with "reasoning" filled in) if all
+    retries fail. Pass CLASSIFY_FALLBACK or VENDOR_FALLBACK depending on
+    which function you're wrapping -- don't reuse one shape for both.
+    """
+    if fallback is None:
+        fallback = CLASSIFY_FALLBACK
+
     for attempt in range(retries + 1):
         try:
             return func(*args, **kwargs)
         except Exception as e:
             if attempt == retries:
-                return {"category": "unclassified", "confidence": 0.0,
-                         "reasoning": f"API error after retries: {str(e)}"}
+                result = dict(fallback)
+                result["reasoning"] = f"API error after retries: {str(e)}"
+                return result
             time.sleep(delay)
 
 # ---------- Main functions ----------
 
-def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
+def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict:
     user_msg = f"Config line: {raw_line}"
     if vendor_hint:
         user_msg += f"\nVendor hint: {vendor_hint}"
@@ -90,16 +130,28 @@ def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
     )
     return _safe_parse_json(response.choices[0].message.content)
 
-def guess_vendor(config_text: str) -> dict:
+def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
+    return call_with_retry(
+        _classify_unknown_line_inner, raw_line, vendor_hint,
+        fallback=CLASSIFY_FALLBACK
+    )
+
+def _guess_vendor_inner(config_text: str) -> dict:
     snippet = "\n".join(config_text.splitlines()[:40])
 
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=200,
-        temperature = 0,
+        temperature=0,
         messages=[
             {"role": "system", "content": VENDOR_GUESS_SYSTEM_PROMPT},
             {"role": "user", "content": snippet}
         ]
     )
     return _safe_parse_json(response.choices[0].message.content)
+
+def guess_vendor(config_text: str) -> dict:
+    return call_with_retry(
+        _guess_vendor_inner, config_text,
+        fallback=VENDOR_FALLBACK
+    )
