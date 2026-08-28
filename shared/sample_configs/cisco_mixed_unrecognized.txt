@@ -1,0 +1,24 @@
+version 15.2
+!
+hostname edge-router-02
+!
+service password-encryption
+!
+line vty 0 4
+ transport input ssh
+ exec-timeout 5 0
+ login local
+ logging synchronous
+!
+ip ssh time-out 60
+ip ssh authentication-retries 3
+aaa authentication login default group tacacs+ local
+aaa authorization exec default group tacacs+ local
+snmp-server community public RO
+snmp-server host 10.0.0.5 version 2c public
+ntp server 192.168.1.1
+archive
+ log config
+  logging enable
+!
+end

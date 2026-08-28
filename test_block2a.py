@@ -1,8 +1,8 @@
 """
 Quick manual test runner for Block 2a.
 
-Usage:
-    python3 test_block2a.py shared/sample_configs/cisco_switch_real.txt
+Usage(sample):
+    `python3 test_block2a.py shared/sample_configs/cisco_switch_real.txt`
 """
 import sys
 import json
