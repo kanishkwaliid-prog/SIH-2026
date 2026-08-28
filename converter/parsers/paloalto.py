@@ -9,6 +9,15 @@ import re
 
 KNOWN_LINE_PATTERNS = [
     r"^set deviceconfig system",
+    # Structural PAN-OS sections that are common but not yet mapped to
+    # a NormalizedConfig field -- flagging these as "known" (rather than
+    # unrecognized) keeps routine interface/zone/policy/NAT config from
+    # flooding Block 2b with lines that aren't actually ambiguous, just
+    # not yet extracted into a field. This list is NOT exhaustive --
+    # add to it as real PAN-OS configs surface new top-level sections.
+    r"^set network", r"^set zone", r"^set rulebase",
+    r"^set shared", r"^set mgt-config", r"^set vsys",
+    r"^set address", r"^set service",
 ]
 
 
