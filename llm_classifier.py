@@ -5,8 +5,12 @@ import time
 from dotenv import load_dotenv
 from groq import Groq
 
+from memory import check_memory, save_confirmed, init_db
+
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+init_db()  # safe to call every import -- CREATE TABLE IF NOT EXISTS
 
 MODEL = "openai/gpt-oss-120b"   # good default Groq model, fast + capable
 
@@ -131,10 +135,24 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
     return _safe_parse_json(response.choices[0].message.content)
 
 def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
+    cached = check_memory(raw_line, vendor_hint)
+    if cached is not None:
+        return cached
+
     return call_with_retry(
         _classify_unknown_line_inner, raw_line, vendor_hint,
         fallback=CLASSIFY_FALLBACK
     )
+
+
+def confirm_classification(raw_line: str, field: str, value, vendor_hint: str = None,
+                            confirmed_by: str = None):
+    """
+    Call this from the review-unknown-lines screen once a human confirms
+    (or corrects) a classification. Saves it to memory so this exact line
+    is never sent to the LLM again.
+    """
+    save_confirmed(raw_line, field, value, vendor_hint=vendor_hint, confirmed_by=confirmed_by)
 
 def _guess_vendor_inner(config_text: str) -> dict:
     snippet = "\n".join(config_text.splitlines()[:40])

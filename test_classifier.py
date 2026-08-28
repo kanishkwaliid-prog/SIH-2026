@@ -11,12 +11,13 @@ test_cases = [
     ("line vty 0 4", "unclear", None),
     ("exec-timeout 10 0", "session_timeout_seconds", 600),
     ("ntp server 10.0.0.1", "unclear", None),
-    ("username admin secret 5 $1$abcd", "unclear", None),
+    ("username admin secret 5 $1$abcd", "password_encryption", "type5"),  # "secret 5" = MD5 (type 5) hash
 ]
 test_cases += [
     ("set system login user admin class super-user", "unclear", None),   # Juniper
     ("set deviceconfig system timezone US/Pacific", "unclear", None),     # Palo Alto
-    ("no logging console", "logging_enabled", False),
+    ("no logging console", "unclear", None),  # disables console output only, not logging overall -- ambiguous by design
+    ("no logging on", "logging_enabled", False),  # this one unambiguously disables all logging
     ("service password-encryption", "password_encryption", "type7"),
     ("ip access-group 101 in", "unclear", None),
     ("transport input ssh", "ssh_enabled", True),
