@@ -1,5 +1,5 @@
 """
-Quick manual test runner for Block 2a.
+Quick manual test runner for Block 2a, used to test a single config file.
 
 Usage(sample):
     `python3 test_block2a.py shared/sample_configs/cisco_switch_real.txt`
