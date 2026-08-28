@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from groq import Groq
 
 load_dotenv()
-client = Groq(api_key=os.getenv("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"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 MODEL = "openai/gpt-oss-120b"   # good default Groq model, fast + capable
 
