@@ -5,6 +5,9 @@ and prints all results together in one place.
 Usage:
     python3 test_all_samples.py
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import json
 from pathlib import Path
 from converter.block2a_main import run_block2a

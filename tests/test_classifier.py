@@ -1,4 +1,7 @@
-from llm_classifier import classify_unknown_line, guess_vendor, needs_human_review
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from block2b.llm_classifier import classify_unknown_line, guess_vendor, needs_human_review
 
 # Each case: (raw_line, expected_field, expected_value)
 # expected_value is checked loosely for session_timeout_seconds (LLM arithmetic
@@ -56,7 +59,7 @@ print("\nVendor guess:", guess_vendor(sample_config))
 
 def test_retry_on_failure():
     from groq import Groq
-    import llm_classifier
+    import block2b.llm_classifier as llm_classifier
 
     print("\n--- Testing retry/fallback on bad API key ---")
     # Temporarily swap in a broken client
@@ -82,7 +85,7 @@ test_retry_on_failure()
 def test_vendor_retry_on_failure():
     """Same as above but for guess_vendor, which uses a different fallback shape."""
     from groq import Groq
-    import llm_classifier
+    import block2b.llm_classifier as llm_classifier
 
     print("\n--- Testing vendor retry/fallback on bad API key ---")
     original_client = llm_classifier.client
@@ -101,7 +104,7 @@ test_vendor_retry_on_failure()
 
 
 def test_edge_cases():
-    from llm_classifier import classify_unknown_line
+    from block2b.llm_classifier import classify_unknown_line
 
     print("\n--- Testing edge cases ---")
     edge_cases = [

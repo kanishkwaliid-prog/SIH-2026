@@ -5,6 +5,8 @@ Usage(sample):
     `python3 test_block2a.py shared/sample_configs/cisco_switch_real.txt`
 """
 import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import json
 from converter.block2a_main import run_block2a
 

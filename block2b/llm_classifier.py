@@ -5,7 +5,7 @@ import time
 from dotenv import load_dotenv
 from groq import Groq
 
-from memory import check_memory, save_confirmed, init_db
+from .memory import check_memory, save_confirmed, init_db
 
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))

@@ -17,7 +17,7 @@ Follows the three-tier rule the team agreed on:
 """
 
 from converter.block2a_main import run_block2a
-from llm_classifier import classify_unknown_line, guess_vendor, confirm_classification
+from block2b.llm_classifier import classify_unknown_line, guess_vendor, confirm_classification
 
 
 def process_config(config_text: str, user_declared_vendor: str = None) -> dict:
