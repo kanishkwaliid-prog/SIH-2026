@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ConfigGuard - Vendor Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#005236",
+                        "on-error": "#690005",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "inverse-primary": "#006a61",
+                        "primary-fixed-dim": "#6bd8cb",
+                        "on-primary-fixed-variant": "#005049",
+                        "inverse-on-surface": "#283044",
+                        "error-container": "#93000a",
+                        "error": "#ffb4ab",
+                        "surface": "#0b1326",
+                        "on-secondary-fixed": "#001d31",
+                        "primary-container": "#29a195",
+                        "inverse-surface": "#dae2fd",
+                        "surface-container-lowest": "#060e20",
+                        "secondary-fixed": "#cce5ff",
+                        "on-secondary-container": "#002c47",
+                        "outline": "#879391",
+                        "on-secondary": "#003351",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-tertiary-fixed": "#002113",
+                        "secondary": "#93ccff",
+                        "on-primary-container": "#00302b",
+                        "on-surface-variant": "#bcc9c6",
+                        "surface-container-highest": "#2d3449",
+                        "on-background": "#dae2fd",
+                        "on-primary-fixed": "#00201d",
+                        "secondary-fixed-dim": "#93ccff",
+                        "surface-dim": "#0b1326",
+                        "on-surface": "#dae2fd",
+                        "on-tertiary": "#003824",
+                        "on-tertiary-container": "#00311f",
+                        "surface-container": "#171f33",
+                        "surface-tint": "#6bd8cb",
+                        "surface-container-low": "#131b2e",
+                        "primary": "#6bd8cb",
+                        "tertiary-container": "#00a572",
+                        "surface-bright": "#31394d",
+                        "tertiary": "#4edea3",
+                        "on-secondary-fixed-variant": "#004b73",
+                        "background": "#0b1326",
+                        "outline-variant": "#3d4947",
+                        "secondary-container": "#3198dc",
+                        "on-primary": "#003732",
+                        "surface-variant": "#2d3449",
+                        "primary-fixed": "#89f5e7",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-high": "#222a3d"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "base": "4px",
+                        "xs": "4px",
+                        "margin-desktop": "48px",
+                        "gutter": "24px",
+                        "md": "16px",
+                        "margin-mobile": "16px",
+                        "lg": "24px",
+                        "xl": "32px",
+                        "sm": "8px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "title-md": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg-mobile": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "code-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "title-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .ambient-shadow {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md text-body-md">
+<nav class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shadow-sm flex justify-between items-center px-margin-desktop w-full h-16 shrink-0 relative z-50">
+<div class="flex items-center gap-gutter">
+<div class="font-headline-lg text-headline-lg font-bold text-primary dark:text-primary md:block hidden">
+                ConfigGuard
+            </div>
+<div class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary md:hidden block">
+                ConfigGuard
+            </div>
+<div class="hidden md:flex items-center gap-md ml-lg">
+<a class="text-primary dark:text-primary border-b-2 border-primary pb-1 hover:text-primary dark:hover:text-primary transition-colors active:scale-95 transition-transform font-label-caps text-label-caps" href="#">Scans</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors active:scale-95 transition-transform font-label-caps text-label-caps" href="#">Rulesets</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors active:scale-95 transition-transform font-label-caps text-label-caps" href="#">Settings</a>
+</div>
+</div>
+<div class="flex items-center gap-md text-on-surface-variant">
+<button class="hover:text-primary transition-colors active:scale-95 flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<button class="hover:text-primary transition-colors active:scale-95 flex items-center justify-center relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-primary rounded-full"></span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center overflow-hidden ml-sm">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="person">person</span>
+</div>
+</div>
+</nav>
+<main class="flex-grow flex justify-center items-start pt-xl pb-margin-desktop px-margin-mobile md:px-margin-desktop">
+<div class="w-full max-w-4xl flex flex-col gap-lg">
+<div class="flex items-center gap-sm text-on-surface-variant hover:text-primary cursor-pointer transition-colors w-fit">
+<span class="material-symbols-outlined text-lg">arrow_back</span>
+<span class="font-label-caps text-label-caps">Back to Scan Setup</span>
+</div>
+<div class="bg-surface-container border border-outline-variant rounded-xl ambient-shadow overflow-hidden">
+<div class="p-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-md border-b border-outline-variant/50">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-lg bg-surface-variant border border-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl" data-icon="router" style="font-variation-settings: 'FILL' 1;">router</span>
+</div>
+<div>
+<h2 class="font-title-md text-title-md text-on-surface mb-xs">Detected Vendor: Cisco IOS</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Target IP: 192.168.1.104</p>
+</div>
+</div>
+<div class="bg-tertiary/10 border border-tertiary/30 px-3 py-1.5 rounded-full flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-caps text-label-caps text-tertiary">94% Confidence</span>
+</div>
+</div>
+<div class="p-lg bg-surface-container-low">
+<details class="group" open="">
+<summary class="flex items-center justify-between cursor-pointer list-none text-on-surface-variant hover:text-on-surface transition-colors font-label-caps text-label-caps">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="troubleshoot">troubleshoot</span>
+                                Why we think this
+                            </span>
+<span class="material-symbols-outlined transform group-open:rotate-180 transition-transform duration-200">expand_more</span>
+</summary>
+<div class="mt-md pt-md border-t border-outline-variant/30 flex flex-wrap gap-sm">
+<div class="bg-surface-variant border border-outline-variant text-on-surface-variant rounded px-3 py-1.5 font-code-md text-code-md flex items-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-xs text-primary">data_object</span>
+                                curly-brace hierarchy
+                            </div>
+<div class="bg-surface-variant border border-outline-variant text-on-surface-variant rounded px-3 py-1.5 font-code-md text-code-md flex items-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-xs text-primary">terminal</span>
+                                system {} block
+                            </div>
+<div class="bg-surface-variant border border-outline-variant text-on-surface-variant rounded px-3 py-1.5 font-code-md text-code-md flex items-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-xs text-primary">settings_ethernet</span>
+                                interface naming pattern
+                            </div>
+</div>
+</details>
+</div>
+</div>
+<div class="bg-surface-container-high border-l-4 border-secondary p-md rounded-r-lg shadow-sm flex items-start gap-md">
+<span class="material-symbols-outlined text-secondary mt-1" data-icon="warning" style="font-variation-settings: 'FILL' 1;">warning</span>
+<div>
+<h3 class="font-title-md text-title-md text-on-surface mb-xs">Configuration Mismatch Potential</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                        You selected <strong class="text-on-surface">Cisco</strong> in the previous step, but our heuristic engine strongly suggests this configuration resembles <strong class="text-on-surface">Juniper Junos</strong> based on recent payload signatures. Proceed anyway or switch vendor?
+                    </p>
+</div>
+</div>
+<div class="flex flex-col sm:flex-row justify-end items-center gap-md mt-sm pt-lg border-t border-outline-variant/30">
+<button class="w-full sm:w-auto border border-outline text-on-surface-variant hover:border-primary hover:text-primary transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg bg-transparent">
+                    Proceed with Cisco anyway
+                </button>
+<button class="w-full sm:w-auto bg-primary text-on-primary hover:bg-primary-fixed-dim transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
+                    Switch to Juniper
+                    <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</main>
+<footer class="bg-surface-container-lowest dark:bg-surface-container-lowest border-t border-outline-variant dark:border-outline-variant flex flex-col md:flex-row justify-between items-center px-margin-desktop py-sm w-full mt-auto">
+<div class="font-body-sm text-body-sm text-tertiary dark:text-tertiary mb-2 md:mb-0">
+            © 2024 ConfigGuard. All systems operational.
+        </div>
+<div class="flex gap-md font-label-caps text-label-caps text-on-surface-variant dark:text-on-surface-variant">
+<a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="#">Privacy Policy</a>
+<a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="#">Terms of Service</a>
+<a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="#">Help Center</a>
+</div>
+</footer>
+</body></html>
