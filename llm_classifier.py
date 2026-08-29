@@ -81,18 +81,22 @@ VENDOR_FALLBACK = {
 
 # ---------- Helpers ----------
 
-def _safe_parse_json(raw_text: str) -> dict:
+def _safe_parse_json(raw_text: str, fallback: dict) -> dict:
+    """
+    fallback: the dict shape to return if the LLM's response isn't valid
+    JSON. Pass CLASSIFY_FALLBACK or VENDOR_FALLBACK depending on which
+    function is calling this -- they have different keys (field/value vs
+    vendor), so a single hardcoded fallback shape here would silently
+    return the wrong shape to whichever caller didn't match it.
+    """
     cleaned = re.sub(r"```json|```", "", raw_text).strip()
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        return {
-            "field": "unclear",
-            "value": None,
-            "confidence": 0.0,
-            "reasoning": "Failed to parse LLM response",
-            "raw_response": raw_text
-        }
+        result = dict(fallback)
+        result["reasoning"] = "Failed to parse LLM response"
+        result["raw_response"] = raw_text
+        return result
 
 def needs_human_review(result: dict, threshold: float = 0.6) -> bool:
     return result.get("confidence", 0.0) < threshold
@@ -132,7 +136,7 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
             {"role": "user", "content": user_msg}
         ]
     )
-    return _safe_parse_json(response.choices[0].message.content)
+    return _safe_parse_json(response.choices[0].message.content, CLASSIFY_FALLBACK)
 
 def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
     cached = check_memory(raw_line, vendor_hint)
@@ -166,7 +170,7 @@ def _guess_vendor_inner(config_text: str) -> dict:
             {"role": "user", "content": snippet}
         ]
     )
-    return _safe_parse_json(response.choices[0].message.content)
+    return _safe_parse_json(response.choices[0].message.content, VENDOR_FALLBACK)
 
 def guess_vendor(config_text: str) -> dict:
     return call_with_retry(
