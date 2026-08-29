@@ -1,0 +1,17 @@
+{
+  "device": {
+    "vendor": "palo_alto",
+    "hostname": "pa-vm-01",
+    "os_version": "10.2.3",
+    "detection_confidence": "medium"
+  },
+  "config": {
+    "ssh_enabled": true,
+    "telnet_enabled": false,
+    "session_timeout_seconds": 600,
+    "logging_enabled": true,
+    "password_encryption": "sha512",
+    "banner_configured": true,
+    "snmp_default_community": []
+  }
+}
