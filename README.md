@@ -65,7 +65,7 @@ cp .env.example .env          # then fill in your LLM API key
 Copy `.env.example` to `.env` and fill in:
 
 ```
-ANTHROPIC_API_KEY=your_key_here
+GROQ_API_KEY=your_key_here
 ```
 
 Never commit `.env` — it's already in `.gitignore`.
