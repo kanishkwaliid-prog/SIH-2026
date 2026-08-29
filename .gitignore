@@ -1,0 +1,25 @@
+# Environment variables / secrets
+.env
+*.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Database
+*.db
+*.sqlite3
+
+# OS/editor junk
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Generated output
+/output/
+*.pdf
+!docs/architecture.pdf
