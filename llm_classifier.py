@@ -90,6 +90,8 @@ def _safe_parse_json(raw_text: str, fallback: dict) -> dict:
     return the wrong shape to whichever caller didn't match it.
     """
     cleaned = re.sub(r"```json|```", "", raw_text).strip()
+    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    cleaned = match.group(0) if match else cleaned
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
@@ -136,7 +138,10 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
             {"role": "user", "content": user_msg}
         ]
     )
-    return _safe_parse_json(response.choices[0].message.content, CLASSIFY_FALLBACK)
+    result = _safe_parse_json(response.choices[0].message.content, CLASSIFY_FALLBACK)
+    if result.get("reasoning") == "Failed to parse LLM response":
+        raise ValueError("LLM returned malformed JSON")
+    return result
 
 def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
     cached = check_memory(raw_line, vendor_hint)
@@ -163,14 +168,17 @@ def _guess_vendor_inner(config_text: str) -> dict:
 
     response = client.chat.completions.create(
         model=MODEL,
-        max_tokens=200,
+        max_tokens=400,
         temperature=0,
         messages=[
             {"role": "system", "content": VENDOR_GUESS_SYSTEM_PROMPT},
             {"role": "user", "content": snippet}
         ]
     )
-    return _safe_parse_json(response.choices[0].message.content, VENDOR_FALLBACK)
+    result = _safe_parse_json(response.choices[0].message.content, VENDOR_FALLBACK)
+    if result.get("reasoning") == "Failed to parse LLM response":
+        raise ValueError("LLM returned malformed JSON")
+    return result
 
 def guess_vendor(config_text: str) -> dict:
     return call_with_retry(
