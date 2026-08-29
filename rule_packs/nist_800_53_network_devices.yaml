@@ -1,0 +1,77 @@
+# NIST SP 800-53 Rev. 5 mapped rules -- same underlying technical checks
+# as rule_packs/cis_network_devices.yaml, mapped to the real NIST 800-53
+# control families they correspond to:
+#   AC-17 Remote Access, AC-12 Session Termination,
+#   AU-2 Event Logging, IA-5 Authenticator Management,
+#   AC-8 System Use Notification.
+# (Control IDs verified against the public NIST 800-53 Rev. 5 catalog --
+# do not add further NIST/STIG rule IDs without verifying them the same
+# way; an invented control number is worse than no citation at all.)
+#
+# Remediation blocks are intentionally left empty here and instead
+# reference the CIS pack -- see `see_cis_rule` below -- to avoid
+# maintaining (and risking drift in) two copies of the same CLI
+# commands. compliance_engine/evaluate.py's remediation lookup falls
+# back to NO_REMEDIATION_TEXT for rules with no `remediation` key, so
+# the report generator (Block 4) should join findings from this pack
+# with the matching CIS rule's remediation via `see_cis_rule` when
+# rendering a combined report.
+
+framework: NIST-800-53
+version: "1.0"
+rules:
+  - id: NIST-AC-17
+    field: ssh_enabled
+    expected: true
+    severity: high
+    explanation: "AC-17 (Remote Access): the organization must authorize, monitor, and control remote administrative access methods. Encrypted remote access (SSH) satisfies this; unencrypted access does not."
+    see_cis_rule: CIS-4.1.1
+
+  - id: NIST-AC-17-1
+    field: telnet_enabled
+    expected: false
+    severity: critical
+    explanation: "AC-17 (Remote Access): unencrypted remote access protocols like Telnet do not meet the confidentiality/integrity protections AC-17 requires for remote administrative sessions."
+    see_cis_rule: CIS-4.1.2
+
+  - id: NIST-AC-12
+    field: session_timeout_seconds
+    expected: "<= 300"
+    severity: medium
+    explanation: "AC-12 (Session Termination): the system must automatically terminate a user session after a defined period of inactivity."
+    see_cis_rule: CIS-4.2.1
+
+  - id: NIST-AC-12-1
+    field: session_timeout_seconds
+    expected: "> 0"
+    severity: high
+    explanation: "AC-12 (Session Termination): a timeout value of 0 (never expires) does not satisfy the control's requirement for automatic termination after inactivity."
+    see_cis_rule: CIS-4.2.2
+
+  - id: NIST-AU-2
+    field: logging_enabled
+    expected: true
+    severity: high
+    explanation: "AU-2 (Event Logging): the organization must identify and log the types of events the system is capable of logging, including administrative access, to a system capable of supporting audit and incident response."
+    see_cis_rule: CIS-6.1.1
+
+  - id: NIST-IA-5
+    field: password_encryption
+    expected: "not in: none, plaintext, cleartext"
+    severity: critical
+    explanation: "IA-5 (Authenticator Management): the organization must protect authenticator content, including stored passwords/secrets, from unauthorized disclosure. Plaintext storage in a config file fails this requirement outright."
+    see_cis_rule: CIS-4.3.1
+
+  - id: NIST-IA-5-1
+    field: password_encryption
+    expected: "not in: type7, weak, rc4"
+    severity: high
+    explanation: "IA-5 (Authenticator Management): protection of stored authenticators must use a scheme resistant to recovery, not merely an obfuscated/reversible encoding."
+    see_cis_rule: CIS-4.3.2
+
+  - id: NIST-AC-8
+    field: banner_configured
+    expected: true
+    severity: low
+    explanation: "AC-8 (System Use Notification): the system must display an approved system-use notification before granting access, informing users of monitoring and legal conditions of use."
+    see_cis_rule: CIS-4.4.1

@@ -16,7 +16,7 @@ from typing import Optional
 
 class DeviceInfo(BaseModel):
     """Identifying info about the device the config came from."""
-    vendor: str                    # e.g. "cisco_ios", "juniper_junos", "palo_alto"
+    vendor: str                    # e.g. "cisco_iosxe_cli", "juniper_junos", "arista_eos"
     hostname: Optional[str] = None
     serial_number: Optional[str] = None
     os_version: Optional[str] = None
@@ -44,7 +44,13 @@ class NormalizedConfig(BaseModel):
 class Finding(BaseModel):
     """One rule's pass/fail result for one device."""
     rule_id: str                   # e.g. "CIS-4.2.1"
-    status: str                    # "PASS" | "FAIL"
+    status: str                    # "PASS" | "FAIL" | "UNKNOWN"
+    # NOTE (Phase 4, compliance_engine/evaluate.py): "UNKNOWN" was added
+    # for cases where the converter couldn't determine this field from
+    # the source config at all (value is None) -- we never want to claim
+    # a device FAILs a check we don't actually have data for. Block 4 /
+    # Block 1 should handle UNKNOWN as its own visual state, not lump it
+    # in with FAIL.
     severity: str                  # "low" | "medium" | "high" | "critical"
     field_checked: str             # e.g. "telnet_enabled"
     expected: str

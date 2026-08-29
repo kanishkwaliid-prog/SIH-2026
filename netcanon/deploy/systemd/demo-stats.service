@@ -1,8 +1,0 @@
-[Unit]
-Description=netcanon demo — sample aggregate traffic counters to disk
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/demo-stats.sh

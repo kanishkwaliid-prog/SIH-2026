@@ -1,21 +1,13 @@
-# Backend / API
-fastapi==0.115.0
-uvicorn==0.30.6
-
-# Data validation
-pydantic==2.9.2
-
-# Rule packs
-pyyaml==6.0.2
-
-# LLM API (Block 2b)
-anthropic==0.34.2
-
-# PDF report generation (Block 4)
-weasyprint==62.3
-
-# Environment variables
-python-dotenv==1.0.1
+# Core dependencies for the compliance engine, schema, and report generator.
+pydantic>=2.0
+PyYAML>=6.0
+reportlab>=4.0
 
 # Testing
-pytest==8.3.3
+pytest>=7.0
+
+# Optional: only needed if you call the real Claude API path in
+# ai_fallback.classify / report_generator.explain (both default to a
+# real Anthropic call but accept an injectable api_call_fn / explain_fn
+# for testing without this installed).
+anthropic>=0.34

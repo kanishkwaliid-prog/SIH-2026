@@ -1,63 +1,267 @@
+# CIS Benchmark-style rules for network device hardening.
+#
+# IMPORTANT: `remediation` keys must match ComplianceResult.vendor from
+# converter/schema_adapter.py exactly (e.g. "cisco_iosxe_cli", not
+# "cisco_ios") -- these are the actual codec identifiers we support,
+# not generic vendor family names. See compliance_engine/evaluate.py
+# for how remediation is looked up.
+#
+# Remediation confidence note: commands for cisco_iosxe_cli,
+# cisco_iosxr, cisco_nxos, juniper_junos, arista_eos, and vyos are
+# based on well-documented, stable CLI syntax. Commands for
+# mikrotik_routeros, fortigate_cli, aruba_aoscx, aruba_aoss, and
+# opnsense are marked NEEDS-VERIFICATION -- confirm against current
+# vendor documentation before this is ever shown to a real user
+# fixing a real device. opnsense is GUI/XML-driven, not CLI-driven, so
+# its "remediation" describes the config.xml element to change, not a
+# CLI command.
+
 framework: CIS
 version: "1.0"
 rules:
+  # --- SSH / Telnet ---
   - id: CIS-4.1.1
     field: ssh_enabled
     expected: true
     severity: high
-    explanation: "Remote administration should use SSH, which encrypts login credentials."
+    explanation: "Remote administration should use SSH, which encrypts login credentials and session traffic."
     remediation:
-      cisco_ios: |
+      cisco_iosxe_cli: |
         line vty 0 4
          transport input ssh
+      cisco_iosxr: |
+        ssh server v2
+        line default
+         transport input ssh
+      cisco_nxos: |
+        feature ssh
       juniper_junos: |
         set system services ssh
-      palo_alto: |
-        set deviceconfig system service disable-telnet yes
+      arista_eos: |
+        management ssh
+         no shutdown
+      vyos: |
+        set service ssh port 22
+      mikrotik_routeros: |
+        # NEEDS-VERIFICATION
+        /ip service enable ssh
+      fortigate_cli: |
+        # NEEDS-VERIFICATION
+        config system global
+          set admin-ssh-port 22
+        end
+      aruba_aoscx: |
+        # NEEDS-VERIFICATION
+        ssh server vrf default
+      aruba_aoss: |
+        # NEEDS-VERIFICATION
+        ip ssh
+      opnsense: |
+        # NEEDS-VERIFICATION -- GUI/XML setting, not CLI:
+        System > Settings > Administration > Secure Shell > Enable Secure Shell
 
   - id: CIS-4.1.2
     field: telnet_enabled
     expected: false
     severity: critical
-    explanation: "Telnet transmits login credentials in plain text and should be disabled."
+    explanation: "Telnet transmits login credentials and all session data in plain text and should be disabled in favor of SSH."
     remediation:
-      cisco_ios: |
+      cisco_iosxe_cli: |
         line vty 0 4
          no transport input telnet
+      cisco_iosxr: |
+        line default
+         no transport input telnet
+      cisco_nxos: |
+        no feature telnet
       juniper_junos: |
         delete system services telnet
-      palo_alto: |
-        set deviceconfig system service disable-telnet yes
+      arista_eos: |
+        management telnet
+         shutdown
+      vyos: |
+        delete service telnet
+      mikrotik_routeros: |
+        # NEEDS-VERIFICATION
+        /ip service disable telnet
+      fortigate_cli: |
+        # NEEDS-VERIFICATION
+        config system interface
+          edit "<interface>"
+            unset allowaccess telnet
+          next
+        end
+      aruba_aoscx: |
+        # NEEDS-VERIFICATION
+        no telnet-server
+      aruba_aoss: |
+        # NEEDS-VERIFICATION
+        no telnet-server
+      opnsense: |
+        # NEEDS-VERIFICATION -- OPNsense has no built-in Telnet admin service by default;
+        # confirm no third-party Telnet plugin is installed/enabled.
 
+  # --- Session timeout ---
   - id: CIS-4.2.1
     field: session_timeout_seconds
     expected: "<= 300"
     severity: medium
-    explanation: "Idle admin sessions should time out to reduce the risk of hijacked sessions."
+    explanation: "Idle administrative sessions should time out within 5 minutes to reduce the risk of a hijacked or forgotten open session."
     remediation:
-      cisco_ios: |
+      cisco_iosxe_cli: |
         line vty 0 4
          exec-timeout 5 0
+      cisco_iosxr: |
+        line default
+         exec-timeout 5 0
+      cisco_nxos: |
+        line vty
+         exec-timeout 5
       juniper_junos: |
         set system login idle-timeout 5
+      arista_eos: |
+        management ssh
+         idle-timeout 5
+      vyos: |
+        set system login idle-timeout 300
+      mikrotik_routeros: |
+        # NEEDS-VERIFICATION
+        /ip ssh set timeout=5m
 
+  - id: CIS-4.2.2
+    field: session_timeout_seconds
+    expected: "> 0"
+    severity: high
+    explanation: "A session timeout of 0 typically means idle sessions never expire -- this is materially worse than a generous-but-nonzero timeout and should be flagged as its own finding."
+    remediation:
+      cisco_iosxe_cli: |
+        line vty 0 4
+         exec-timeout 10 0
+        ! (any nonzero value; 0 0 means "never times out")
+      cisco_iosxr: |
+        line default
+         exec-timeout 10 0
+      cisco_nxos: |
+        line vty
+         exec-timeout 10
+
+  # --- Logging ---
   - id: CIS-6.1.1
     field: logging_enabled
     expected: true
     severity: high
-    explanation: "Administrative access should be logged for auditing and incident response."
+    explanation: "Administrative and system events should be logged to a remote syslog server for auditing and incident response."
     remediation:
-      cisco_ios: |
-        logging buffered 16384
+      cisco_iosxe_cli: |
+        logging host <syslog-server-ip>
         logging trap informational
+      cisco_iosxr: |
+        logging <syslog-server-ip>
+        logging trap informational
+      cisco_nxos: |
+        logging server <syslog-server-ip>
       juniper_junos: |
-        set system syslog file messages any any
+        set system syslog host <syslog-server-ip> any any
+      arista_eos: |
+        logging host <syslog-server-ip>
+      vyos: |
+        set system syslog host <syslog-server-ip> facility all level info
+      mikrotik_routeros: |
+        # NEEDS-VERIFICATION
+        /system logging action add name=remote target=remote remote=<syslog-server-ip>
+        /system logging add topics=info action=remote
+      fortigate_cli: |
+        # NEEDS-VERIFICATION
+        config log syslogd setting
+          set status enable
+          set server <syslog-server-ip>
+        end
+      aruba_aoscx: |
+        # NEEDS-VERIFICATION
+        logging <syslog-server-ip>
+      aruba_aoss: |
+        # NEEDS-VERIFICATION
+        logging <syslog-server-ip>
+      opnsense: |
+        # NEEDS-VERIFICATION -- GUI/XML setting:
+        System > Settings > Logging / targets > Add remote syslog target
 
+  # --- Password encryption ---
   - id: CIS-4.3.1
     field: password_encryption
-    expected: "not none"
-    severity: high
-    explanation: "Passwords stored in the config should not be stored in plain text."
+    expected: "not in: none, plaintext, cleartext"
+    severity: critical
+    explanation: "Passwords stored in the running config must not be stored in plain, readable text -- at minimum a reversible encoding should be applied."
     remediation:
-      cisco_ios: |
+      cisco_iosxe_cli: |
         service password-encryption
+      cisco_iosxr: |
+        # IOS-XR stores secrets as type 8/9 by default when 'secret' is used;
+        # confirm no plaintext 'password' lines remain.
+      cisco_nxos: |
+        # NX-OS hashes passwords by default; confirm no cleartext override.
+      juniper_junos: |
+        # Junos encrypts secrets automatically on commit; confirm
+        # 'authentication-order' and local passwords use 'encrypted-password'.
+      arista_eos: |
+        # EOS hashes passwords automatically for 'secret'; avoid legacy 'password' lines.
+      vyos: |
+        # VyOS hashes login passwords automatically; confirm no plaintext override.
+
+  - id: CIS-4.3.2
+    field: password_encryption
+    expected: "not in: type7, weak, rc4"
+    severity: high
+    explanation: "A password field being 'encrypted' is not sufficient if the scheme is a weak, trivially reversible cipher (e.g. Cisco type 7). A strong one-way hash (e.g. type 8/9, scrypt, sha512, bcrypt) should be used instead."
+    remediation:
+      cisco_iosxe_cli: |
+        enable algorithm-type sha256 secret <new-secret>
+        username <user> algorithm-type sha256 secret <new-secret>
+      cisco_iosxr: |
+        username <user> secret 9 <new-secret>
+      cisco_nxos: |
+        username <user> password <new-secret> sha256
+      juniper_junos: |
+        set system login user <user> authentication plain-text-password
+        # (Junos prompts for the password and stores it as SHA-512 by default)
+
+  # --- Banner ---
+  - id: CIS-4.4.1
+    field: banner_configured
+    expected: true
+    severity: low
+    explanation: "A legal-notice login banner should be configured to establish authorized-use notice before granting access."
+    remediation:
+      cisco_iosxe_cli: |
+        banner motd ^C
+        Authorized access only. All activity is monitored and logged.
+        ^C
+      cisco_iosxr: |
+        banner motd "Authorized access only. All activity is monitored and logged."
+      cisco_nxos: |
+        banner motd #Authorized access only. All activity is monitored and logged.#
+      juniper_junos: |
+        set system login message "Authorized access only. All activity is monitored and logged."
+      arista_eos: |
+        banner motd
+        Authorized access only. All activity is monitored and logged.
+        EOF
+      vyos: |
+        set system login banner pre-login "Authorized access only."
+      mikrotik_routeros: |
+        # NEEDS-VERIFICATION
+        /ip service set banner="Authorized access only."
+      fortigate_cli: |
+        # NEEDS-VERIFICATION
+        config system replacemsg admin pre_admin-disclaimer-text
+          set buffer "Authorized access only."
+        end
+      aruba_aoscx: |
+        # NEEDS-VERIFICATION
+        banner motd "Authorized access only."
+      aruba_aoss: |
+        # NEEDS-VERIFICATION
+        banner motd "Authorized access only."
+      opnsense: |
+        # NEEDS-VERIFICATION -- GUI/XML setting:
+        System > Settings > General > Login page message

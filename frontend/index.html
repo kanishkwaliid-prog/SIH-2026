@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIH 26155 — Network Compliance Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ===================== HEADER / STEPPER RAIL ===================== -->
+  <header class="rail">
+    <div class="rail-brand">
+      <div class="rail-brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22">
+          <circle cx="4" cy="12" r="2.4" class="port"/>
+          <circle cx="12" cy="5" r="2.4" class="port"/>
+          <circle cx="12" cy="19" r="2.4" class="port"/>
+          <circle cx="20" cy="12" r="2.4" class="port"/>
+          <path d="M6.2 12 H17.8 M11 6.9 L11.6 10.6 M11 17.1 L11.6 13.4" class="wire"/>
+        </svg>
+      </div>
+      <div class="rail-brand-text">
+        <div class="rail-title">Compliance Console</div>
+        <div class="rail-subtitle">SIH 26155 · Network Hardening Audit</div>
+      </div>
+    </div>
+
+    <ol class="steps" id="steps">
+      <li class="step" data-step="1">
+        <span class="step-port"><span class="step-num">1</span></span>
+        <span class="step-label">Upload</span>
+      </li>
+      <li class="step" data-step="2">
+        <span class="step-port"><span class="step-num">2</span></span>
+        <span class="step-label">Confirm Vendor</span>
+      </li>
+      <li class="step" data-step="3">
+        <span class="step-port"><span class="step-num">3</span></span>
+        <span class="step-label">Review Unknowns</span>
+      </li>
+      <li class="step" data-step="4">
+        <span class="step-port"><span class="step-num">4</span></span>
+        <span class="step-label">Results</span>
+      </li>
+    </ol>
+
+    <div class="rail-meta">
+      <span class="badge badge-mock">MOCK API</span>
+      <span class="rail-meta-hint">Wire to FastAPI once stable</span>
+    </div>
+  </header>
+
+  <!-- ===================== MAIN ===================== -->
+  <main class="stage" id="stage">
+
+    <!-- ---------- SCREEN 1: UPLOAD ---------- -->
+    <section class="screen" id="screen-upload" data-screen="1">
+      <div class="screen-head">
+        <h1>Upload device configs</h1>
+        <p class="screen-sub">Single file or a batch. We'll detect the vendor for each before anything else happens.</p>
+      </div>
+
+      <div class="panel dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload config files">
+        <input type="file" id="fileInput" multiple accept=".txt,.cfg,.conf,.xml,.log" hidden>
+        <div class="dropzone-inner">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M12 3v12m0-12 4 4m-4-4-4 4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 16v2.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V16" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="dropzone-title">Drop config files here, or click to browse</div>
+          <div class="dropzone-sub">.txt · .cfg · .conf · .xml — one device per file</div>
+        </div>
+      </div>
+
+      <div class="panel sample-panel">
+        <div class="sample-panel-head">
+          <span>No files handy? Load a sample config</span>
+        </div>
+        <div class="sample-chips" id="sampleChips"></div>
+      </div>
+
+      <div class="panel vendor-hint-panel">
+        <label class="field-label" for="vendorOverride">Optional — force a vendor instead of auto-detecting</label>
+        <select id="vendorOverride" class="select">
+          <option value="">Auto-detect vendor</option>
+        </select>
+      </div>
+
+      <div class="queue" id="queue"></div>
+
+      <div class="screen-actions">
+        <button class="btn btn-primary" id="btnProcessQueue" disabled>Process queue →</button>
+      </div>
+    </section>
+
+    <!-- ---------- SCREEN 2: VENDOR CONFIRMATION ---------- -->
+    <section class="screen" id="screen-vendor" data-screen="2" hidden>
+      <div class="screen-head">
+        <h1>Confirm vendor</h1>
+        <p class="screen-sub">Detection confidence came back below the 85% threshold — pick the right vendor before we parse this config.</p>
+      </div>
+
+      <div class="panel vendor-confirm-panel" id="vendorConfirmPanel"></div>
+
+      <div class="screen-actions">
+        <button class="btn btn-ghost" id="btnVendorBack">← Back</button>
+        <button class="btn btn-primary" id="btnVendorConfirm">Confirm vendor →</button>
+      </div>
+    </section>
+
+    <!-- ---------- SCREEN 3: REVIEW UNKNOWN LINES ---------- -->
+    <section class="screen" id="screen-unknowns" data-screen="3" hidden>
+      <div class="screen-head">
+        <h1>Review unrecognized lines</h1>
+        <p class="screen-sub">The parser couldn't map these lines to a known field. Confirm or correct the AI's guess for each — nothing is saved to memory until you submit the batch.</p>
+      </div>
+
+      <div class="panel" id="unknownsEmptyPanel" hidden>
+        <div class="empty-state">Every line in this config was recognized — nothing to review.</div>
+      </div>
+
+      <div class="panel table-panel" id="unknownsTablePanel">
+        <table class="data-table" id="unknownsTable">
+          <thead>
+            <tr>
+              <th>Raw line</th>
+              <th>AI guess</th>
+              <th>Confidence</th>
+              <th>Confirmed category</th>
+            </tr>
+          </thead>
+          <tbody id="unknownsTbody"></tbody>
+        </table>
+      </div>
+
+      <div class="screen-actions">
+        <button class="btn btn-ghost" id="btnUnknownsBack">← Back</button>
+        <button class="btn btn-primary" id="btnUnknownsSubmit">Confirm batch &amp; evaluate →</button>
+      </div>
+    </section>
+
+    <!-- ---------- SCREEN 4: RESULTS + WHAT-IF ---------- -->
+    <section class="screen" id="screen-results" data-screen="4" hidden>
+      <div class="screen-head results-head">
+        <div>
+          <h1 id="resultsDeviceTitle">Results</h1>
+          <p class="screen-sub" id="resultsDeviceSub"></p>
+        </div>
+        <div class="framework-toggle" role="tablist" aria-label="Rule framework">
+          <button class="framework-btn active" data-framework="CIS" role="tab" aria-selected="true">CIS</button>
+          <button class="framework-btn" data-framework="NIST" role="tab" aria-selected="false">NIST 800-53</button>
+        </div>
+      </div>
+
+      <div class="summary-chips" id="summaryChips"></div>
+
+      <div class="panel table-panel">
+        <table class="data-table findings-table" id="findingsTable">
+          <thead>
+            <tr>
+              <th>Rule ID</th>
+              <th>Status</th>
+              <th>Severity</th>
+              <th>Field checked</th>
+            </tr>
+          </thead>
+          <tbody id="findingsTbody"></tbody>
+        </table>
+      </div>
+
+      <div class="results-toolbar">
+        <button class="btn btn-secondary" id="btnDownloadPdf">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round"/></svg>
+          Download PDF report
+        </button>
+        <button class="btn btn-outline" id="btnToggleWhatif">Open what-if panel</button>
+        <button class="btn btn-ghost" id="btnStartOver" style="margin-left:auto;">Start over</button>
+      </div>
+
+      <!-- WHAT-IF PANEL -->
+      <div class="panel whatif-panel" id="whatifPanel" hidden>
+        <div class="whatif-head">
+          <h2>What-if simulator</h2>
+          <p class="screen-sub">Toggle fields on a scratch copy of this config — nothing here touches the stored config or triggers remediation.</p>
+        </div>
+
+        <div class="whatif-body">
+          <div class="whatif-controls" id="whatifControls"></div>
+
+          <div class="whatif-scoreboard">
+            <div class="score-card">
+              <div class="score-label">Before</div>
+              <div class="score-value" id="scoreBefore">0.0</div>
+            </div>
+            <div class="score-arrow" id="scoreArrow">→</div>
+            <div class="score-card">
+              <div class="score-label">After</div>
+              <div class="score-value" id="scoreAfter">0.0</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="whatif-diff">
+          <h3>Findings that flip</h3>
+          <div id="whatifDiffEmpty" class="empty-state small">No change from current overrides.</div>
+          <table class="data-table" id="whatifDiffTable" hidden>
+            <thead><tr><th>Rule ID</th><th>Before</th><th></th><th>After</th></tr></thead>
+            <tbody id="whatifDiffTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Hidden print-preview root used by "Download PDF report" (mock backend: renders
+     the same layout report_generator.generator.generate_pdf() produces, then calls
+     window.print(); wire to a real download link once the FastAPI endpoint exists). -->
+<div id="printRoot" class="print-only"></div>
+
+<script src="mock-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

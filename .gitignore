@@ -1,0 +1,43 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- AI fallback memory store (local, per-machine learning data) ---
+ai_fallback/*.db
+ai_fallback/*.sqlite
+ai_fallback/*.sqlite3
+*.db
+*.sqlite3
+
+# --- Generated reports / local test output ---
+*.pdf
+report_generator/output/
+/output/
+/tmp_test_output/
+
+# --- Node (frontend has none checked in, but just in case a dev adds tooling) ---
+node_modules/
+npm-debug.log*
+
+# --- Editor / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Secrets ---
+.env
+.env.*
+*.key
+
+# --- Netcanon reference clone (per handoff doc: reference only, not to be committed) ---
+netcanon/

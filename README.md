@@ -1,79 +1,119 @@
-# AI-Powered Vendor-Agnostic Network Compliance Engine
+# SIH 26155 — Network Compliance Audit Toolkit
 
-SIH 2026 project — an AI-augmented tool that checks network device
-configurations (firewalls, routers, switches) from any vendor against
-security frameworks like CIS, NIST, and DISA STIGs, and generates a
-report with pass/fail findings and step-by-step remediation.
+A vendor-agnostic network device compliance auditor: parse configs
+from 12 network vendors, evaluate them against CIS and NIST 800-53
+rule packs, generate PDF reports with plain-English remediation
+explanations, and simulate the risk impact of proposed config changes
+before applying them.
 
-## Team
+Built for Smart India Hackathon 2026 (Problem Statement 26155).
 
-| Name | Block | Responsibility |
+## Status
+
+| Phase | What | Status |
 |---|---|---|
-| TBD | Block 1 | Frontend (upload, confirmation UI, report viewer) |
-| TBD | Block 2a | Vendor detection + hardcoded parsers |
-| TBD | Block 2b | LLM fallback + prompt engineering |
-| TBD | Block 2c | Knowledge base + training/confirmation flow |
-| TBD | Block 3 | Compliance engine + rule pack authoring |
-| TBD | Block 4 | Report generator (PDF) |
+| 1–3 | Vendor parsing / schema adapter (`converter/`) | ⚠️ see **Known issues** below |
+| 4 | Compliance rule engine (`compliance_engine/`, `rule_packs/`) | ✅ done, verified |
+| 5 | AI-assisted unknown-line classifier (`ai_fallback/`) | ✅ done, verified |
+| 5.5 | PDF report generator (`report_generator/`) | ✅ done, verified against real schema |
+| 5.6 | Frontend (`frontend/`) | ✅ done, mocked backend, verified end-to-end |
+| 6 | What-if risk simulator (`whatif/`) | ✅ done, verified against real schema |
+| 7 | Snapshot & revert | Not started |
+| 8 | Full pipeline integration | Not started |
+| 9 | Attribution & submission prep | Not started |
 
-## How the pipeline works
+See `SIH_26155_handoff_v3.md` for the detailed phase-by-phase history
+and the exact reconciliation log of what was fixed between the mocked
+and real schema.
 
-1. **Frontend** — user uploads a config file, optionally names the vendor
-2. **Converter** — detects the vendor, converts the config into a standard
-   JSON schema (see `shared/schema.py`). Falls back to an LLM guess, then
-   to a human confirmation, for anything it doesn't recognize.
-3. **Compliance engine** — checks the JSON against a rule pack
-   (`rule_packs/`) for the chosen framework (CIS/NIST/STIG)
-4. **Report generator** — turns the findings into a PDF with plain-English
-   explanations, technical details, and vendor-specific CLI remediation
+## Known issues
 
-## Repo structure
+- **`converter/schema_adapter.py` imports `converter.netcanon_migration.codecs.registry`,
+  which is not present in this repo.** That package (the actual
+  per-vendor parsing codecs for all 12 supported vendors) was never
+  delivered in any of the source zips this repo was assembled from —
+  only `schema_adapter.py` itself and `test_cross_vendor.py` were
+  provided. As a result, `converter/schema_adapter.py` cannot
+  currently be imported, and `converter/test_cross_vendor.py` will
+  fail to collect. Every other module (`compliance_engine`, `shared`,
+  `ai_fallback`, `report_generator`, `whatif`) imports and runs
+  independently of this and is unaffected. **Before relying on live
+  vendor detection/parsing, the `netcanon_migration` codec package
+  needs to be added** (per the handoff doc, this was migrated from
+  `netcanon/netcanon`, MIT licensed).
+- `rule_packs/*.yaml` remediation commands are only verified/high-confidence
+  for `cisco_iosxe_cli`, `cisco_iosxr`, `cisco_nxos`, `juniper_junos`,
+  `arista_eos`, and `vyos`. Entries for `mikrotik_routeros`,
+  `fortigate_cli`, `aruba_aoscx`, `aruba_aoss`, and `opnsense` are
+  marked `NEEDS-VERIFICATION` in the YAML — confirm against current
+  vendor docs before demoing or shipping those vendors.
+- `frontend/` runs entirely against mocked data (see
+  `frontend/README.md`) — it has not been wired to a real backend yet.
+
+## Repo layout
 
 ```
-frontend/            Block 1
-converter/            Block 2 (detection, parsers, LLM fallback, knowledge base)
-compliance_engine/    Block 3
-report_generator/     Block 4
-rule_packs/            CIS/NIST/STIG rules as YAML
-shared/                Agreed JSON schema + sample data everyone builds against
-docs/                   Architecture doc, demo video link, presentation
+converter/            Vendor detection + parsing -> ComplianceResult
+                       (imports a missing codec package -- see Known issues)
+compliance_engine/    Rule evaluation engine (evaluate_config, risk_score)
+rule_packs/           CIS + NIST 800-53 rule definitions (YAML)
+shared/               Pydantic models -- the cross-block data contract
+ai_fallback/          AI-assisted classifier for unrecognized config lines,
+                       with a persistent per-vendor memory (SQLite)
+report_generator/     PDF compliance report generator (ReportLab)
+whatif/               Risk-impact simulator for proposed config changes
+frontend/             Phase 5.6 UI (plain HTML/CSS/JS, mocked backend)
 ```
 
-## Getting started (local setup)
+## Setup
+
+Requires Python 3.10+.
 
 ```bash
-git clone <repo-url>
-cd <repo-name>
-python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # then fill in your LLM API key
 ```
 
-## Branching workflow
+Run the test suites (each covers one module independently):
 
-- Never push directly to `main`
-- Create a branch per block: `git checkout -b block2-converter`
-- Commit and push regularly, not just once at the end
-- Open a Pull Request into `main` when a block works; get one teammate
-  to review before merging
-- If you need to change `shared/schema.py`, message the team first —
-  every block depends on it
+```bash
+pytest compliance_engine/test_evaluate.py
+pytest ai_fallback/test_ai_fallback.py
+pytest report_generator/test_generator.py
+pytest whatif/test_simulator.py
 
-## Environment variables
-
-Copy `.env.example` to `.env` and fill in:
-
-```
-ANTHROPIC_API_KEY=your_key_here
+# NOTE: this one currently fails to collect -- see Known issues above
+pytest converter/test_cross_vendor.py
 ```
 
-Never commit `.env` — it's already in `.gitignore`.
+The `ai_fallback` and `report_generator` modules default to real
+Claude API calls (`ANTHROPIC_API_KEY` env var required) for
+unrecognized-line classification and FAIL-finding explanations
+respectively, but both accept an injectable function
+(`api_call_fn` / `explain_fn`) — the test suites use fakes and don't
+need an API key.
 
-## Deliverables checklist
+### Frontend
 
-- [ ] Source code (this repo)
-- [ ] README with setup instructions (this file)
-- [ ] Architecture document (max 2 pages) — `docs/architecture.pdf`
-- [ ] Demo video (max 2 minutes) — link in `docs/demo_video.md`
-- [ ] Technical presentation (max 5 slides) — `docs/presentation.pptx`
+No build step needed:
+
+```bash
+cd frontend
+python3 -m http.server 8000
+# open http://localhost:8000
+```
+
+See `frontend/README.md` for what's real vs. mocked in the current
+build.
+
+## License
+
+Original code in this repo (compliance rule engine, AI-assisted
+unknown-line learning loop, what-if risk simulator, PDF report
+generator) is © the SIH 26155 team. The vendor codec/parsing layer
+(once added — see Known issues) and the snapshot/backup storage
+pattern planned for Phase 7 are adapted from
+[Netcanon](https://github.com/netcanon/netcanon) (MIT licensed);
+proper attribution is planned for Phase 9 and not yet added to this
+repo.
