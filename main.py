@@ -6,7 +6,7 @@ from pathlib import Path
 from compliance_engine.evaluator import load_rule_pack, evaluate_report
 
 # Import Block 4 PDF generator
-from report_gen.report_gen import generate_pdf_file
+from report_generator.report_gen import generate_pdf_file
 
 def run_compliance_pipeline(converter_json_path: str, output_pdf_path: str = "compliance_report.pdf"):
     print(f"1. Loading converter JSON: {converter_json_path}")
