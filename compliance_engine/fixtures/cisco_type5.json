@@ -1,0 +1,17 @@
+{
+  "device": {
+    "vendor": "cisco_ios",
+    "hostname": "access-sw-12",
+    "os_version": "15.1",
+    "detection_confidence": "high"
+  },
+  "config": {
+    "ssh_enabled": true,
+    "telnet_enabled": false,
+    "session_timeout_seconds": 720,
+    "logging_enabled": true,
+    "password_encryption": "type5",
+    "banner_configured": true,
+    "snmp_default_community": []
+  }
+}

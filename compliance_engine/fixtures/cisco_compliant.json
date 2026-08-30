@@ -1,0 +1,18 @@
+{
+  "device": {
+    "vendor": "cisco_ios",
+    "hostname": "core-rtr-01",
+    "serial_number": "FTX9999Z1AA",
+    "os_version": "17.3",
+    "detection_confidence": "high"
+  },
+  "config": {
+    "ssh_enabled": true,
+    "telnet_enabled": false,
+    "session_timeout_seconds": 300,
+    "logging_enabled": true,
+    "password_encryption": "type9",
+    "banner_configured": true,
+    "snmp_default_community": []
+  }
+}
