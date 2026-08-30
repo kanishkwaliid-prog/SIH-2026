@@ -8,7 +8,40 @@ from groq import Groq
 from .memory import check_memory, save_confirmed, init_db
 
 load_dotenv()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+# The client is built lazily instead of at import time. Constructing Groq()
+# with no GROQ_API_KEY raises immediately, which used to make *importing* this
+# module fail -- and since pipeline.py imports it, that took down the whole
+# app (and every test) for anyone without a key in their .env.
+#
+# Deferring it means the app boots fine without a key; the failure surfaces
+# per-call inside call_with_retry, which already handles it by returning the
+# proper fallback shape. That is the Tier 3 path pipeline.py documents: lines
+# come back as "unclear" for a human to resolve on the review screen.
+_client = None
+
+
+class LLMUnavailable(RuntimeError):
+    """The LLM cannot be reached at all (e.g. no API key configured).
+
+    Kept distinct from transient API errors so call_with_retry doesn't burn
+    retries + sleeps on a condition that cannot possibly resolve mid-run.
+    Without this, analysing a config with N unknown lines and no key took
+    N * retries * delay seconds of pointless waiting before falling back.
+    """
+
+
+def get_client():
+    global _client
+    if _client is None:
+        if not os.getenv("GROQ_API_KEY"):
+            raise LLMUnavailable(
+                "GROQ_API_KEY is not set -- LLM classification is disabled, "
+                "so this line is being sent straight to human review."
+            )
+        _client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    return _client
+
 
 init_db()  # safe to call every import -- CREATE TABLE IF NOT EXISTS
 
@@ -116,6 +149,11 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
     for attempt in range(retries + 1):
         try:
             return func(*args, **kwargs)
+        except LLMUnavailable as e:
+            # Not transient -- fall back immediately instead of sleeping.
+            result = dict(fallback)
+            result["reasoning"] = str(e)
+            return result
         except Exception as e:
             if attempt == retries:
                 result = dict(fallback)
@@ -130,7 +168,7 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
     if vendor_hint:
         user_msg += f"\nVendor hint: {vendor_hint}"
 
-    response = client.chat.completions.create(
+    response = get_client().chat.completions.create(
         model=MODEL,
         max_tokens=200,
         messages=[
@@ -166,7 +204,7 @@ def confirm_classification(raw_line: str, field: str, value, vendor_hint: str = 
 def _guess_vendor_inner(config_text: str) -> dict:
     snippet = "\n".join(config_text.splitlines()[:40])
 
-    response = client.chat.completions.create(
+    response = get_client().chat.completions.create(
         model=MODEL,
         max_tokens=400,
         temperature=0,

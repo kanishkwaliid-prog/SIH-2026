@@ -1,6 +1,8 @@
 # Backend / API
 fastapi==0.115.0
 uvicorn==0.30.6
+# Required by FastAPI to parse multipart/form-data (the config file upload)
+python-multipart==0.0.9
 
 # Data validation
 pydantic==2.9.2
@@ -13,6 +15,14 @@ groq==1.7.0
 
 # PDF report generation (Block 4)
 weasyprint==62.3
+# weasyprint==62.3 is broken by pydyf>=0.12 (its own pin is too loose --
+# pip installs the latest pydyf by default, which removed an attribute
+# weasyprint 62.3 still calls, and PDF generation fails with:
+#   'super' object has no attribute 'transform'
+# Pin pydyf below 0.12 until upgrading weasyprint.
+pydyf<0.12
+# report_generator/report_gen.py imports jinja2 for its HTML report template
+jinja2==3.1.4
 
 # Environment variables
 python-dotenv==1.0.1
