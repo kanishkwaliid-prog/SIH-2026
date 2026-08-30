@@ -5,10 +5,10 @@ uvicorn==0.30.6
 python-multipart==0.0.9
 
 # Data validation
-pydantic==2.9.2
+pydantic==2.12.5
 
 # Rule packs
-pyyaml==6.0.2
+pyyaml==6.0.3
 
 # LLM API (Block 2b)
 groq==1.7.0
