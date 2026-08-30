@@ -1,0 +1,281 @@
+framework: CIS
+version: "1.1"
+# SCHEMA QUESTION FOR THE TEAM (raise now): snmp_default_community appears in
+# Block 2A demo fixtures but is NOT in shared/schema.py NormalizedConfig.
+# Confirm the field is final (bool vs community-string) before merge.
+# Do not treat this comment as a rule.
+
+# SCHEMA TODO — logging destination (do not invent a converter field):
+# logging_enabled only tells us logging is on, not whether it goes to a remote
+# syslog host vs the local buffer. Once Block 2A adds something like
+# logging_remote_host / syslog_server, add:
+#   CIS-6.2.1  remote syslog configured (not local-only)
+#   CIS-6.2.2  syslog destination is an approved collector (not 127.0.0.1)
+# Flag for teammate discussion — not evaluable against current JSON.
+
+# SCHEMA TODO — banner content (do not invent a converter field):
+# banner_configured is a boolean; we cannot see the banner text. Cannot check
+# that the banner does not reveal internal hostnames/IPs, or that it includes
+# an authorized-use notice. Once banner_text exists, add:
+#   CIS-5.2.1  banner text must not contain hostnames or IP addresses
+#   CIS-5.2.2  banner text must include an authorized-use / legal notice
+
+rules:
+  - id: CIS-4.1.1
+    field: ssh_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "Remote administration must use SSH so login credentials are encrypted in transit (CIS Level 1)."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+      juniper_junos: |
+        set system services ssh
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+        set deviceconfig system service disable-http yes
+
+  - id: CIS-4.1.2
+    field: telnet_enabled
+    condition:
+      equals: false
+    severity: critical
+    explanation: "Telnet transmits credentials in cleartext and must be disabled on all VTYs / management services."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+         no transport input telnet
+      juniper_junos: |
+        delete system services telnet
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+
+  - id: CIS-4.2.1
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+      lte: 900
+    severity: medium
+    explanation: "CIS Level 1: idle admin sessions must time out within 15 minutes (900 seconds). A value of 0 (never expire) fails this check."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 15 0
+        line con 0
+         exec-timeout 15 0
+      juniper_junos: |
+        set system login idle-timeout 15
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 15
+
+  - id: CIS-4.2.2
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+    severity: high
+    explanation: "A timeout of 0 disables idle disconnect (sessions never expire). Idle exec-timeout must be enabled."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 10 0
+      juniper_junos: |
+        set system login idle-timeout 10
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 10
+
+  - id: CIS-4.2.3
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+      lte: 300
+    severity: high
+    explanation: "CIS Level 2 (stricter than CIS-4.2.1): idle admin sessions must time out within 5 minutes (300 seconds). 0 (never expire) fails."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 5 0
+        line con 0
+         exec-timeout 5 0
+      juniper_junos: |
+        set system login idle-timeout 5
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 5
+
+  - id: CIS-4.2.4
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+      lte: 600
+    severity: medium
+    explanation: "Recommended idle timeout is 10 minutes (600 seconds): tighter than the 15-minute Level 1 ceiling, less aggressive than the 5-minute Level 2 benchmark. 0 (never expire) fails."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 10 0
+      juniper_junos: |
+        set system login idle-timeout 10
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 10
+
+  - id: CIS-4.3.1
+    field: password_encryption
+    condition:
+      not_equals: none
+    severity: high
+    explanation: "Passwords in the running config must not be stored in cleartext (type 0 / none)."
+    remediation:
+      cisco_ios: |
+        service password-encryption
+        enable secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: CIS-4.3.2
+    field: password_encryption
+    condition:
+      not_equals: type7
+    severity: high
+    explanation: "Cisco type 7 (Vigenère) is trivially reversible and must not be used for stored secrets."
+    remediation:
+      cisco_ios: |
+        enable secret
+        username admin secret
+        no username admin password
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: CIS-4.3.3
+    field: password_encryption
+    condition:
+      not_equals: type5
+    severity: medium
+    explanation: "MD5-based type 5 hashes are no longer a strong password type; migrate to type 8 (PBKDF2) or type 9 (scrypt). Flagged at medium because type 5 is hashed (unlike type 7) but is cryptographically weak."
+    remediation:
+      cisco_ios: |
+        enable algorithm-type scrypt secret
+        username admin algorithm-type scrypt secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: CIS-4.3.4
+    field: password_encryption
+    condition:
+      in: [type8, type9, sha256, sha512, scrypt]
+    severity: high
+    explanation: "CIS Level 2: stored secrets must use a modern KDF (type 8/9, SHA-256/512, or scrypt), not type 5/7 or plaintext."
+    remediation:
+      cisco_ios: |
+        enable algorithm-type scrypt secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: CIS-4.3.5
+    field: password_encryption
+    condition:
+      not_in: [none, type7]
+    severity: high
+    explanation: "Combined check: encryption must be present and must not be reversible type 7. Type 5 still passes this rule; CIS-4.3.3/4.3.4 cover strength."
+    remediation:
+      cisco_ios: |
+        service password-encryption
+        enable secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: CIS-5.1.1
+    field: banner_configured
+    condition:
+      equals: true
+    severity: medium
+    explanation: "CIS Level 1: a login/MOTD banner must be configured so unauthorized users see a legal notice before authentication."
+    remediation:
+      cisco_ios: |
+        banner login ^
+        Authorized access only. Violators will be prosecuted.
+        ^
+      juniper_junos: |
+        set system login message "Authorized access only."
+      palo_alto: |
+        set deviceconfig system login-banner "Authorized access only."
+
+  - id: CIS-5.1.2
+    field: banner_configured
+    condition:
+      equals: true
+    severity: high
+    explanation: "CIS Level 2: an interactive login banner is required on all management access paths (VTY, console, and GUI), not only recommended."
+    remediation:
+      cisco_ios: |
+        banner login ^C
+        Authorized access only.
+        ^C
+        banner motd ^C
+        Authorized access only.
+        ^C
+      juniper_junos: |
+        set system login message "Authorized access only."
+        set system login announcement "Authorized access only."
+      palo_alto: |
+        set deviceconfig system login-banner "Authorized access only."
+
+  - id: CIS-6.1.1
+    field: logging_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "CIS Level 1: administrative and system events must be logged for audit and incident response."
+    remediation:
+      cisco_ios: |
+        logging buffered 16384
+        logging trap informational
+      juniper_junos: |
+        set system syslog file messages any any
+      palo_alto: |
+        set deviceconfig system syslog setting
+
+  - id: CIS-6.1.2
+    field: logging_enabled
+    condition:
+      equals: true
+    severity: critical
+    explanation: "CIS Level 2: logging must not be disabled. Without logs, failed logins and config changes cannot be reconstructed after an incident."
+    remediation:
+      cisco_ios: |
+        logging buffered 32768
+        logging trap informational
+        logging console critical
+      juniper_junos: |
+        set system syslog file messages any any
+        set system syslog console any error
+      palo_alto: |
+        set deviceconfig system syslog setting
+
+  - id: CIS-7.1.1
+    field: snmp_default_community
+    condition:
+      excludes: [public, private]
+    severity: critical
+    explanation: "Default SNMP community strings (public/private) must not be in use; they are a well-known credential for read/write access."
+    remediation:
+      cisco_ios: |
+        no snmp-server community public
+        no snmp-server community private
+        snmp-server community <unique-string> ro
+      juniper_junos: |
+        delete snmp community public
+        delete snmp community private
+      palo_alto: |
+        delete snmp-setting access-setting version v2c

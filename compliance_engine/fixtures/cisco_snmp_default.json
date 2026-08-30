@@ -1,0 +1,17 @@
+{
+  "device": {
+    "vendor": "cisco_ios",
+    "hostname": "snmp-legacy-01",
+    "os_version": "12.4",
+    "detection_confidence": "high"
+  },
+  "config": {
+    "ssh_enabled": false,
+    "telnet_enabled": false,
+    "session_timeout_seconds": 120,
+    "logging_enabled": true,
+    "password_encryption": "type8",
+    "banner_configured": true,
+    "snmp_default_community": ["public"]
+  }
+}

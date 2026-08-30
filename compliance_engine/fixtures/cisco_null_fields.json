@@ -1,0 +1,16 @@
+{
+  "device": {
+    "vendor": "cisco_ios",
+    "hostname": "partial-parse-01",
+    "detection_confidence": "medium"
+  },
+  "config": {
+    "ssh_enabled": true,
+    "telnet_enabled": null,
+    "session_timeout_seconds": 1800,
+    "logging_enabled": null,
+    "password_encryption": "none",
+    "banner_configured": false,
+    "snmp_default_community": null
+  }
+}
