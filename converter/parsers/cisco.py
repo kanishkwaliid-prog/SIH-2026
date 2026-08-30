@@ -82,8 +82,8 @@ def parse_cisco(config_text: str) -> tuple[dict, list[str]]:
     # a finding, even though it's still configured SNMPv2c.
     KNOWN_WEAK_COMMUNITIES = {"public", "private", "cisco", "community"}
     all_communities = re.findall(r"snmp-server community (\S+)", config_text)
-    weak_snmp = [c for c in all_communities if c.lower() in KNOWN_WEAK_COMMUNITIES]
-    if weak_snmp:
+    if all_communities:
+        weak_snmp = [c for c in all_communities if c.lower() in KNOWN_WEAK_COMMUNITIES]
         fields["snmp_default_community"] = weak_snmp
 
     unrecognized_lines = []
