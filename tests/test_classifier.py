@@ -62,9 +62,11 @@ def test_retry_on_failure():
     import block2b.llm_classifier as llm_classifier
 
     print("\n--- Testing retry/fallback on bad API key ---")
-    # Temporarily swap in a broken client
-    original_client = llm_classifier.client
-    llm_classifier.client = Groq(api_key="invalid_key_on_purpose")
+    # Temporarily swap in a broken client. The client is lazily built now
+    # (see get_client in llm_classifier), so we patch the _client cache
+    # directly -- get_client returns it as-is once it is non-None.
+    original_client = llm_classifier._client
+    llm_classifier._client = Groq(api_key="invalid_key_on_purpose")
 
     # classify_unknown_line already wraps call_with_retry internally now,
     # so we call it directly -- wrapping it again here would retry-on-retries.
@@ -76,7 +78,7 @@ def test_retry_on_failure():
     print("✓ Retry/fallback works — no crash on bad key")
 
     # Restore the real client
-    llm_classifier.client = original_client
+    llm_classifier._client = original_client
 
 
 test_retry_on_failure()
@@ -88,8 +90,8 @@ def test_vendor_retry_on_failure():
     import block2b.llm_classifier as llm_classifier
 
     print("\n--- Testing vendor retry/fallback on bad API key ---")
-    original_client = llm_classifier.client
-    llm_classifier.client = Groq(api_key="invalid_key_on_purpose")
+    original_client = llm_classifier._client
+    llm_classifier._client = Groq(api_key="invalid_key_on_purpose")
 
     result = llm_classifier.guess_vendor("hostname fw01\nset network interface eth1")
     print("Result with broken key:", result)
@@ -97,7 +99,7 @@ def test_vendor_retry_on_failure():
     assert result.get("vendor") == "Unknown", "Should fail gracefully with vendor fallback shape"
     print("✓ Vendor retry/fallback works — correct fallback shape, no crash")
 
-    llm_classifier.client = original_client
+    llm_classifier._client = original_client
 
 
 test_vendor_retry_on_failure()

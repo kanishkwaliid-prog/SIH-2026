@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-from .report_generator import generate_pdf_bytes
+from .report_gen import generate_pdf_bytes
 
 router = APIRouter(prefix="/api/reports", tags=["Report Generation"])
 
