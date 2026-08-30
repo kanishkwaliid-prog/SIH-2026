@@ -1,0 +1,12 @@
+set deviceconfig system type static
+set deviceconfig system update-server updates.paloaltonetworks.com
+set deviceconfig system timezone US/Pacific
+set deviceconfig system service disable-telnet yes
+set deviceconfig system service disable-http yes
+set deviceconfig system hostname PA-VM
+set deviceconfig system ip-address 192.168.1.103
+set deviceconfig system netmask 255.255.255.0
+set deviceconfig system default-gateway 192.168.1.254
+set deviceconfig system dns-setting servers primary 8.8.8.8
+set deviceconfig system ntp-servers primary-ntp-server ntp-server-address us.pool.ntp.org
+set deviceconfig system ntp-servers primary-ntp-server authentication-type none
