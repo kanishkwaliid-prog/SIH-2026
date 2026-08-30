@@ -1,0 +1,10 @@
+set system host-name branch-fw-03
+set system services ssh
+set system syslog file messages any critical
+set system login idle-timeout 10
+set system ntp server 192.168.1.1
+set system authentication-order [ radius password ]
+set security screen ids-option untrust-screen icmp ping-death
+set security flow tcp-mss all-tcp mss 1400
+set chassis cluster reth-count 2
+set groups node0 system host-name branch-fw-03-node0

@@ -39,6 +39,7 @@ class NormalizedConfig(BaseModel):
     logging_enabled: Optional[bool] = None
     password_encryption: Optional[str] = None   # e.g. "type7", "md5", "none"
     banner_configured: Optional[bool] = None
+    snmp_default_community: Optional[list[str]] = None   # e.g. ["public", "private"]
 
 
 class Finding(BaseModel):

@@ -1,0 +1,13 @@
+! Fictional "NetGuard OS" config - used to test unknown vendor handling
+device-name = "core-fw-01"
+mgmt-access {
+    protocol: secure-shell
+    protocol: legacy-telnet
+    idle-limit: 120s
+}
+audit-log {
+    enabled: false
+}
+credential-store {
+    hash-algo: none
+}
