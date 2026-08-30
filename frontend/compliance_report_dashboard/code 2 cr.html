@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ConfigGuard - Compliance Report Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#005236",
+                        "on-error": "#690005",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "inverse-primary": "#006a61",
+                        "primary-fixed-dim": "#6bd8cb",
+                        "on-primary-fixed-variant": "#005049",
+                        "inverse-on-surface": "#283044",
+                        "error-container": "#93000a",
+                        "error": "#ffb4ab",
+                        "surface": "#0b1326",
+                        "on-secondary-fixed": "#001d31",
+                        "primary-container": "#29a195",
+                        "inverse-surface": "#dae2fd",
+                        "surface-container-lowest": "#060e20",
+                        "secondary-fixed": "#cce5ff",
+                        "on-secondary-container": "#002c47",
+                        "outline": "#879391",
+                        "on-secondary": "#003351",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-tertiary-fixed": "#002113",
+                        "secondary": "#93ccff",
+                        "on-primary-container": "#00302b",
+                        "on-surface-variant": "#bcc9c6",
+                        "surface-container-highest": "#2d3449",
+                        "on-background": "#dae2fd",
+                        "on-primary-fixed": "#00201d",
+                        "secondary-fixed-dim": "#93ccff",
+                        "surface-dim": "#0b1326",
+                        "on-surface": "#dae2fd",
+                        "on-tertiary": "#003824",
+                        "on-tertiary-container": "#00311f",
+                        "surface-container": "#171f33",
+                        "surface-tint": "#6bd8cb",
+                        "surface-container-low": "#131b2e",
+                        "primary": "#6bd8cb",
+                        "tertiary-container": "#00a572",
+                        "surface-bright": "#31394d",
+                        "tertiary": "#4edea3",
+                        "on-secondary-fixed-variant": "#004b73",
+                        "background": "#0b1326",
+                        "outline-variant": "#3d4947",
+                        "secondary-container": "#3198dc",
+                        "on-primary": "#003732",
+                        "surface-variant": "#2d3449",
+                        "primary-fixed": "#89f5e7",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-high": "#222a3d"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "base": "4px",
+                        "xs": "4px",
+                        "margin-desktop": "48px",
+                        "gutter": "24px",
+                        "md": "16px",
+                        "margin-mobile": "16px",
+                        "lg": "24px",
+                        "xl": "32px",
+                        "sm": "8px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "title-md": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg-mobile": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "code-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "title-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.35s;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+        .code-block {
+            background-color: #060e20; /* surface-container-lowest */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #6bd8cb;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #6bd8cb;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md antialiased min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="bg-surface border-b border-outline-variant shadow-sm w-full sticky top-0 z-50">
+<div class="flex justify-between items-center px-margin-desktop w-full h-16 max-w-7xl mx-auto">
+<div class="flex items-center gap-gutter">
+<span class="font-headline-lg text-headline-lg font-bold text-primary hidden md:block">ConfigGuard</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary md:hidden">ConfigGuard</span>
+<nav class="hidden md:flex gap-lg ml-xl">
+<a class="text-primary border-b-2 border-primary pb-1 font-body-md text-body-md" href="#">Scans</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md active:scale-95 transition-transform" href="#">Rulesets</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md active:scale-95 transition-transform" href="#">Settings</a>
+</nav>
+</div>
+<div class="flex items-center gap-md">
+<button class="text-on-surface-variant hover:text-primary transition-colors active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-outline-variant overflow-hidden ml-sm">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="A futuristic, sleek minimalist user avatar showing a glowing abstract geometric security node on a deep charcoal background. Dark mode aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCuJY7Xt7lGmK5qGY4LmMgjNfAbtCu9fxOBu2z-c4LbNDStrJBQ8ApDHdEy1X5DecO_uecr-d3F_KdfrUTys6-vYxz9-Nxm-bh-e56khx4CaUzwu2eUYBs5hZQcSXp0JPUGG53SQ-aCDS8VuH7qQjieRbFvw_0DLgNkFGwBJNA9wD7AuvdXCvlHWV4VgzDjaqyrAujV9oOIDFv8sb7QcayZZHhRR7GqoskCL5W7G43tOe9lCxI1fJo0"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow w-full max-w-7xl mx-auto px-margin-mobile md:px-margin-desktop py-lg pb-32">
+<!-- Header & View Toggle -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-xl gap-md">
+<div>
+<h1 class="font-headline-lg text-headline-lg md:text-display-lg md:font-display-lg text-on-surface mb-sm">Compliance Report</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Scan completed: 2024-05-20 14:32:01 UTC</p>
+</div>
+<div class="flex items-center gap-sm bg-surface-container rounded-lg p-1 border border-outline-variant">
+<button class="px-md py-sm rounded bg-secondary-container text-on-secondary-container font-label-caps text-label-caps shadow-sm transition-colors" id="viewToggleSimple" onclick="toggleView('simple')">Simple View</button>
+<button class="px-md py-sm rounded text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors" id="viewToggleTech" onclick="toggleView('technical')">Technical View</button>
+</div>
+</div>
+<!-- Bento Grid Layout for Summary -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-md mb-xl">
+<!-- Asset Info Card -->
+<div class="bg-surface-container-low rounded-xl border border-outline-variant p-lg shadow-sm flex flex-col justify-center">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant mb-md tracking-wider">ASSET DETAILS</h2>
+<div class="space-y-md">
+<div>
+<span class="block font-label-caps text-label-caps text-on-surface-variant opacity-70">HOSTNAME</span>
+<span class="font-code-md text-code-md text-on-surface">edge-router-sjc-01</span>
+</div>
+<div>
+<span class="block font-label-caps text-label-caps text-on-surface-variant opacity-70">VENDOR</span>
+<span class="font-body-md text-body-md text-on-surface">Cisco Systems</span>
+</div>
+<div>
+<span class="block font-label-caps text-label-caps text-on-surface-variant opacity-70">SERIAL</span>
+<span class="font-code-md text-code-md text-on-surface">FGL2314QW9A</span>
+</div>
+</div>
+</div>
+<!-- Compliance Ring Card -->
+<div class="bg-surface-container-low rounded-xl border border-outline-variant p-lg shadow-sm flex flex-col items-center justify-center md:col-span-2 relative overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent z-0 pointer-events-none"></div>
+<h2 class="font-label-caps text-label-caps text-on-surface-variant mb-md tracking-wider self-start z-10 w-full">OVERALL SCORE</h2>
+<div class="flex items-center gap-xl z-10 w-full justify-around">
+<!-- Ring -->
+<div class="relative w-32 h-32 flex-shrink-0">
+<svg class="w-full h-full" viewbox="0 0 120 120">
+<!-- Background ring -->
+<circle class="text-surface-variant stroke-current" cx="60" cy="60" fill="transparent" r="50" stroke-width="8"></circle>
+<!-- Progress ring -->
+<circle class="text-primary stroke-current progress-ring__circle" cx="60" cy="60" fill="transparent" r="50" stroke-dasharray="314.159" stroke-dashoffset="87.964" stroke-linecap="round" stroke-width="8"></circle>
+</svg>
+<div class="absolute inset-0 flex items-center justify-center flex-col">
+<span class="font-headline-lg text-headline-lg text-primary font-bold">72%</span>
+</div>
+</div>
+<!-- Stat Pills -->
+<div class="flex flex-col gap-sm flex-grow max-w-xs">
+<div class="flex justify-between items-center bg-tertiary/10 border border-tertiary/20 rounded-lg px-md py-sm">
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-label-caps text-label-caps text-tertiary">PASSED</span>
+</div>
+<span class="font-title-md text-title-md text-tertiary">148</span>
+</div>
+<div class="flex justify-between items-center bg-error/10 border border-error/20 rounded-lg px-md py-sm">
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="font-label-caps text-label-caps text-error">FAILED</span>
+</div>
+<span class="font-title-md text-title-md text-error">12</span>
+</div>
+<div class="flex justify-between items-center bg-[#f59e0b]/10 border border-[#f59e0b]/20 rounded-lg px-md py-sm">
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-[#f59e0b]"></span>
+<span class="font-label-caps text-label-caps text-[#fbbf24]">WARNINGS</span>
+</div>
+<span class="font-title-md text-title-md text-[#fbbf24]">45</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Findings List -->
+<div class="mb-xl">
+<h2 class="font-title-md text-title-md text-on-surface mb-md">Findings (Failed)</h2>
+<div class="space-y-md">
+<!-- Finding Card 1 -->
+<div class="bg-surface-container-low rounded-xl border border-error/30 overflow-hidden shadow-sm transition-all hover:border-error/50">
+<!-- Header -->
+<div class="p-md bg-surface-container border-b border-outline-variant flex flex-wrap justify-between items-center gap-md cursor-pointer" onclick="toggleCard(this)">
+<div class="flex items-center gap-md">
+<div class="bg-error/20 text-error px-sm py-xs rounded font-label-caps text-label-caps border border-error/30 flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]" data-icon="gpp_bad" data-weight="fill">gpp_bad</span>
+                                CRITICAL
+                            </div>
+<span class="font-code-md text-code-md text-on-surface bg-surface-variant px-sm py-xs rounded border border-outline-variant">CIS-4.2.1</span>
+<span class="font-title-md text-title-md text-on-surface">SSH Root Login Enabled</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant transition-transform transform">expand_more</span>
+</div>
+<!-- Content Body -->
+<div class="p-md space-y-md">
+<!-- Simple View Content -->
+<div class="view-simple">
+<p class="font-body-md text-body-md text-on-surface-variant">
+                                Direct root login via SSH is currently permitted. This poses a significant security risk as it allows attackers to attempt brute-force attacks directly against the highest privilege account.
+                            </p>
+</div>
+<!-- Technical View Content -->
+<div class="view-technical hidden space-y-md">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<div class="bg-surface-container-highest rounded border border-outline-variant p-sm">
+<span class="block font-label-caps text-label-caps text-error mb-xs">FOUND CONFIGURATION</span>
+<pre class="font-code-md text-code-md text-on-surface overflow-x-auto text-error">PermitRootLogin yes</pre>
+</div>
+<div class="bg-surface-container-highest rounded border border-outline-variant p-sm">
+<span class="block font-label-caps text-label-caps text-tertiary mb-xs">EXPECTED CONFIGURATION</span>
+<pre class="font-code-md text-code-md text-on-surface overflow-x-auto text-tertiary">PermitRootLogin no</pre>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-center mb-xs">
+<span class="font-label-caps text-label-caps text-on-surface-variant">REMEDIATION CLI</span>
+<button class="text-primary hover:text-primary-fixed-dim transition-colors flex items-center gap-xs text-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="content_copy">content_copy</span>
+                                        Copy
+                                    </button>
+</div>
+<div class="code-block rounded-lg p-md overflow-x-auto relative group">
+<pre class="font-code-md text-code-md text-secondary">conf t
+line vty 0 4
+ no permit root login
+end
+write memory</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Fixed Bottom Actions -->
+<div class="fixed bottom-0 left-0 right-0 bg-surface-container/90 backdrop-blur-md border-t border-outline-variant p-md flex justify-center z-40 shadow-[0_-4px_24px_rgba(0,0,0,0.5)]">
+<button class="bg-gradient-to-r from-[#0d9488] to-[#0f766e] text-white px-xl py-sm rounded-lg font-title-md text-title-md shadow-lg hover:shadow-primary/20 transition-all flex items-center gap-sm active:scale-95">
+<span class="material-symbols-outlined" data-icon="download">download</span>
+            Download Full Report (PDF)
+        </button>
+</div>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest border-t border-outline-variant w-full mt-auto relative z-10 pb-20">
+<div class="flex justify-between items-center px-margin-desktop py-sm w-full max-w-7xl mx-auto">
+<span class="font-label-caps text-label-caps text-on-surface-variant">© 2024 ConfigGuard. All systems operational.</span>
+<div class="flex gap-lg">
+<a class="font-body-sm text-body-sm text-tertiary opacity-80 hover:opacity-100 hover:text-primary transition-all" href="#">Privacy Policy</a>
+<a class="font-body-sm text-body-sm text-tertiary opacity-80 hover:opacity-100 hover:text-primary transition-all" href="#">Terms of Service</a>
+<a class="font-body-sm text-body-sm text-tertiary opacity-80 hover:opacity-100 hover:text-primary transition-all" href="#">Help Center</a>
+</div>
+</div>
+</footer>
+<script>
+        function toggleView(view) {
+            const btnSimple = document.getElementById('viewToggleSimple');
+            const btnTech = document.getElementById('viewToggleTech');
+            const simpleViews = document.querySelectorAll('.view-simple');
+            const techViews = document.querySelectorAll('.view-technical');
+            
+            if(view === 'simple') {
+                btnSimple.className = "px-md py-sm rounded bg-secondary-container text-on-secondary-container font-label-caps text-label-caps shadow-sm transition-colors";
+                btnTech.className = "px-md py-sm rounded text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors";
+                
+                simpleViews.forEach(el => el.classList.remove('hidden'));
+                techViews.forEach(el => el.classList.add('hidden'));
+            } else {
+                btnTech.className = "px-md py-sm rounded bg-secondary-container text-on-secondary-container font-label-caps text-label-caps shadow-sm transition-colors";
+                btnSimple.className = "px-md py-sm rounded text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors";
+                
+                techViews.forEach(el => el.classList.remove('hidden'));
+                simpleViews.forEach(el => el.classList.add('hidden'));
+            }
+        }
+
+        function toggleCard(headerElement) {
+            const body = headerElement.nextElementSibling;
+            const icon = headerElement.querySelector('.material-symbols-outlined:last-child');
+            
+            // Toggle body visibility (assuming it starts open for this example, or toggle a class)
+            // For a robust implementation you'd use max-height transitions, keeping it simple here
+            if (icon.textContent === 'expand_more') {
+                icon.textContent = 'expand_less';
+                icon.classList.add('rotate-180');
+            } else {
+                icon.textContent = 'expand_more';
+                icon.classList.remove('rotate-180');
+            }
+        }
+    </script>
+</body></html>
