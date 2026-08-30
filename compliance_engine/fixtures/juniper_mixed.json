@@ -1,0 +1,17 @@
+{
+  "device": {
+    "vendor": "juniper_junos",
+    "hostname": "fw-edge-j1",
+    "os_version": "20.4R3",
+    "detection_confidence": "high"
+  },
+  "config": {
+    "ssh_enabled": true,
+    "telnet_enabled": true,
+    "session_timeout_seconds": 900,
+    "logging_enabled": true,
+    "password_encryption": "sha256",
+    "banner_configured": false,
+    "snmp_default_community": ["public"]
+  }
+}
