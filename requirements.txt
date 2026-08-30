@@ -10,9 +10,12 @@ pyyaml==6.0.2
 
 # LLM API (Block 2b)
 groq==1.7.0
+anthropic==0.34.2
 
 # PDF report generation (Block 4)
 weasyprint==62.3
+jinja2==3.1.6
+pydyf==0.10.0
 
 # Environment variables
 python-dotenv==1.0.1
