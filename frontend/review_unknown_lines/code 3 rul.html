@@ -202,101 +202,99 @@
 <thead class="bg-surface-container-high border-b border-outline-variant">
 <tr>
 <th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant">Raw Config Line</th>
-<th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant">AI's Suggested Category</th>
+<th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant">AI's Suggested Field</th>
 <th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant">Confidence</th>
 <th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant text-right">Action</th>
 </tr>
 </thead>
-<tbody class="divide-y divide-outline-variant">
-<!-- Row 1 -->
-<tr class="hover:bg-surface-variant transition-colors group">
-<td class="py-md px-lg">
-<div class="bg-surface-container-lowest p-sm rounded border border-outline-variant inline-block">
-<code class="font-code-md text-code-md text-tertiary">aaa authentication login default local</code>
-</div>
-</td>
-<td class="py-md px-lg">
-<select class="bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5">
-<option selected="">Authentication</option>
-<option>Logging</option>
-<option>Encryption</option>
-<option>Access Control</option>
-<option>Other</option>
-</select>
-</td>
-<td class="py-md px-lg">
-<span class="bg-primary/10 text-primary font-label-caps text-label-caps px-2 py-1 rounded-full border border-primary/20">AI suggested this</span>
-</td>
-<td class="py-md px-lg text-right">
-<div class="flex justify-end gap-sm">
-<button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span></button>
-<button class="text-on-surface-variant hover:text-tertiary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="check">check</span></button>
-</div>
-</td>
-</tr>
-<!-- Row 2 -->
-<tr class="hover:bg-surface-variant transition-colors group">
-<td class="py-md px-lg">
-<div class="bg-surface-container-lowest p-sm rounded border border-outline-variant inline-block">
-<code class="font-code-md text-code-md text-tertiary">logging host 192.168.1.100 transport udp port 514</code>
-</div>
-</td>
-<td class="py-md px-lg">
-<select class="bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5">
-<option>Authentication</option>
-<option selected="">Logging</option>
-<option>Encryption</option>
-<option>Access Control</option>
-<option>Other</option>
-</select>
-</td>
-<td class="py-md px-lg">
-<span class="bg-primary/10 text-primary font-label-caps text-label-caps px-2 py-1 rounded-full border border-primary/20">AI suggested this</span>
-</td>
-<td class="py-md px-lg text-right">
-<div class="flex justify-end gap-sm">
-<button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span></button>
-<button class="text-on-surface-variant hover:text-tertiary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="check">check</span></button>
-</div>
-</td>
-</tr>
-<!-- Row 3 -->
-<tr class="hover:bg-surface-variant transition-colors group">
-<td class="py-md px-lg">
-<div class="bg-surface-container-lowest p-sm rounded border border-outline-variant inline-block">
-<code class="font-code-md text-code-md text-tertiary">crypto isakmp policy 10</code>
-</div>
-</td>
-<td class="py-md px-lg">
-<select class="bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5">
-<option>Authentication</option>
-<option>Logging</option>
-<option selected="">Encryption</option>
-<option>Access Control</option>
-<option>Other</option>
-</select>
-</td>
-<td class="py-md px-lg">
-<span class="bg-primary/10 text-primary font-label-caps text-label-caps px-2 py-1 rounded-full border border-primary/20">AI suggested this</span>
-</td>
-<td class="py-md px-lg text-right">
-<div class="flex justify-end gap-sm">
-<button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span></button>
-<button class="text-on-surface-variant hover:text-tertiary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="check">check</span></button>
-</div>
-</td>
-</tr>
+<tbody id="pendingConfirmationsBody" class="divide-y divide-outline-variant">
+<!-- Rows are rendered by renderPendingConfirmations() below -->
 </tbody>
 </table>
 </div>
 <!-- Footer Actions -->
 <div class="bg-surface-container-high border-t border-outline-variant p-lg flex flex-col sm:flex-row justify-between items-center gap-md">
 <p class="font-body-sm text-on-surface-variant">You'll only need to do this once per line type — we'll remember it next time.</p>
-<button class="bg-primary/50 text-on-primary-fixed/50 font-title-md text-title-md px-xl py-sm rounded-lg cursor-not-allowed transition-colors w-full sm:w-auto" disabled="">
+<button id="confirmAllBtn" class="bg-primary text-on-primary-fixed font-title-md text-title-md px-xl py-sm rounded-lg transition-colors w-full sm:w-auto" disabled="">
                     Confirm All &amp; Continue
                 </button>
 </div>
 </div>
+
+<script>
+// These are the real NormalizedConfig field names from shared/schema.py --
+// the dropdown MUST use these exact values, since /confirm sends the
+// selected value straight through to apply_confirmation(field=...).
+const FIELD_OPTIONS = [
+  { value: "ssh_enabled",              label: "SSH Enabled" },
+  { value: "telnet_enabled",           label: "Telnet Enabled" },
+  { value: "session_timeout_seconds",  label: "Session Timeout (seconds)" },
+  { value: "logging_enabled",          label: "Logging Enabled" },
+  { value: "password_encryption",      label: "Password Encryption" },
+  { value: "banner_configured",        label: "Banner Configured" },
+  { value: "snmp_default_community",   label: "SNMP Community String" },
+  { value: "unclear",                  label: "Unclear / Not Applicable" },
+];
+
+// Placeholder data shaped exactly like the real API's pending_confirmations
+// array (see POST /upload in api.py). Once wired up, replace this with the
+// actual array returned from that call -- nothing else here needs to change.
+let pendingConfirmations = [
+  { raw_line: "ip ssh authentication-retries 3", suggested_field: "unclear", suggested_value: null, confidence: 0.98, reasoning: "Sets SSH authentication retries, not a defined field" },
+  { raw_line: "logging enable", suggested_field: "logging_enabled", suggested_value: true, confidence: 0.97, reasoning: "Enables syslog logging on Cisco IOS" },
+  { raw_line: "log config", suggested_field: "unclear", suggested_value: null, confidence: 0.6, reasoning: "Does not match any known command for the defined fields" },
+];
+
+function confidenceStyle(confidence) {
+  // Real percentage, color-coded so a shaky guess LOOKS different from a
+  // confident one -- not just a flat "AI suggested this" label every time.
+  if (confidence >= 0.85) return "bg-primary/10 text-primary border-primary/20";
+  if (confidence >= 0.5)  return "bg-secondary/10 text-secondary border-secondary/20";
+  return "bg-error/10 text-error border-error/20";
+}
+
+function renderPendingConfirmations() {
+  const tbody = document.getElementById("pendingConfirmationsBody");
+  tbody.innerHTML = "";
+
+  pendingConfirmations.forEach((item, index) => {
+    const pct = Math.round(item.confidence * 100);
+    const optionsHtml = FIELD_OPTIONS.map(opt =>
+      `<option value="${opt.value}" ${opt.value === item.suggested_field ? "selected" : ""}>${opt.label}</option>`
+    ).join("");
+
+    const row = document.createElement("tr");
+    row.className = "hover:bg-surface-variant transition-colors group";
+    row.dataset.rawLine = item.raw_line;
+    row.innerHTML = `
+      <td class="py-md px-lg">
+        <div class="bg-surface-container-lowest p-sm rounded border border-outline-variant inline-block">
+          <code class="font-code-md text-code-md text-tertiary">${item.raw_line}</code>
+        </div>
+      </td>
+      <td class="py-md px-lg">
+        <select data-index="${index}" class="field-select bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5">
+          ${optionsHtml}
+        </select>
+      </td>
+      <td class="py-md px-lg">
+        <span title="${item.reasoning || ''}" class="${confidenceStyle(item.confidence)} font-label-caps text-label-caps px-2 py-1 rounded-full border">${pct}% confident</span>
+      </td>
+      <td class="py-md px-lg text-right">
+        <div class="flex justify-end gap-sm">
+          <button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span></button>
+          <button class="text-on-surface-variant hover:text-tertiary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="check">check</span></button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  document.getElementById("confirmAllBtn").disabled = pendingConfirmations.length === 0;
+}
+
+renderPendingConfirmations();
+</script>
 </main>
 <!-- Footer -->
 <footer class="bg-surface-container-lowest border-t border-outline-variant w-full flex flex-col sm:flex-row justify-between items-center px-margin-desktop py-sm mt-auto z-50">
