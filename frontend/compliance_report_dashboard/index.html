@@ -129,10 +129,12 @@
 <header class="bg-surface border-b border-outline-variant shadow-sm w-full sticky top-0 z-50">
 <div class="flex justify-between items-center px-margin-desktop w-full h-16 max-w-7xl mx-auto">
 <div class="flex items-center gap-gutter">
+<a href="../upload_configuration/index.html" class="flex items-center gap-sm">
 <span class="font-headline-lg text-headline-lg font-bold text-primary hidden md:block">ConfigGuard</span>
 <span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary md:hidden">ConfigGuard</span>
+</a>
 <nav class="hidden md:flex gap-lg ml-xl">
-<a class="text-primary border-b-2 border-primary pb-1 font-body-md text-body-md" href="#">Scans</a>
+<a class="text-primary border-b-2 border-primary pb-1 font-body-md text-body-md" href="../upload_configuration/index.html">Scans</a>
 <a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md active:scale-95 transition-transform" href="#">Rulesets</a>
 <a class="text-on-surface-variant hover:text-primary transition-colors font-body-md text-body-md active:scale-95 transition-transform" href="#">Settings</a>
 </nav>
@@ -160,6 +162,10 @@
 </div>
 <div class="flex items-center gap-md">
 <select id="deviceSelect" class="hidden bg-surface-container border border-outline-variant rounded-lg py-sm px-md font-body-sm text-body-sm text-on-surface"></select>
+<a href="../upload_configuration/index.html" class="flex items-center gap-xs bg-surface-container hover:bg-surface-container-high border border-outline-variant text-on-surface font-label-caps text-label-caps px-md py-sm rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[18px]">add</span>
+New Scan
+</a>
 <div class="flex items-center gap-sm bg-surface-container rounded-lg p-1 border border-outline-variant">
 <button class="px-md py-sm rounded bg-secondary-container text-on-secondary-container font-label-caps text-label-caps shadow-sm transition-colors" id="viewToggleSimple" onclick="toggleView('simple')">Simple View</button>
 <button class="px-md py-sm rounded text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors" id="viewToggleTech" onclick="toggleView('technical')">Technical View</button>
