@@ -178,7 +178,7 @@
 </div>
 <div class="hidden md:flex items-center gap-gutter">
 <div class="flex space-x-md">
-<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md active:scale-95 transition-transform" href="#">Scans</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md active:scale-95 transition-transform" href="../upload_configuration/index.html">Scans</a>
 <a class="text-on-surface-variant hover:text-primary transition-colors font-body-md active:scale-95 transition-transform" href="#">Rulesets</a>
 <a class="text-on-surface-variant hover:text-primary transition-colors font-body-md active:scale-95 transition-transform" href="#">Settings</a>
 </div>
@@ -202,101 +202,152 @@
 <thead class="bg-surface-container-high border-b border-outline-variant">
 <tr>
 <th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant">Raw Config Line</th>
-<th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant">AI's Suggested Category</th>
+<th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant">AI's Suggested Field</th>
 <th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant">Confidence</th>
 <th class="py-md px-lg font-label-caps text-label-caps text-on-surface-variant text-right">Action</th>
 </tr>
 </thead>
-<tbody class="divide-y divide-outline-variant">
-<!-- Row 1 -->
-<tr class="hover:bg-surface-variant transition-colors group">
-<td class="py-md px-lg">
-<div class="bg-surface-container-lowest p-sm rounded border border-outline-variant inline-block">
-<code class="font-code-md text-code-md text-tertiary">aaa authentication login default local</code>
-</div>
-</td>
-<td class="py-md px-lg">
-<select class="bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5">
-<option selected="">Authentication</option>
-<option>Logging</option>
-<option>Encryption</option>
-<option>Access Control</option>
-<option>Other</option>
-</select>
-</td>
-<td class="py-md px-lg">
-<span class="bg-primary/10 text-primary font-label-caps text-label-caps px-2 py-1 rounded-full border border-primary/20">AI suggested this</span>
-</td>
-<td class="py-md px-lg text-right">
-<div class="flex justify-end gap-sm">
-<button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span></button>
-<button class="text-on-surface-variant hover:text-tertiary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="check">check</span></button>
-</div>
-</td>
-</tr>
-<!-- Row 2 -->
-<tr class="hover:bg-surface-variant transition-colors group">
-<td class="py-md px-lg">
-<div class="bg-surface-container-lowest p-sm rounded border border-outline-variant inline-block">
-<code class="font-code-md text-code-md text-tertiary">logging host 192.168.1.100 transport udp port 514</code>
-</div>
-</td>
-<td class="py-md px-lg">
-<select class="bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5">
-<option>Authentication</option>
-<option selected="">Logging</option>
-<option>Encryption</option>
-<option>Access Control</option>
-<option>Other</option>
-</select>
-</td>
-<td class="py-md px-lg">
-<span class="bg-primary/10 text-primary font-label-caps text-label-caps px-2 py-1 rounded-full border border-primary/20">AI suggested this</span>
-</td>
-<td class="py-md px-lg text-right">
-<div class="flex justify-end gap-sm">
-<button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span></button>
-<button class="text-on-surface-variant hover:text-tertiary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="check">check</span></button>
-</div>
-</td>
-</tr>
-<!-- Row 3 -->
-<tr class="hover:bg-surface-variant transition-colors group">
-<td class="py-md px-lg">
-<div class="bg-surface-container-lowest p-sm rounded border border-outline-variant inline-block">
-<code class="font-code-md text-code-md text-tertiary">crypto isakmp policy 10</code>
-</div>
-</td>
-<td class="py-md px-lg">
-<select class="bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5">
-<option>Authentication</option>
-<option>Logging</option>
-<option selected="">Encryption</option>
-<option>Access Control</option>
-<option>Other</option>
-</select>
-</td>
-<td class="py-md px-lg">
-<span class="bg-primary/10 text-primary font-label-caps text-label-caps px-2 py-1 rounded-full border border-primary/20">AI suggested this</span>
-</td>
-<td class="py-md px-lg text-right">
-<div class="flex justify-end gap-sm">
-<button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span></button>
-<button class="text-on-surface-variant hover:text-tertiary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="check">check</span></button>
-</div>
-</td>
-</tr>
+<tbody id="pendingConfirmationsBody" class="divide-y divide-outline-variant">
+<!-- Rows are rendered by renderPendingConfirmations() below -->
 </tbody>
 </table>
 </div>
 <!-- Footer Actions -->
 <div class="bg-surface-container-high border-t border-outline-variant p-lg flex flex-col sm:flex-row justify-between items-center gap-md">
 <p class="font-body-sm text-on-surface-variant">You'll only need to do this once per line type — we'll remember it next time.</p>
-<button class="bg-primary/50 text-on-primary-fixed/50 font-title-md text-title-md px-xl py-sm rounded-lg cursor-not-allowed transition-colors w-full sm:w-auto" disabled="">
+<button id="confirmAllBtn" class="bg-primary text-on-primary-fixed font-title-md text-title-md px-xl py-sm rounded-lg transition-colors w-full sm:w-auto" disabled="">
                     Confirm All &amp; Continue
                 </button>
 </div>
 </div>
+
+<script src="../shared.js"></script>
+<script>
+// These are the real NormalizedConfig field names from shared/schema.py --
+// the dropdown MUST use these exact values, since /confirm sends the
+// selected value straight through to apply_confirmation(field=...).
+const FIELD_OPTIONS = [
+  { value: "ssh_enabled",              label: "SSH Enabled" },
+  { value: "telnet_enabled",           label: "Telnet Enabled" },
+  { value: "session_timeout_seconds",  label: "Session Timeout (seconds)" },
+  { value: "logging_enabled",          label: "Logging Enabled" },
+  { value: "password_encryption",      label: "Password Encryption" },
+  { value: "banner_configured",        label: "Banner Configured" },
+  { value: "snmp_default_community",   label: "SNMP Community String" },
+  { value: "unclear",                  label: "Unclear / Not Applicable" },
+];
+
+const sessionId = getUrlParam("session");
+const session = sessionId ? getSessionById(sessionId) : null;
+
+if (!session) {
+  window.location.href = "../upload_configuration/index.html";
+}
+
+// Real data from this session's /upload response, not placeholders.
+let pendingConfirmations = session ? session.pending_confirmations.slice() : [];
+
+function confidenceStyle(confidence) {
+  // Real percentage, color-coded so a shaky guess LOOKS different from a
+  // confident one -- not just a flat "AI suggested this" label every time.
+  if (confidence >= 0.85) return "bg-primary/10 text-primary border-primary/20";
+  if (confidence >= 0.5)  return "bg-secondary/10 text-secondary border-secondary/20";
+  return "bg-error/10 text-error border-error/20";
+}
+
+function renderPendingConfirmations() {
+  const tbody = document.getElementById("pendingConfirmationsBody");
+  tbody.innerHTML = "";
+
+  pendingConfirmations.forEach((item, index) => {
+    const pct = Math.round(item.confidence * 100);
+    const optionsHtml = FIELD_OPTIONS.map(opt =>
+      `<option value="${opt.value}" ${opt.value === item.suggested_field ? "selected" : ""}>${opt.label}</option>`
+    ).join("");
+
+    const needsValue = item.suggested_field !== "unclear";
+    const valueInput = needsValue
+      ? `<input type="text" data-value-index="${index}" value="${item.suggested_value ?? ""}" placeholder="value" class="mt-xs bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg block w-full p-2 font-code-md" />`
+      : "";
+
+    const row = document.createElement("tr");
+    row.className = "hover:bg-surface-variant transition-colors group";
+    row.dataset.rawLine = item.raw_line;
+    row.innerHTML = `
+      <td class="py-md px-lg">
+        <div class="bg-surface-container-lowest p-sm rounded border border-outline-variant inline-block">
+          <code class="font-code-md text-code-md text-tertiary">${item.raw_line}</code>
+        </div>
+      </td>
+      <td class="py-md px-lg">
+        <select data-index="${index}" class="field-select bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5">
+          ${optionsHtml}
+        </select>
+        ${valueInput}
+      </td>
+      <td class="py-md px-lg">
+        <span title="${item.reasoning || ''}" class="${confidenceStyle(item.confidence)} font-label-caps text-label-caps px-2 py-1 rounded-full border">${pct}% confident</span>
+      </td>
+      <td class="py-md px-lg text-right">
+        <span class="text-tertiary text-[13px]">Ready</span>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  document.getElementById("confirmAllBtn").disabled = pendingConfirmations.length === 0;
+
+  // When the dropdown changes, show/hide the value input for that row.
+  tbody.querySelectorAll(".field-select").forEach((select) => {
+    select.addEventListener("change", (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      pendingConfirmations[idx].suggested_field = e.target.value;
+      renderPendingConfirmations();
+    });
+  });
+
+  tbody.querySelectorAll("[data-value-index]").forEach((input) => {
+    input.addEventListener("input", (e) => {
+      const idx = parseInt(e.target.dataset.valueIndex, 10);
+      pendingConfirmations[idx].suggested_value = e.target.value;
+    });
+  });
+}
+
+renderPendingConfirmations();
+
+document.getElementById("confirmAllBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("confirmAllBtn");
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+
+  // Coerce simple typed values (booleans, numbers) since the input
+  // fields are plain text -- apply_confirmation stores whatever we send.
+  const confirmations = pendingConfirmations.map((item) => {
+    let value = item.suggested_value;
+    if (item.suggested_field === "unclear") {
+      value = null;
+    } else if (value === "true") {
+      value = true;
+    } else if (value === "false") {
+      value = false;
+    } else if (value !== null && value !== "" && !isNaN(value) && item.suggested_field === "session_timeout_seconds") {
+      value = Number(value);
+    }
+    return { raw_line: item.raw_line, field: item.suggested_field, value: value };
+  });
+
+  try {
+    const result = await confirmLines(sessionId, confirmations, "demo-user");
+    updateSession(sessionId, { config: result.config, pending_confirmations: [] });
+    routeToNextStep();
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "Confirm All & Continue";
+    alert("Couldn't save confirmations. Check the backend is running and try again.");
+  }
+});
+</script>
 </main>
 <!-- Footer -->
 <footer class="bg-surface-container-lowest border-t border-outline-variant w-full flex flex-col sm:flex-row justify-between items-center px-margin-desktop py-sm mt-auto z-50">
