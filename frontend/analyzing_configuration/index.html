@@ -190,38 +190,42 @@
 </div>
 </div>
 <!-- Status Header -->
-<h2 class="font-title-md text-title-md text-on-surface mb-sm text-center">Processing Scan</h2>
-<p class="font-body-sm text-body-sm text-tertiary mb-xl text-center pulse-dot">De-identifying sensitive data...</p>
+<h2 class="font-title-md text-title-md text-on-surface mb-sm text-center" id="statusHeader">Processing Scan</h2>
+<p class="font-body-sm text-body-sm text-tertiary mb-xl text-center pulse-dot" id="statusSubtext">Uploading and parsing your configuration...</p>
 <!-- Vertical Stepper -->
-<div class="w-full flex flex-col gap-md pl-4 border-l border-outline-variant/50 relative">
+<div class="w-full flex flex-col gap-md pl-4 border-l border-outline-variant/50 relative" id="stepper">
 <!-- Step 1: Active -->
 <div class="flex items-start gap-md relative">
-<div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-primary shadow-[0_0_8px_rgba(107,216,203,0.6)] pulse-dot"></div>
+<div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-primary shadow-[0_0_8px_rgba(107,216,203,0.6)] pulse-dot" id="step1Dot"></div>
 <div class="flex flex-col">
-<span class="font-body-md text-body-md text-on-surface font-medium">Parsing config</span>
+<span class="font-body-md text-body-md text-on-surface font-medium" id="step1Label">Parsing config</span>
 </div>
 </div>
 <!-- Step 2: Pending -->
 <div class="flex items-start gap-md relative">
-<div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-surface-variant border border-outline-variant"></div>
+<div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-surface-variant border border-outline-variant" id="step2Dot"></div>
 <div class="flex flex-col">
-<span class="font-body-md text-body-md text-on-surface-variant">Checking unknown lines</span>
+<span class="font-body-md text-body-md text-on-surface-variant" id="step2Label">Checking unknown lines</span>
 </div>
 </div>
 <!-- Step 3: Pending -->
 <div class="flex items-start gap-md relative">
-<div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-surface-variant border border-outline-variant"></div>
+<div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-surface-variant border border-outline-variant" id="step3Dot"></div>
 <div class="flex flex-col">
-<span class="font-body-md text-body-md text-on-surface-variant">Comparing against ruleset</span>
+<span class="font-body-md text-body-md text-on-surface-variant" id="step3Label">Comparing against ruleset</span>
 </div>
 </div>
 <!-- Step 4: Pending -->
 <div class="flex items-start gap-md relative">
-<div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-surface-variant border border-outline-variant"></div>
+<div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-surface-variant border border-outline-variant" id="step4Dot"></div>
 <div class="flex flex-col">
-<span class="font-body-md text-body-md text-on-surface-variant">Generating report</span>
+<span class="font-body-md text-body-md text-on-surface-variant" id="step4Label">Generating report</span>
 </div>
 </div>
+</div>
+<div id="errorBox" class="hidden w-full mt-lg bg-error-container/20 border border-error/30 rounded-lg p-md text-center">
+<p class="font-body-sm text-body-sm text-error mb-sm" id="errorText"></p>
+<a href="../upload_configuration/index.html" class="font-body-sm text-body-sm text-primary hover:underline">← Back to upload</a>
 </div>
 </div>
 </main>
@@ -236,4 +240,67 @@
 <a class="font-body-sm text-body-sm text-tertiary dark:text-tertiary opacity-80 hover:opacity-100 transition-opacity" href="#">Help Center</a>
 </div>
 </footer>
+<script src="../shared.js"></script>
+<script>
+    function markStepDone(dotId) {
+      const dot = document.getElementById(dotId);
+      dot.classList.remove("bg-surface-variant", "border", "border-outline-variant", "pulse-dot");
+      dot.classList.add("bg-primary");
+    }
+
+    function markStepActive(dotId) {
+      const dot = document.getElementById(dotId);
+      dot.classList.remove("bg-surface-variant", "border", "border-outline-variant");
+      dot.classList.add("bg-primary", "shadow-[0_0_8px_rgba(107,216,203,0.6)]", "pulse-dot");
+    }
+
+    function showFatalError(message) {
+      document.getElementById("statusSubtext").textContent = "Something went wrong.";
+      document.getElementById("errorText").textContent = message;
+      document.getElementById("errorBox").classList.remove("hidden");
+    }
+
+    async function runUpload() {
+      const raw = sessionStorage.getItem("pendingUpload");
+      if (!raw) {
+        // Nobody uploaded anything -- send them back rather than showing
+        // a spinner that never resolves.
+        window.location.href = "../upload_configuration/index.html";
+        return;
+      }
+
+      const { files, vendorHint } = JSON.parse(raw);
+
+      try {
+        markStepActive("step1Dot");
+        const results = await uploadConfigs(files, vendorHint);
+        // Attach each file's raw text to its session -- needed later if
+        // the user switches vendors and we need to re-run /upload with a
+        // corrected hint (order is preserved by the API, matching by index).
+        results.forEach((r, i) => {
+          if (files[i]) r.raw_text = files[i].text;
+        });
+        markStepDone("step1Dot");
+
+        // Block 2b's LLM fallback already ran as part of the same
+        // /upload call (see api.py) -- this step is shown briefly for
+        // clarity even though it already happened synchronously above.
+        markStepActive("step2Dot");
+        setSessions(results);
+        sessionStorage.removeItem("pendingUpload");
+        markStepDone("step2Dot");
+
+        // Steps 3/4 (compliance check + report generation) happen later,
+        // after any human confirmations are resolved -- so we hand off
+        // to the router now rather than waiting here.
+        routeToNextStep();
+      } catch (err) {
+        showFatalError(
+          "Couldn't reach the analysis server. Make sure the backend is running (uvicorn api:app --port 8000) and try again."
+        );
+      }
+    }
+
+    runUpload();
+</script>
 </body></html>
