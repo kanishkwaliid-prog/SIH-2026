@@ -170,14 +170,15 @@
 <div class="w-16 h-16 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center text-primary group-hover:scale-110 group-hover:bg-primary/10 transition-transform duration-300">
 <span class="material-symbols-outlined text-4xl" data-icon="cloud_upload">cloud_upload</span>
 </div>
-<div class="flex flex-col gap-xs">
+<div class="flex flex-col gap-xs" id="fileNameDisplay">
 <h3 class="font-title-md text-title-md text-on-surface">Drop your config file here or <span class="text-primary hover:underline cursor-pointer">browse</span></h3>
-<p class="font-body-sm text-body-sm text-on-surface-variant">Supports .txt, .cfg, .conf, .xml (Max 10MB)</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Supports .txt, .cfg, .conf, .xml (Max 10MB) — multiple files allowed</p>
 </div>
 </div>
 <!-- Hidden File Input -->
-<input accept=".txt,.cfg,.conf,.xml" aria-label="Upload configuration file" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" type="file"/>
+<input accept=".txt,.cfg,.conf,.xml" aria-label="Upload configuration file" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" id="fileInput" multiple="" type="file"/>
 </div>
+<p id="errorMsg" class="font-body-sm text-body-sm text-error hidden"></p>
 <!-- Settings & CTA Container -->
 <div class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-md shadow-[0_8px_32px_rgba(0,0,0,0.2)]">
 <!-- Vendor Dropdown -->
@@ -199,7 +200,7 @@
                         </p>
 </div>
 <!-- CTA Button -->
-<button class="mt-sm w-full bg-gradient-to-r from-primary-container to-[#0f766e] hover:from-primary hover:to-primary-container text-on-primary-container font-title-md text-title-md py-md px-lg rounded-lg shadow-[0_0_20px_rgba(41,161,149,0.2)] hover:shadow-[0_0_25px_rgba(107,216,203,0.4)] transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-sm font-medium">
+<button class="mt-sm w-full bg-gradient-to-r from-primary-container to-[#0f766e] hover:from-primary hover:to-primary-container text-on-primary-container font-title-md text-title-md py-md px-lg rounded-lg shadow-[0_0_20px_rgba(41,161,149,0.2)] hover:shadow-[0_0_25px_rgba(107,216,203,0.4)] transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none" id="analyzeBtn">
 <span class="material-symbols-outlined" data-icon="troubleshoot" data-weight="fill">troubleshoot</span>
                         Analyze Configuration
                     </button>
@@ -379,4 +380,86 @@
             dropzone.classList.add('border-outline-variant', 'bg-surface-container-low');
         }
     </script>
+<script src="../shared.js"></script>
+<script>
+    // Maps the friendly dropdown values to the exact vendor names Block 2a
+    // knows about (see converter/parsers/__init__.py's dispatch table).
+    // "auto" and "fortinet" both send no hint -- fortinet has no parser
+    // yet, so sending it as a hint would just cause a guaranteed mismatch.
+    const VENDOR_MAP = {
+      auto: null,
+      cisco: "cisco_ios",
+      juniper: "juniper_junos",
+      "palo-alto": "palo_alto",
+      fortinet: null,
+    };
+
+    const fileInput = document.getElementById("fileInput");
+    const fileNameDisplay = document.getElementById("fileNameDisplay");
+    const analyzeBtn = document.getElementById("analyzeBtn");
+    const errorMsg = document.getElementById("errorMsg");
+    const vendorSelect = document.getElementById("vendor-select");
+
+    let selectedFiles = [];
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.remove("hidden");
+    }
+
+    function clearError() {
+      errorMsg.classList.add("hidden");
+    }
+
+    fileInput.addEventListener("change", () => {
+      selectedFiles = Array.from(fileInput.files);
+      clearError();
+      if (selectedFiles.length === 0) {
+        fileNameDisplay.innerHTML = `
+          <h3 class="font-title-md text-title-md text-on-surface">Drop your config file here or <span class="text-primary hover:underline cursor-pointer">browse</span></h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">Supports .txt, .cfg, .conf, .xml (Max 10MB) — multiple files allowed</p>
+        `;
+      } else {
+        const names = selectedFiles.map((f) => f.name).join(", ");
+        fileNameDisplay.innerHTML = `
+          <h3 class="font-title-md text-title-md text-primary">${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""} selected</h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">${names}</p>
+        `;
+      }
+    });
+
+    analyzeBtn.addEventListener("click", async () => {
+      clearError();
+      if (selectedFiles.length === 0) {
+        showError("Please select at least one config file before analyzing.");
+        return;
+      }
+
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = "Reading files...";
+
+      try {
+        const fileTextEntries = await Promise.all(
+          selectedFiles.map(async (file) => ({
+            filename: file.name,
+            text: await file.text(),
+          }))
+        );
+
+        const vendorHint = VENDOR_MAP[vendorSelect.value];
+
+        // Hand off to the analyzing screen, which does the actual /upload
+        // call -- this page's job is just gathering input.
+        sessionStorage.setItem(
+          "pendingUpload",
+          JSON.stringify({ files: fileTextEntries, vendorHint: vendorHint })
+        );
+        window.location.href = "../analyzing_configuration/index.html";
+      } catch (err) {
+        showError("Couldn't read one of the selected files. Please try again.");
+        analyzeBtn.disabled = false;
+        analyzeBtn.innerHTML = '<span class="material-symbols-outlined" data-icon="troubleshoot" data-weight="fill">troubleshoot</span> Analyze Configuration';
+      }
+    });
+</script>
 </body></html>

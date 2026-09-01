@@ -150,13 +150,13 @@
 <span class="material-symbols-outlined text-primary text-3xl" data-icon="router" style="font-variation-settings: 'FILL' 1;">router</span>
 </div>
 <div>
-<h2 class="font-title-md text-title-md text-on-surface mb-xs">Detected Vendor: Cisco IOS</h2>
-<p class="font-body-sm text-body-sm text-on-surface-variant">Target IP: 192.168.1.104</p>
+<h2 class="font-title-md text-title-md text-on-surface mb-xs" id="vendorHeading">Detecting vendor…</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant" id="filenameSubtext"></p>
 </div>
 </div>
-<div class="bg-tertiary/10 border border-tertiary/30 px-3 py-1.5 rounded-full flex items-center gap-2">
+<div class="bg-tertiary/10 border border-tertiary/30 px-3 py-1.5 rounded-full flex items-center gap-2" id="confidenceBadge">
 <span class="material-symbols-outlined text-tertiary text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
-<span class="font-label-caps text-label-caps text-tertiary">94% Confidence</span>
+<span class="font-label-caps text-label-caps text-tertiary" id="confidenceText">—</span>
 </div>
 </div>
 <div class="p-lg bg-surface-container-low">
@@ -168,41 +168,34 @@
                             </span>
 <span class="material-symbols-outlined transform group-open:rotate-180 transition-transform duration-200">expand_more</span>
 </summary>
-<div class="mt-md pt-md border-t border-outline-variant/30 flex flex-wrap gap-sm">
-<div class="bg-surface-variant border border-outline-variant text-on-surface-variant rounded px-3 py-1.5 font-code-md text-code-md flex items-center gap-2 shadow-sm">
-<span class="material-symbols-outlined text-xs text-primary">data_object</span>
-                                curly-brace hierarchy
-                            </div>
-<div class="bg-surface-variant border border-outline-variant text-on-surface-variant rounded px-3 py-1.5 font-code-md text-code-md flex items-center gap-2 shadow-sm">
-<span class="material-symbols-outlined text-xs text-primary">terminal</span>
-                                system {} block
-                            </div>
-<div class="bg-surface-variant border border-outline-variant text-on-surface-variant rounded px-3 py-1.5 font-code-md text-code-md flex items-center gap-2 shadow-sm">
-<span class="material-symbols-outlined text-xs text-primary">settings_ethernet</span>
-                                interface naming pattern
-                            </div>
+<div class="mt-md pt-md border-t border-outline-variant/30">
+<p class="font-body-sm text-body-sm text-on-surface-variant" id="reasonText">—</p>
 </div>
 </details>
 </div>
 </div>
-<div class="bg-surface-container-high border-l-4 border-secondary p-md rounded-r-lg shadow-sm flex items-start gap-md">
+<div id="mismatchBanner" class="bg-surface-container-high border-l-4 border-secondary p-md rounded-r-lg shadow-sm flex items-start gap-md hidden">
 <span class="material-symbols-outlined text-secondary mt-1" data-icon="warning" style="font-variation-settings: 'FILL' 1;">warning</span>
 <div>
-<h3 class="font-title-md text-title-md text-on-surface mb-xs">Configuration Mismatch Potential</h3>
-<p class="font-body-sm text-body-sm text-on-surface-variant">
-                        You selected <strong class="text-on-surface">Cisco</strong> in the previous step, but our heuristic engine strongly suggests this configuration resembles <strong class="text-on-surface">Juniper Junos</strong> based on recent payload signatures. Proceed anyway or switch vendor?
-                    </p>
+<h3 class="font-title-md text-title-md text-on-surface mb-xs">Please confirm before continuing</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant" id="mismatchText">—</p>
 </div>
 </div>
-<div class="flex flex-col sm:flex-row justify-end items-center gap-md mt-sm pt-lg border-t border-outline-variant/30">
-<button class="w-full sm:w-auto border border-outline text-on-surface-variant hover:border-primary hover:text-primary transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg bg-transparent">
-                    Proceed with Cisco anyway
+<div class="flex flex-col sm:flex-row justify-end items-center gap-md mt-sm pt-lg border-t border-outline-variant/30" id="actionRow">
+<button id="proceedBtn" class="w-full sm:w-auto border border-outline text-on-surface-variant hover:border-primary hover:text-primary transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg bg-transparent">
+                    Proceed anyway
                 </button>
-<button class="w-full sm:w-auto bg-primary text-on-primary hover:bg-primary-fixed-dim transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
-                    Switch to Juniper
+<select id="switchVendorSelect" class="w-full sm:w-auto bg-surface-container-highest border border-outline-variant rounded-lg py-3 px-md font-body-sm text-body-sm text-on-surface">
+<option value="cisco_ios">Cisco IOS / NX-OS</option>
+<option value="juniper_junos">Juniper Junos</option>
+<option value="palo_alto">Palo Alto PAN-OS</option>
+</select>
+<button id="switchBtn" class="w-full sm:w-auto bg-primary text-on-primary hover:bg-primary-fixed-dim transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
+                    Switch vendor
                     <span class="material-symbols-outlined text-sm">arrow_forward</span>
 </button>
 </div>
+<p id="switchError" class="font-body-sm text-body-sm text-error hidden px-lg pb-md"></p>
 </div>
 </main>
 <footer class="bg-surface-container-lowest dark:bg-surface-container-lowest border-t border-outline-variant dark:border-outline-variant flex flex-col md:flex-row justify-between items-center px-margin-desktop py-sm w-full mt-auto">
@@ -215,4 +208,101 @@
 <a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="#">Help Center</a>
 </div>
 </footer>
+<script src="../shared.js"></script>
+<script>
+    const sessionId = getUrlParam("session");
+    const session = sessionId ? getSessionById(sessionId) : null;
+
+    if (!session) {
+      // No valid session -- nothing to confirm, send back to start.
+      window.location.href = "../upload_configuration/index.html";
+    }
+
+    const VENDOR_LABELS = {
+      cisco_ios: "Cisco IOS",
+      juniper_junos: "Juniper Junos",
+      palo_alto: "Palo Alto PAN-OS",
+    };
+
+    function renderVendorLabel(vendor) {
+      return VENDOR_LABELS[vendor] || vendor || "Unknown";
+    }
+
+    function renderConfidence(confidence) {
+      // Block 2a returns a WORD ("high"/"low"); Block 2b's LLM guess
+      // returns a FLOAT (0-1). Handle both honestly rather than faking
+      // a percentage we don't actually have.
+      if (typeof confidence === "number") {
+        return `${Math.round(confidence * 100)}% Confidence (AI guess)`;
+      }
+      if (confidence === "high") return "High Confidence";
+      if (confidence === "low") return "Low Confidence";
+      return "Confidence unknown";
+    }
+
+    function render() {
+      document.getElementById("vendorHeading").textContent =
+        `Detected Vendor: ${renderVendorLabel(session.device.vendor)}`;
+      document.getElementById("filenameSubtext").textContent = session.filename || "";
+      document.getElementById("confidenceText").textContent = renderConfidence(session.device.confidence);
+      document.getElementById("reasonText").textContent = session.device.reason || "No reason provided.";
+
+      if (session.device.needs_confirmation) {
+        document.getElementById("mismatchBanner").classList.remove("hidden");
+        document.getElementById("mismatchText").textContent = session.device.reason || "";
+      }
+
+      // Default the "switch to" dropdown to something other than the
+      // currently-detected vendor, so it's a meaningful choice.
+      const select = document.getElementById("switchVendorSelect");
+      const otherOption = Array.from(select.options).find((o) => o.value !== session.device.vendor);
+      if (otherOption) select.value = otherOption.value;
+    }
+
+    document.getElementById("proceedBtn").addEventListener("click", () => {
+      updateSession(sessionId, {
+        device: Object.assign({}, session.device, { needs_confirmation: false }),
+      });
+      routeToNextStep();
+    });
+
+    document.getElementById("switchBtn").addEventListener("click", async () => {
+      const switchBtn = document.getElementById("switchBtn");
+      const errorEl = document.getElementById("switchError");
+      errorEl.classList.add("hidden");
+
+      if (!session.raw_text) {
+        errorEl.textContent = "Original file content isn't available to re-analyze. Please re-upload.";
+        errorEl.classList.remove("hidden");
+        return;
+      }
+
+      const newVendor = document.getElementById("switchVendorSelect").value;
+      switchBtn.disabled = true;
+      switchBtn.textContent = "Re-analyzing...";
+
+      try {
+        const results = await uploadConfigs(
+          [{ filename: session.filename, text: session.raw_text }],
+          newVendor
+        );
+        const newSession = results[0];
+        newSession.raw_text = session.raw_text;
+
+        // Replace the old session with the freshly re-analyzed one.
+        const sessions = getSessions().filter((s) => s.session_id !== sessionId);
+        sessions.push(newSession);
+        setSessions(sessions);
+
+        routeToNextStep();
+      } catch (err) {
+        errorEl.textContent = "Couldn't reach the analysis server. Please try again.";
+        errorEl.classList.remove("hidden");
+        switchBtn.disabled = false;
+        switchBtn.innerHTML = 'Switch vendor <span class="material-symbols-outlined text-sm">arrow_forward</span>';
+      }
+    });
+
+    if (session) render();
+</script>
 </body></html>

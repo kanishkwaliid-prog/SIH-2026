@@ -221,6 +221,7 @@
 </div>
 </div>
 
+<script src="../shared.js"></script>
 <script>
 // These are the real NormalizedConfig field names from shared/schema.py --
 // the dropdown MUST use these exact values, since /confirm sends the
@@ -236,14 +237,15 @@ const FIELD_OPTIONS = [
   { value: "unclear",                  label: "Unclear / Not Applicable" },
 ];
 
-// Placeholder data shaped exactly like the real API's pending_confirmations
-// array (see POST /upload in api.py). Once wired up, replace this with the
-// actual array returned from that call -- nothing else here needs to change.
-let pendingConfirmations = [
-  { raw_line: "ip ssh authentication-retries 3", suggested_field: "unclear", suggested_value: null, confidence: 0.98, reasoning: "Sets SSH authentication retries, not a defined field" },
-  { raw_line: "logging enable", suggested_field: "logging_enabled", suggested_value: true, confidence: 0.97, reasoning: "Enables syslog logging on Cisco IOS" },
-  { raw_line: "log config", suggested_field: "unclear", suggested_value: null, confidence: 0.6, reasoning: "Does not match any known command for the defined fields" },
-];
+const sessionId = getUrlParam("session");
+const session = sessionId ? getSessionById(sessionId) : null;
+
+if (!session) {
+  window.location.href = "../upload_configuration/index.html";
+}
+
+// Real data from this session's /upload response, not placeholders.
+let pendingConfirmations = session ? session.pending_confirmations.slice() : [];
 
 function confidenceStyle(confidence) {
   // Real percentage, color-coded so a shaky guess LOOKS different from a
@@ -263,6 +265,11 @@ function renderPendingConfirmations() {
       `<option value="${opt.value}" ${opt.value === item.suggested_field ? "selected" : ""}>${opt.label}</option>`
     ).join("");
 
+    const needsValue = item.suggested_field !== "unclear";
+    const valueInput = needsValue
+      ? `<input type="text" data-value-index="${index}" value="${item.suggested_value ?? ""}" placeholder="value" class="mt-xs bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg block w-full p-2 font-code-md" />`
+      : "";
+
     const row = document.createElement("tr");
     row.className = "hover:bg-surface-variant transition-colors group";
     row.dataset.rawLine = item.raw_line;
@@ -276,24 +283,70 @@ function renderPendingConfirmations() {
         <select data-index="${index}" class="field-select bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5">
           ${optionsHtml}
         </select>
+        ${valueInput}
       </td>
       <td class="py-md px-lg">
         <span title="${item.reasoning || ''}" class="${confidenceStyle(item.confidence)} font-label-caps text-label-caps px-2 py-1 rounded-full border">${pct}% confident</span>
       </td>
       <td class="py-md px-lg text-right">
-        <div class="flex justify-end gap-sm">
-          <button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span></button>
-          <button class="text-on-surface-variant hover:text-tertiary transition-colors p-sm rounded-lg hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]" data-icon="check">check</span></button>
-        </div>
+        <span class="text-tertiary text-[13px]">Ready</span>
       </td>
     `;
     tbody.appendChild(row);
   });
 
   document.getElementById("confirmAllBtn").disabled = pendingConfirmations.length === 0;
+
+  // When the dropdown changes, show/hide the value input for that row.
+  tbody.querySelectorAll(".field-select").forEach((select) => {
+    select.addEventListener("change", (e) => {
+      const idx = parseInt(e.target.dataset.index, 10);
+      pendingConfirmations[idx].suggested_field = e.target.value;
+      renderPendingConfirmations();
+    });
+  });
+
+  tbody.querySelectorAll("[data-value-index]").forEach((input) => {
+    input.addEventListener("input", (e) => {
+      const idx = parseInt(e.target.dataset.valueIndex, 10);
+      pendingConfirmations[idx].suggested_value = e.target.value;
+    });
+  });
 }
 
 renderPendingConfirmations();
+
+document.getElementById("confirmAllBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("confirmAllBtn");
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+
+  // Coerce simple typed values (booleans, numbers) since the input
+  // fields are plain text -- apply_confirmation stores whatever we send.
+  const confirmations = pendingConfirmations.map((item) => {
+    let value = item.suggested_value;
+    if (item.suggested_field === "unclear") {
+      value = null;
+    } else if (value === "true") {
+      value = true;
+    } else if (value === "false") {
+      value = false;
+    } else if (value !== null && value !== "" && !isNaN(value) && item.suggested_field === "session_timeout_seconds") {
+      value = Number(value);
+    }
+    return { raw_line: item.raw_line, field: item.suggested_field, value: value };
+  });
+
+  try {
+    const result = await confirmLines(sessionId, confirmations, "demo-user");
+    updateSession(sessionId, { config: result.config, pending_confirmations: [] });
+    routeToNextStep();
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "Confirm All & Continue";
+    alert("Couldn't save confirmations. Check the backend is running and try again.");
+  }
+});
 </script>
 </main>
 <!-- Footer -->

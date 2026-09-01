@@ -156,11 +156,14 @@
 <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-xl gap-md">
 <div>
 <h1 class="font-headline-lg text-headline-lg md:text-display-lg md:font-display-lg text-on-surface mb-sm">Compliance Report</h1>
-<p class="font-body-md text-body-md text-on-surface-variant">Scan completed: 2024-05-20 14:32:01 UTC</p>
+<p class="font-body-md text-body-md text-on-surface-variant" id="scanMeta">Loading…</p>
 </div>
+<div class="flex items-center gap-md">
+<select id="deviceSelect" class="hidden bg-surface-container border border-outline-variant rounded-lg py-sm px-md font-body-sm text-body-sm text-on-surface"></select>
 <div class="flex items-center gap-sm bg-surface-container rounded-lg p-1 border border-outline-variant">
 <button class="px-md py-sm rounded bg-secondary-container text-on-secondary-container font-label-caps text-label-caps shadow-sm transition-colors" id="viewToggleSimple" onclick="toggleView('simple')">Simple View</button>
 <button class="px-md py-sm rounded text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors" id="viewToggleTech" onclick="toggleView('technical')">Technical View</button>
+</div>
 </div>
 </div>
 <!-- Bento Grid Layout for Summary -->
@@ -170,16 +173,16 @@
 <h2 class="font-label-caps text-label-caps text-on-surface-variant mb-md tracking-wider">ASSET DETAILS</h2>
 <div class="space-y-md">
 <div>
-<span class="block font-label-caps text-label-caps text-on-surface-variant opacity-70">HOSTNAME</span>
-<span class="font-code-md text-code-md text-on-surface">edge-router-sjc-01</span>
+<span class="block font-label-caps text-label-caps text-on-surface-variant opacity-70">FILENAME</span>
+<span class="font-code-md text-code-md text-on-surface" id="assetFilename">—</span>
 </div>
 <div>
 <span class="block font-label-caps text-label-caps text-on-surface-variant opacity-70">VENDOR</span>
-<span class="font-body-md text-body-md text-on-surface">Cisco Systems</span>
+<span class="font-body-md text-body-md text-on-surface" id="assetVendor">—</span>
 </div>
 <div>
-<span class="block font-label-caps text-label-caps text-on-surface-variant opacity-70">SERIAL</span>
-<span class="font-code-md text-code-md text-on-surface">FGL2314QW9A</span>
+<span class="block font-label-caps text-label-caps text-on-surface-variant opacity-70">FRAMEWORK</span>
+<span class="font-code-md text-code-md text-on-surface" id="assetFramework">CIS</span>
 </div>
 </div>
 </div>
@@ -194,10 +197,10 @@
 <!-- Background ring -->
 <circle class="text-surface-variant stroke-current" cx="60" cy="60" fill="transparent" r="50" stroke-width="8"></circle>
 <!-- Progress ring -->
-<circle class="text-primary stroke-current progress-ring__circle" cx="60" cy="60" fill="transparent" r="50" stroke-dasharray="314.159" stroke-dashoffset="87.964" stroke-linecap="round" stroke-width="8"></circle>
+<circle class="text-primary stroke-current progress-ring__circle" cx="60" cy="60" fill="transparent" r="50" stroke-dasharray="314.159" stroke-dashoffset="314.159" stroke-linecap="round" stroke-width="8" id="scoreRing"></circle>
 </svg>
 <div class="absolute inset-0 flex items-center justify-center flex-col">
-<span class="font-headline-lg text-headline-lg text-primary font-bold">72%</span>
+<span class="font-headline-lg text-headline-lg text-primary font-bold" id="scorePercent">—</span>
 </div>
 </div>
 <!-- Stat Pills -->
@@ -207,21 +210,21 @@
 <span class="w-2 h-2 rounded-full bg-tertiary"></span>
 <span class="font-label-caps text-label-caps text-tertiary">PASSED</span>
 </div>
-<span class="font-title-md text-title-md text-tertiary">148</span>
+<span class="font-title-md text-title-md text-tertiary" id="passCount">—</span>
 </div>
 <div class="flex justify-between items-center bg-error/10 border border-error/20 rounded-lg px-md py-sm">
 <div class="flex items-center gap-sm">
 <span class="w-2 h-2 rounded-full bg-error"></span>
 <span class="font-label-caps text-label-caps text-error">FAILED</span>
 </div>
-<span class="font-title-md text-title-md text-error">12</span>
+<span class="font-title-md text-title-md text-error" id="failCount">—</span>
 </div>
 <div class="flex justify-between items-center bg-[#f59e0b]/10 border border-[#f59e0b]/20 rounded-lg px-md py-sm">
 <div class="flex items-center gap-sm">
 <span class="w-2 h-2 rounded-full bg-[#f59e0b]"></span>
-<span class="font-label-caps text-label-caps text-[#fbbf24]">WARNINGS</span>
+<span class="font-label-caps text-label-caps text-[#fbbf24]">NOT EVALUATED</span>
 </div>
-<span class="font-title-md text-title-md text-[#fbbf24]">45</span>
+<span class="font-title-md text-title-md text-[#fbbf24]" id="notEvalCount">—</span>
 </div>
 </div>
 </div>
@@ -230,66 +233,14 @@
 <!-- Findings List -->
 <div class="mb-xl">
 <h2 class="font-title-md text-title-md text-on-surface mb-md">Findings (Failed)</h2>
-<div class="space-y-md">
-<!-- Finding Card 1 -->
-<div class="bg-surface-container-low rounded-xl border border-error/30 overflow-hidden shadow-sm transition-all hover:border-error/50">
-<!-- Header -->
-<div class="p-md bg-surface-container border-b border-outline-variant flex flex-wrap justify-between items-center gap-md cursor-pointer" onclick="toggleCard(this)">
-<div class="flex items-center gap-md">
-<div class="bg-error/20 text-error px-sm py-xs rounded font-label-caps text-label-caps border border-error/30 flex items-center gap-xs">
-<span class="material-symbols-outlined text-[16px]" data-icon="gpp_bad" data-weight="fill">gpp_bad</span>
-                                CRITICAL
-                            </div>
-<span class="font-code-md text-code-md text-on-surface bg-surface-variant px-sm py-xs rounded border border-outline-variant">CIS-4.2.1</span>
-<span class="font-title-md text-title-md text-on-surface">SSH Root Login Enabled</span>
-</div>
-<span class="material-symbols-outlined text-on-surface-variant transition-transform transform">expand_more</span>
-</div>
-<!-- Content Body -->
-<div class="p-md space-y-md">
-<!-- Simple View Content -->
-<div class="view-simple">
-<p class="font-body-md text-body-md text-on-surface-variant">
-                                Direct root login via SSH is currently permitted. This poses a significant security risk as it allows attackers to attempt brute-force attacks directly against the highest privilege account.
-                            </p>
-</div>
-<!-- Technical View Content -->
-<div class="view-technical hidden space-y-md">
-<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
-<div class="bg-surface-container-highest rounded border border-outline-variant p-sm">
-<span class="block font-label-caps text-label-caps text-error mb-xs">FOUND CONFIGURATION</span>
-<pre class="font-code-md text-code-md text-on-surface overflow-x-auto text-error">PermitRootLogin yes</pre>
-</div>
-<div class="bg-surface-container-highest rounded border border-outline-variant p-sm">
-<span class="block font-label-caps text-label-caps text-tertiary mb-xs">EXPECTED CONFIGURATION</span>
-<pre class="font-code-md text-code-md text-on-surface overflow-x-auto text-tertiary">PermitRootLogin no</pre>
-</div>
-</div>
-<div>
-<div class="flex justify-between items-center mb-xs">
-<span class="font-label-caps text-label-caps text-on-surface-variant">REMEDIATION CLI</span>
-<button class="text-primary hover:text-primary-fixed-dim transition-colors flex items-center gap-xs text-sm">
-<span class="material-symbols-outlined text-[16px]" data-icon="content_copy">content_copy</span>
-                                        Copy
-                                    </button>
-</div>
-<div class="code-block rounded-lg p-md overflow-x-auto relative group">
-<pre class="font-code-md text-code-md text-secondary">conf t
-line vty 0 4
- no permit root login
-end
-write memory</pre>
-</div>
-</div>
-</div>
-</div>
-</div>
+<div class="space-y-md" id="findingsList">
+<p class="font-body-sm text-body-sm text-on-surface-variant" id="loadingText">Running compliance evaluation…</p>
 </div>
 </div>
 </main>
 <!-- Fixed Bottom Actions -->
 <div class="fixed bottom-0 left-0 right-0 bg-surface-container/90 backdrop-blur-md border-t border-outline-variant p-md flex justify-center z-40 shadow-[0_-4px_24px_rgba(0,0,0,0.5)]">
-<button class="bg-gradient-to-r from-[#0d9488] to-[#0f766e] text-white px-xl py-sm rounded-lg font-title-md text-title-md shadow-lg hover:shadow-primary/20 transition-all flex items-center gap-sm active:scale-95">
+<button id="downloadBtn" class="bg-gradient-to-r from-[#0d9488] to-[#0f766e] text-white px-xl py-sm rounded-lg font-title-md text-title-md shadow-lg hover:shadow-primary/20 transition-all flex items-center gap-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed" disabled="">
 <span class="material-symbols-outlined" data-icon="download">download</span>
             Download Full Report (PDF)
         </button>
@@ -330,9 +281,6 @@ write memory</pre>
         function toggleCard(headerElement) {
             const body = headerElement.nextElementSibling;
             const icon = headerElement.querySelector('.material-symbols-outlined:last-child');
-            
-            // Toggle body visibility (assuming it starts open for this example, or toggle a class)
-            // For a robust implementation you'd use max-height transitions, keeping it simple here
             if (icon.textContent === 'expand_more') {
                 icon.textContent = 'expand_less';
                 icon.classList.add('rotate-180');
@@ -342,4 +290,136 @@ write memory</pre>
             }
         }
     </script>
+<script src="../shared.js"></script>
+<script>
+    const VENDOR_LABELS = {
+      cisco_ios: "Cisco IOS",
+      juniper_junos: "Juniper Junos",
+      palo_alto: "Palo Alto PAN-OS",
+    };
+
+    const SEVERITY_STYLE = {
+      critical: { badge: "bg-error/20 text-error border-error/30", icon: "gpp_bad", border: "border-error/30 hover:border-error/50" },
+      high:     { badge: "bg-error/20 text-error border-error/30", icon: "gpp_bad", border: "border-error/30 hover:border-error/50" },
+      medium:   { badge: "bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30", icon: "warning", border: "border-[#f59e0b]/30" },
+      low:      { badge: "bg-secondary/20 text-secondary border-secondary/30", icon: "info", border: "border-secondary/30" },
+    };
+
+    let currentSessionId = null;
+
+    function populateDeviceSelect(sessions) {
+      const select = document.getElementById("deviceSelect");
+      if (sessions.length <= 1) return;
+      select.classList.remove("hidden");
+      select.innerHTML = sessions
+        .map((s) => `<option value="${s.session_id}">${s.filename}</option>`)
+        .join("");
+      select.addEventListener("change", () => loadReport(select.value));
+    }
+
+    function renderFindings(findings) {
+      const failed = findings.filter((f) => f.status === "FAIL");
+      const list = document.getElementById("findingsList");
+
+      if (failed.length === 0) {
+        list.innerHTML = `<p class="font-body-md text-body-md text-tertiary">No failed checks — this device passed every evaluated rule.</p>`;
+        return;
+      }
+
+      list.innerHTML = failed
+        .map((f) => {
+          const style = SEVERITY_STYLE[f.severity] || SEVERITY_STYLE.low;
+          const remediation = f.remediation_cli
+            ? `<div>
+                <span class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">REMEDIATION CLI</span>
+                <div class="code-block rounded-lg p-md overflow-x-auto"><pre class="font-code-md text-code-md text-secondary">${f.remediation_cli}</pre></div>
+              </div>`
+            : "";
+
+          return `
+            <div class="bg-surface-container-low rounded-xl border ${style.border} overflow-hidden shadow-sm transition-all">
+              <div class="p-md bg-surface-container border-b border-outline-variant flex flex-wrap justify-between items-center gap-md cursor-pointer" onclick="toggleCard(this)">
+                <div class="flex items-center gap-md">
+                  <div class="${style.badge} px-sm py-xs rounded font-label-caps text-label-caps border flex items-center gap-xs">
+                    <span class="material-symbols-outlined text-[16px]" data-weight="fill">${style.icon}</span>
+                    ${f.severity.toUpperCase()}
+                  </div>
+                  <span class="font-code-md text-code-md text-on-surface bg-surface-variant px-sm py-xs rounded border border-outline-variant">${f.rule_id}</span>
+                  <span class="font-title-md text-title-md text-on-surface">${f.field_checked}</span>
+                </div>
+                <span class="material-symbols-outlined text-on-surface-variant transition-transform transform">expand_more</span>
+              </div>
+              <div class="p-md space-y-md">
+                <div class="view-simple">
+                  <p class="font-body-md text-body-md text-on-surface-variant">${f.explanation}</p>
+                </div>
+                <div class="view-technical hidden space-y-md">
+                  <div class="bg-surface-container-highest rounded border border-outline-variant p-sm">
+                    <span class="block font-label-caps text-label-caps text-error mb-xs">OBSERVED VALUE</span>
+                    <pre class="font-code-md text-code-md text-on-surface overflow-x-auto text-error">${JSON.stringify(f.actual)}</pre>
+                  </div>
+                  ${remediation}
+                </div>
+              </div>
+            </div>`;
+        })
+        .join("");
+    }
+
+    async function loadReport(sessionId) {
+      currentSessionId = sessionId;
+      const session = getSessionById(sessionId);
+      if (!session) return;
+
+      document.getElementById("assetFilename").textContent = session.filename || "—";
+      document.getElementById("assetVendor").textContent = VENDOR_LABELS[session.device.vendor] || session.device.vendor || "Unknown";
+      document.getElementById("scanMeta").textContent = `Scan of ${session.filename}`;
+      document.getElementById("downloadBtn").disabled = true;
+      document.getElementById("loadingText").classList.remove("hidden");
+      document.getElementById("findingsList").innerHTML = `<p class="font-body-sm text-body-sm text-on-surface-variant" id="loadingText">Running compliance evaluation…</p>`;
+
+      try {
+        // Cache the eval result on the session so switching between the
+        // Simple/Technical toggle (or re-visiting) doesn't re-call the API.
+        let evalResult = session.findings ? session : await evaluateSession(sessionId, "CIS");
+        updateSession(sessionId, { findings: evalResult.findings, warning: evalResult.warning });
+
+        const findings = evalResult.findings;
+        const passCount = findings.filter((f) => f.status === "PASS").length;
+        const failCount = findings.filter((f) => f.status === "FAIL").length;
+        const notEvalCount = findings.filter((f) => f.status === "NOT_EVALUATED").length;
+        const scored = passCount + failCount;
+        const score = scored > 0 ? Math.round((passCount / scored) * 100) : 0;
+
+        document.getElementById("passCount").textContent = passCount;
+        document.getElementById("failCount").textContent = failCount;
+        document.getElementById("notEvalCount").textContent = notEvalCount;
+        document.getElementById("scorePercent").textContent = `${score}%`;
+
+        const circumference = 314.159;
+        document.getElementById("scoreRing").setAttribute(
+          "stroke-dashoffset",
+          String(circumference * (1 - score / 100))
+        );
+
+        renderFindings(findings);
+        document.getElementById("downloadBtn").disabled = false;
+      } catch (err) {
+        document.getElementById("findingsList").innerHTML =
+          `<p class="font-body-sm text-body-sm text-error">Couldn't run compliance evaluation. Make sure the backend is running and try again.</p>`;
+      }
+    }
+
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      if (currentSessionId) window.open(reportPdfUrl(currentSessionId), "_blank");
+    });
+
+    const sessions = getSessions();
+    if (sessions.length === 0) {
+      window.location.href = "../upload_configuration/index.html";
+    } else {
+      populateDeviceSelect(sessions);
+      loadReport(sessions[0].session_id);
+    }
+</script>
 </body></html>
