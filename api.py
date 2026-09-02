@@ -34,6 +34,7 @@ review_system.init_review_tables()
 review_system.seed_user("alice", "Alice", "senior_engineer")
 review_system.seed_user("bob", "Bob", "engineer")
 review_system.seed_user("carol", "Carol", "user")
+review_system.seed_user("demo-user", "Demo User", "engineer")
 
 # Allow the frontend (opened as a local file or served from a different
 # port) to call this API during development. Fine for a hackathon demo;
@@ -129,14 +130,17 @@ async def confirm_lines(body: ConfirmRequest):
     config = session["config"]
     review_results = []
     for item in body.confirmations:
-        config, result = apply_confirmation(
-            config,
-            raw_line=item.raw_line,
-            field=item.field,
-            value=item.value,
-            vendor_hint=session["device"].get("vendor"),
-            confirmed_by=body.confirmed_by,
-        )
+        try:
+            config, result = apply_confirmation(
+                config,
+                raw_line=item.raw_line,
+                field=item.field,
+                value=item.value,
+                vendor_hint=session["device"].get("vendor"),
+                confirmed_by=body.confirmed_by,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         review_results.append({"raw_line": item.raw_line, **result})
 
     session["config"] = config
@@ -192,7 +196,7 @@ async def get_report_pdf(session_id: str):
 async def review_report():
     """Compliance-relevant: shows what's been consensus-confirmed, what's
     still pending, and whether the audit trail is intact."""
-    return review_system.generate_report()
+    return review_system.generate_report() 
 
 @app.get("/health")
 async def health():
