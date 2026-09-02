@@ -17,7 +17,8 @@ Follows the three-tier rule the team agreed on:
 """
 
 from converter.block2a_main import run_block2a
-from block2b.llm_classifier import classify_unknown_line, guess_vendor, confirm_classification
+from block2b.llm_classifier import classify_unknown_line, guess_vendor
+from block2b import review_system
 
 
 def process_config(config_text: str, user_declared_vendor: str = None) -> dict:
@@ -103,27 +104,39 @@ def apply_confirmation(
     value,
     vendor_hint: str = None,
     confirmed_by: str = None,
-) -> dict:
+) -> tuple[dict, dict]:
     """
-    Call this once a human confirms (or corrects) one pending confirmation
-    from the review screen. Two things happen:
-      1. The confirmed answer is saved to memory (memory.py), so this
-         exact line resolves at Tier 1/cache speed next time -- never
-         hits the LLM again.
-      2. If the confirmed field is a real NormalizedConfig field (not
-         "unclear"), it's merged into the config dict that's passed in.
+    Call this once a reviewer votes on one pending confirmation from the
+    review screen. Unlike before, this does NOT immediately save to
+    memory -- it records one weighted vote via review_system, and only
+    once enough independent reviewers agree does the line get promoted
+    into memory.py's cache and merged into config.
 
-    Returns the updated config dict. Call this once per confirmed line;
-    the frontend should call it for every item the human resolves on the
-    review-unknown-lines screen.
+    confirmed_by must be a known reviewer id (seeded via
+    review_system.seed_user() -- see api.py startup) so their role can be
+    looked up server-side. Raises ValueError if confirmed_by is unknown.
+
+    Returns (config, result) where result is:
+      {"status": "rejected", "reason": "duplicate_vote"}      -- this reviewer already voted on this line
+      {"status": "recorded", "total_points": int, "num_reviewers": int}  -- vote counted, not enough yet
+      {"status": "promoted", "field": str, "value": ...}      -- consensus reached, now in memory + config
+
+    Call this once per vote; the frontend should call it for every line a
+    reviewer weighs in on, and show the returned status so the reviewer
+    knows if their vote alone resolved it or if it's still pending others.
     """
-    confirm_classification(raw_line, field, value, vendor_hint=vendor_hint, confirmed_by=confirmed_by)
+    if not confirmed_by:
+        raise ValueError("confirmed_by is required -- every vote must be attributed to a known reviewer")
 
-    if field and field != "unclear":
+    result = review_system.submit_review(
+        raw_line, field, value, submitted_by=confirmed_by, vendor_hint=vendor_hint
+    )
+
+    if result["status"] == "promoted" and result["field"] != "unclear":
         config = dict(config)
-        config[field] = value
+        config[result["field"]] = result["value"]
 
-    return config
+    return config, result
 
 
 if __name__ == "__main__":
