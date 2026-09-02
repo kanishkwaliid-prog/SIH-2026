@@ -2,9 +2,11 @@
 API layer for the compliance pipeline. Wraps Block 2 (pipeline.py),
 Block 3 (compliance_engine/evaluator.py), and Block 4
 (report_generator/report_gen.py) behind HTTP endpoints so the frontend
-can call them.
+can call them. Also serves the frontend itself (see the bottom of this
+file), so one command runs the whole app.
 
 Run with: uvicorn api:app --reload --port 8000
+Then open: http://localhost:8000/
 
 This is a hackathon-scoped implementation: sessions are stored in memory
 (a plain dict), not a database, so restarting the server loses in-progress
@@ -13,15 +15,20 @@ already uses, or a new table) for anything beyond that.
 """
 
 import uuid
+from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from pipeline import apply_confirmation, process_config
 from compliance_engine.evaluator import evaluate_report, load_rule_pack
 from report_generator.report_gen import generate_pdf_bytes
+
+BASE_DIR = Path(__file__).resolve().parent
+FRONTEND_DIR = BASE_DIR / "frontend"
 
 app = FastAPI(title="Network Compliance Engine API")
 
@@ -177,3 +184,16 @@ async def get_report_pdf(session_id: str):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# ---------- Serve the frontend ----------
+# Mounted under /app so it can't collide with the /upload, /confirm, etc.
+# API routes above. Visiting "/" just bounces to the first screen.
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="/app/upload_configuration/index.html")
+
+
+if FRONTEND_DIR.is_dir():
+    app.mount("/app", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
