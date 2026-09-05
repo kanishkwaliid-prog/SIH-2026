@@ -162,6 +162,14 @@
 </div>
 <div class="flex items-center gap-md">
 <select id="deviceSelect" class="hidden bg-surface-container border border-outline-variant rounded-lg py-sm px-md font-body-sm text-body-sm text-on-surface"></select>
+<div id="frameworkPicker" class="flex items-center gap-sm bg-surface-container rounded-lg p-2 border border-outline-variant">
+<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="CIS" checked class="framework-checkbox"> CIS</label>
+<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="NIST" class="framework-checkbox"> NIST</label>
+<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="STIG" class="framework-checkbox"> STIG</label>
+<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="RBI" class="framework-checkbox"> RBI</label>
+<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="SEBI" class="framework-checkbox"> SEBI</label>
+<button id="applyFrameworksBtn" class="bg-primary text-on-primary text-xs px-2 py-1 rounded">Apply</button>
+</div>
 <a href="../upload_configuration/index.html" class="flex items-center gap-xs bg-surface-container hover:bg-surface-container-high border border-outline-variant text-on-surface font-label-caps text-label-caps px-md py-sm rounded-lg transition-colors">
 <span class="material-symbols-outlined text-[18px]">add</span>
 New Scan
@@ -384,10 +392,15 @@ New Scan
       document.getElementById("loadingText").classList.remove("hidden");
       document.getElementById("findingsList").innerHTML = `<p class="font-body-sm text-body-sm text-on-surface-variant" id="loadingText">Running compliance evaluation…</p>`;
 
+      const selectedFrameworks = Array.from(document.querySelectorAll(".framework-checkbox:checked")).map((el) => el.value);
+      const frameworksToUse = selectedFrameworks.length ? selectedFrameworks : ["CIS"];
+      document.getElementById("assetFramework").textContent = frameworksToUse.join(", ");
+
       try {
-        // Cache the eval result on the session so switching between the
-        // Simple/Technical toggle (or re-visiting) doesn't re-call the API.
-        let evalResult = session.findings ? session : await evaluateSession(sessionId, "CIS");
+        // Note: this always re-runs the evaluation against the currently
+        // selected frameworks -- a cached result would ignore a new
+        // framework selection, which defeats the point of the picker.
+        let evalResult = await evaluateSession(sessionId, frameworksToUse);
         updateSession(sessionId, { findings: evalResult.findings, warning: evalResult.warning });
 
         const findings = evalResult.findings;
@@ -418,6 +431,10 @@ New Scan
 
     document.getElementById("downloadBtn").addEventListener("click", () => {
       if (currentSessionId) window.open(reportPdfUrl(currentSessionId), "_blank");
+    });
+
+    document.getElementById("applyFrameworksBtn").addEventListener("click", () => {
+      if (currentSessionId) loadReport(currentSessionId);
     });
 
     const sessions = getSessions();

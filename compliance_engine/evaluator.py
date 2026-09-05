@@ -64,6 +64,28 @@ def load_all_rule_packs(rules_dir: Path | str | None = None) -> list[dict[str, A
     return combined
 
 
+FRAMEWORK_FILE_MAP = {
+    "CIS": "cis_rules.yaml",
+    "NIST": "nist_rules.yaml",
+    "STIG": "stig_rules.yaml",
+    "RBI": "rbi_rules.yaml",
+    "SEBI": "sebi_rules.yaml",
+}
+
+
+def load_selected_rule_packs(frameworks: list[str], rules_dir: Path | str | None = None) -> list[dict[str, Any]]:
+    """Load only the rule packs the user selected, e.g. ['CIS', 'NIST']."""
+    base = Path(rules_dir) if rules_dir else RULES_DIR
+    combined: list[dict[str, Any]] = []
+    for fw in frameworks:
+        filename = FRAMEWORK_FILE_MAP.get(fw.upper())
+        if not filename:
+            continue
+        rules, _ = load_rule_pack(base / filename)
+        combined.extend(rules)
+    return combined
+
+
 def _norm(value: Any) -> Any:
     if isinstance(value, str):
         return value.strip().lower()
