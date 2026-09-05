@@ -164,7 +164,8 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
 # ---------- Main functions ----------
 
 def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict:
-    user_msg = f"Config line: {raw_line}"
+    redacted_line = redact_sensitive(raw_line)
+    user_msg = f"Config line: {redacted_line}"
     if vendor_hint:
         user_msg += f"\nVendor hint: {vendor_hint}"
 
@@ -203,6 +204,7 @@ def confirm_classification(raw_line: str, field: str, value, vendor_hint: str = 
 
 def _guess_vendor_inner(config_text: str) -> dict:
     snippet = "\n".join(config_text.splitlines()[:40])
+    snippet = redact_sensitive(snippet)
 
     response = get_client().chat.completions.create(
         model=MODEL,
@@ -223,3 +225,39 @@ def guess_vendor(config_text: str) -> dict:
         _guess_vendor_inner, config_text,
         fallback=VENDOR_FALLBACK
     )
+
+def redact_sensitive(text: str) -> str:
+    """
+    Strips values that reveal real network topology or credentials before
+    this text is sent to the cloud LLM. The classifier only needs to
+    recognize COMMAND STRUCTURE (is this SSH-related? what encryption
+    scheme?) -- it never needs to see the actual IP, password, or
+    community string. Check LINE_CLASSIFY_SYSTEM_PROMPT above: the
+    "value" the model returns is always a bool/int/scheme-name
+    (true, 600, "type7"), never a raw secret -- so redacting the secret
+    itself costs no classification accuracy.
+
+    This is a heuristic covering the common cases, not an exhaustive
+    DLP filter -- flag any pattern that slips through so it can be added.
+    """
+    redacted = text
+
+    # IPv4 addresses (also catches subnet masks -- harmless to redact those too)
+    redacted = re.sub(r'\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b', '<IP_ADDR>', redacted)
+
+    # Cisco-style secrets: "password X", "secret X", "enable secret 5 X",
+    # "username admin secret 5 X" -- keep the keyword + type-number prefix
+    # (needed to tell type5 vs type7 apart), redact only the actual value.
+    redacted = re.sub(
+        r'\b((?:enable\s+)?(?:secret|password))\s+(\d+\s+)?(\S+)',
+        lambda m: f"{m.group(1)} {m.group(2) or ''}<REDACTED>",
+        redacted, flags=re.IGNORECASE
+    )
+
+    # SNMP community strings, both common forms:
+    #   snmp-server community <string> RO
+    #   snmp-server host <ip> version 2c <string>
+    redacted = re.sub(r'(snmp-server community\s+)(\S+)', r'\1<REDACTED>', redacted, flags=re.IGNORECASE)
+    redacted = re.sub(r'(version\s+\d+c\s+)(\S+)', r'\1<REDACTED>', redacted, flags=re.IGNORECASE)
+
+    return redacted
