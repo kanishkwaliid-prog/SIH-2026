@@ -1,0 +1,125 @@
+framework: RBI
+version: "1.0"
+# INTERPRETIVE MAPPING — NOT AN OFFICIAL OR CERTIFIED COMPLIANCE MAPPING.
+# These rules are this project's own technical interpretation of general
+# principles in the Reserve Bank of India Cyber Security Framework (for
+# banks and NBFCs) as they can be checked against device-level config
+# fields. RBI guidance is principle-based and does not publish a numbered
+# device-hardening checklist. Rule IDs (RBI-CSF-*) are ours, not RBI's.
+# A real RBI-oriented audit also requires organizational, governance, and
+# procedural controls (board oversight, SOC, vendor risk, incident
+# reporting, etc.) that this tool cannot check.
+
+rules:
+  - id: RBI-CSF-1
+    field: ssh_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "RBI's Cyber Security Framework requires network management and security, including secure remote administration of infrastructure — mapped here to requiring SSH for device management."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+      juniper_junos: |
+        set system services ssh
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+        set deviceconfig system service disable-http yes
+
+  - id: RBI-CSF-2
+    field: telnet_enabled
+    condition:
+      equals: false
+    severity: critical
+    explanation: "RBI's Cyber Security Framework requires secure configuration and disabling of unnecessary or insecure services — mapped here to disabling Telnet."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+         no transport input telnet
+      juniper_junos: |
+        delete system services telnet
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+
+  - id: RBI-CSF-3
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+      lte: 900
+    severity: high
+    explanation: "RBI's Cyber Security Framework requires user access management for privileged and administrative access — mapped here to an idle management-session timeout of at most 15 minutes (900 seconds). A value of 0 (never expire) fails."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 15 0
+        line con 0
+         exec-timeout 15 0
+      juniper_junos: |
+        set system login idle-timeout 15
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 15
+
+  - id: RBI-CSF-4
+    field: logging_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "RBI's Cyber Security Framework requires maintenance of audit trails and logs for security events and administrative activity — mapped here to enabling device logging."
+    remediation:
+      cisco_ios: |
+        logging buffered 16384
+        logging trap informational
+      juniper_junos: |
+        set system syslog file messages any any
+      palo_alto: |
+        set deviceconfig system syslog setting
+
+  - id: RBI-CSF-5
+    field: password_encryption
+    condition:
+      not_in: [none, type7]
+    severity: high
+    explanation: "RBI's Cyber Security Framework and related IT guidelines require protection of authentication credentials — mapped here to rejecting cleartext (none) and reversible type-7 stored passwords."
+    remediation:
+      cisco_ios: |
+        service password-encryption
+        enable secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: RBI-CSF-6
+    field: banner_configured
+    condition:
+      equals: true
+    severity: medium
+    explanation: "RBI's Cyber Security Framework emphasizes controlled access to systems and deterring unauthorized use — mapped here to requiring a login/MOTD banner on network devices."
+    remediation:
+      cisco_ios: |
+        banner login ^
+        Authorized access only.
+        ^
+      juniper_junos: |
+        set system login message "Authorized access only."
+      palo_alto: |
+        set deviceconfig system login-banner "Authorized access only."
+
+  - id: RBI-CSF-7
+    field: snmp_default_community
+    condition:
+      excludes: [public, private]
+    severity: critical
+    explanation: "RBI's Cyber Security Framework requires secure configuration, including changing vendor default credentials — mapped here to excluding the default SNMP communities public and private."
+    remediation:
+      cisco_ios: |
+        no snmp-server community public
+        no snmp-server community private
+        snmp-server community <unique-string> ro
+      juniper_junos: |
+        delete snmp community public
+        delete snmp community private
+      palo_alto: |
+        delete snmp-setting access-setting version v2c

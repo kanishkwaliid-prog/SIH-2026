@@ -1,0 +1,126 @@
+framework: SEBI
+version: "1.0"
+# INTERPRETIVE MAPPING — NOT AN OFFICIAL OR CERTIFIED COMPLIANCE MAPPING.
+# These rules are this project's own technical interpretation of general
+# principles in SEBI's Cybersecurity and Cyber Resilience Framework
+# (CSCRF) for market infrastructure institutions, stock brokers, and
+# related entities, as they can be checked against device-level config
+# fields. CSCRF is principle-based (Identify / Protect / Detect / Respond
+# / Recover) and does not publish a numbered device-hardening checklist.
+# Rule IDs (SEBI-CSCRF-*) are ours, not SEBI's. A real SEBI-oriented
+# audit also requires organizational, governance, and procedural controls
+# (cyber resilience policy, SOC, VAPT, incident reporting to SEBI, BCP)
+# that this tool cannot check.
+
+rules:
+  - id: SEBI-CSCRF-1
+    field: ssh_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "SEBI's Cybersecurity and Cyber Resilience Framework requires protective network and access controls for critical systems — mapped here to requiring SSH for encrypted remote administration."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+      juniper_junos: |
+        set system services ssh
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+        set deviceconfig system service disable-http yes
+
+  - id: SEBI-CSCRF-2
+    field: telnet_enabled
+    condition:
+      equals: false
+    severity: critical
+    explanation: "SEBI's CSCRF requires hardening and removal of insecure services as part of Protect — mapped here to disabling Telnet."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+         no transport input telnet
+      juniper_junos: |
+        delete system services telnet
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+
+  - id: SEBI-CSCRF-3
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+      lte: 600
+    severity: high
+    explanation: "SEBI's CSCRF requires privileged access management and session control for critical systems — mapped here to an idle management-session timeout of at most 10 minutes (600 seconds). A value of 0 (never expire) fails."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 10 0
+        line con 0
+         exec-timeout 10 0
+      juniper_junos: |
+        set system login idle-timeout 10
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 10
+
+  - id: SEBI-CSCRF-4
+    field: logging_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "SEBI's CSCRF Detect function requires logging and continuous monitoring of security-relevant events — mapped here to enabling device logging."
+    remediation:
+      cisco_ios: |
+        logging buffered 32768
+        logging trap informational
+      juniper_junos: |
+        set system syslog file messages any any
+      palo_alto: |
+        set deviceconfig system syslog setting
+
+  - id: SEBI-CSCRF-5
+    field: password_encryption
+    condition:
+      in: [type8, type9, sha256, sha512, scrypt]
+    severity: high
+    explanation: "SEBI's CSCRF Protect function requires protection of credentials and cryptographic controls — mapped here to requiring a modern stored-password type (type 8/9, SHA-256/512, or scrypt)."
+    remediation:
+      cisco_ios: |
+        enable algorithm-type scrypt secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: SEBI-CSCRF-6
+    field: banner_configured
+    condition:
+      equals: true
+    severity: medium
+    explanation: "SEBI's CSCRF access-control expectations include making unauthorized use explicit — mapped here to requiring a login banner on network devices."
+    remediation:
+      cisco_ios: |
+        banner login ^
+        Authorized access only.
+        ^
+      juniper_junos: |
+        set system login message "Authorized access only."
+      palo_alto: |
+        set deviceconfig system login-banner "Authorized access only."
+
+  - id: SEBI-CSCRF-7
+    field: snmp_default_community
+    condition:
+      excludes: [public, private]
+    severity: critical
+    explanation: "SEBI's CSCRF requires that default and well-known credentials not remain in production — mapped here to excluding SNMP communities public and private."
+    remediation:
+      cisco_ios: |
+        no snmp-server community public
+        no snmp-server community private
+        snmp-server community <unique-string> ro
+      juniper_junos: |
+        delete snmp community public
+        delete snmp community private
+      palo_alto: |
+        delete snmp-setting access-setting version v2c
