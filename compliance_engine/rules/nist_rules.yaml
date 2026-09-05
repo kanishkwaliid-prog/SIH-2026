@@ -1,0 +1,149 @@
+framework: NIST
+version: "1.0"
+# NIST SP 800-53 Rev. 5 mappings onto the current converter schema only.
+# No fields beyond ssh_enabled, telnet_enabled, session_timeout_seconds,
+# logging_enabled, password_encryption, banner_configured, snmp_default_community.
+
+rules:
+  - id: NIST-AC-17
+    field: ssh_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "NIST SP 800-53 Rev. 5 AC-17 (Remote Access): remote management sessions must use encrypted mechanisms such as SSH rather than cleartext protocols."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+      juniper_junos: |
+        set system services ssh
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+        set deviceconfig system service disable-http yes
+
+  - id: NIST-CM-7
+    field: telnet_enabled
+    condition:
+      equals: false
+    severity: critical
+    explanation: "NIST SP 800-53 Rev. 5 CM-7 (Least Functionality): prohibit unnecessary or insecure services; Telnet must be disabled on management interfaces."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+         no transport input telnet
+      juniper_junos: |
+        delete system services telnet
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+
+  - id: NIST-AC-12
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+      lte: 600
+    severity: high
+    explanation: "NIST SP 800-53 Rev. 5 AC-12 (Session Termination): idle privileged/management sessions must be terminated; a 10-minute (600 second) ceiling is used here. A value of 0 (never expire) fails."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 10 0
+        line con 0
+         exec-timeout 10 0
+      juniper_junos: |
+        set system login idle-timeout 10
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 10
+
+  - id: NIST-AU-2
+    field: logging_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "NIST SP 800-53 Rev. 5 AU-2 (Event Logging): the organization must determine and enable logging of security-relevant events, including administrative access to network devices."
+    remediation:
+      cisco_ios: |
+        logging buffered 16384
+        logging trap informational
+      juniper_junos: |
+        set system syslog file messages any any
+      palo_alto: |
+        set deviceconfig system syslog setting
+
+  - id: NIST-IA-5
+    field: password_encryption
+    condition:
+      not_equals: none
+    severity: high
+    explanation: "NIST SP 800-53 Rev. 5 IA-5 (Authenticator Management): authenticators must be protected from unauthorized disclosure; passwords must not be stored in cleartext in the device configuration."
+    remediation:
+      cisco_ios: |
+        service password-encryption
+        enable secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: NIST-IA-5-1
+    field: password_encryption
+    condition:
+      not_equals: type7
+    severity: high
+    explanation: "NIST SP 800-53 Rev. 5 IA-5(1) (Password-based Authentication): authenticators stored on the device must not use reversible (type 7) obfuscation."
+    remediation:
+      cisco_ios: |
+        enable secret
+        username admin secret
+        no username admin password
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: NIST-IA-5-1C
+    field: password_encryption
+    condition:
+      in: [type8, type9, sha256, sha512, scrypt]
+    severity: medium
+    explanation: "NIST SP 800-53 Rev. 5 IA-5(1)(c): protect authenticators with approved cryptography; require a modern KDF (type 8/9, SHA-256/512, or scrypt) rather than type 5 MD5 or type 7."
+    remediation:
+      cisco_ios: |
+        enable algorithm-type scrypt secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: NIST-AC-8
+    field: banner_configured
+    condition:
+      equals: true
+    severity: medium
+    explanation: "NIST SP 800-53 Rev. 5 AC-8 (System Use Notification): display a system use / consent notification before granting access to the device."
+    remediation:
+      cisco_ios: |
+        banner login ^
+        Authorized access only. Violators will be prosecuted.
+        ^
+      juniper_junos: |
+        set system login message "Authorized access only."
+      palo_alto: |
+        set deviceconfig system login-banner "Authorized access only."
+
+  - id: NIST-IA-5-D
+    field: snmp_default_community
+    condition:
+      excludes: [public, private]
+    severity: critical
+    explanation: "NIST SP 800-53 Rev. 5 IA-5 (Authenticator Management): change default authenticators prior to operational use; SNMP community strings must not be the factory defaults public or private."
+    remediation:
+      cisco_ios: |
+        no snmp-server community public
+        no snmp-server community private
+        snmp-server community <unique-string> ro
+      juniper_junos: |
+        delete snmp community public
+        delete snmp community private
+      palo_alto: |
+        delete snmp-setting access-setting version v2c
