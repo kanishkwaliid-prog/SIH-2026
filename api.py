@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from pipeline import apply_confirmation, process_config
-from compliance_engine.evaluator import evaluate_report, load_rule_pack
+from compliance_engine.evaluator import evaluate_report, load_selected_rule_packs
 from report_generator.report_gen import generate_pdf_bytes
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -157,22 +157,26 @@ async def confirm_lines(body: ConfirmRequest):
 # ---------- POST /evaluate ----------
 
 @app.post("/evaluate/{session_id}")
-async def evaluate_session(session_id: str, framework: str = "CIS"):
+async def evaluate_session(session_id: str, frameworks: str = "CIS"):
     """
     Runs Block 3 (compliance evaluation) on this session's current config
     (including any confirmations already applied). Stores the result on
     the session so /report/{session_id}/pdf can use it afterward.
+
+    `frameworks` is a comma-separated list of rule packs to evaluate
+    against, e.g. "CIS,NIST". Defaults to CIS only.
     """
     session = SESSIONS.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Unknown session_id -- did you call /upload first?")
 
-    rules, loaded_framework = load_rule_pack()
+    framework_list = [f.strip().upper() for f in frameworks.split(",") if f.strip()]
+    rules = load_selected_rule_packs(framework_list)
     converter_output = {"device": session["device"], "config": session["config"]}
     eval_result = evaluate_report(converter_output, rules)
 
     session["eval_result"] = eval_result
-    session["framework"] = framework or loaded_framework
+    session["framework"] = ", ".join(framework_list)
 
     return eval_result
 
