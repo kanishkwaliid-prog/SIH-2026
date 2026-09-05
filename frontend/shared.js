@@ -74,9 +74,10 @@ async function confirmLines(sessionId, confirmations, confirmedBy) {
   return response.json();
 }
 
-async function evaluateSession(sessionId, framework) {
+async function evaluateSession(sessionId, frameworks) {
   const url = new URL(`${API_BASE}/evaluate/${sessionId}`);
-  if (framework) url.searchParams.set("framework", framework);
+  const list = Array.isArray(frameworks) ? frameworks.join(",") : frameworks;
+  if (list) url.searchParams.set("frameworks", list);
   const response = await fetch(url, { method: "POST" });
   if (!response.ok) {
     throw new Error(`Evaluate failed: ${response.status}`);
