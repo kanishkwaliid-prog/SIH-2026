@@ -1,0 +1,135 @@
+framework: STIG
+version: "1.0"
+# DISA Network Device Management STIG mappings (Cisco IOS/IOS-XE NDM family)
+# onto the current converter schema only. V-IDs cited from Cisco IOS Switch
+# NDM STIG / Cisco IOS-XE Router NDM STIG checks that cover SSH, Telnet,
+# idle timeout, audit logging, banners, stored passwords, and SNMP.
+
+rules:
+  - id: STIG-V-220524
+    field: ssh_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "DISA Cisco IOS Switch NDM STIG V-220524: management access must use replay-resistant, encrypted authentication (SSH) rather than cleartext remote login."
+    remediation:
+      cisco_ios: |
+        ip ssh version 2
+        line vty 0 4
+         transport input ssh
+      juniper_junos: |
+        set system services ssh protocol-version v2
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+
+  - id: STIG-V-220537
+    field: telnet_enabled
+    condition:
+      equals: false
+    severity: critical
+    explanation: "DISA Cisco IOS Switch NDM STIG V-220537: prohibit unnecessary and/or nonsecure functions and protocols; Telnet must be disabled on the device."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+         no transport input telnet
+      juniper_junos: |
+        delete system services telnet
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+
+  - id: STIG-V-220525
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+      lte: 600
+    severity: high
+    explanation: "DISA Cisco IOS Switch NDM STIG V-220525: terminate device-management sessions after 10 minutes (600 seconds) of inactivity. A value of 0 (never expire) fails."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 10 0
+        line con 0
+         exec-timeout 10 0
+      juniper_junos: |
+        set system login idle-timeout 10
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 10
+
+  - id: STIG-V-216654
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+    severity: high
+    explanation: "DISA Cisco IOS-XE Router NDM STIG V-216654: network connections associated with device management must not remain open indefinitely; idle timeout must be enabled (not 0)."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 10 0
+      juniper_junos: |
+        set system login idle-timeout 10
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 10
+
+  - id: STIG-V-220549
+    field: logging_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "DISA Cisco IOS Switch NDM STIG V-220549: the device must generate audit records for organization-defined events, including administrative sessions; logging must be enabled."
+    remediation:
+      cisco_ios: |
+        logging buffered 32768
+        logging trap informational
+      juniper_junos: |
+        set system syslog file messages any any
+      palo_alto: |
+        set deviceconfig system syslog setting
+
+  - id: STIG-V-220548
+    field: banner_configured
+    condition:
+      equals: true
+    severity: medium
+    explanation: "DISA Cisco IOS Switch NDM STIG V-220548: display the Standard Mandatory DoD Notice and Consent Banner before granting access to the device."
+    remediation:
+      cisco_ios: |
+        banner login ^C
+        You are accessing a U.S. Government information system.
+        ^C
+      juniper_junos: |
+        set system login message "You are accessing a U.S. Government information system."
+      palo_alto: |
+        set deviceconfig system login-banner "You are accessing a U.S. Government information system."
+
+  - id: STIG-V-220531
+    field: password_encryption
+    condition:
+      not_in: [none, type7]
+    severity: high
+    explanation: "DISA Cisco IOS Switch NDM STIG V-220531: locally stored passwords must be encrypted with a FIPS-aligned method; cleartext (none) and reversible type 7 obfuscation are not permitted."
+    remediation:
+      cisco_ios: |
+        service password-encryption
+        enable secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: STIG-V-220559
+    field: snmp_default_community
+    condition:
+      excludes: [public, private]
+    severity: critical
+    explanation: "DISA Cisco IOS Switch NDM STIG V-220559: default SNMP community strings (public/private) must not be configured; they are well-known authenticators for device management."
+    remediation:
+      cisco_ios: |
+        no snmp-server community public
+        no snmp-server community private
+        snmp-server community <unique-string> ro
+      juniper_junos: |
+        delete snmp community public
+        delete snmp community private
+      palo_alto: |
+        delete snmp-setting access-setting version v2c

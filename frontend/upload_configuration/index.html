@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ConfigGuard - Upload Configuration</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#005236",
+                    "on-error": "#690005",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "inverse-primary": "#006a61",
+                    "primary-fixed-dim": "#6bd8cb",
+                    "on-primary-fixed-variant": "#005049",
+                    "inverse-on-surface": "#283044",
+                    "error-container": "#93000a",
+                    "error": "#ffb4ab",
+                    "surface": "#0b1326",
+                    "on-secondary-fixed": "#001d31",
+                    "primary-container": "#29a195",
+                    "inverse-surface": "#dae2fd",
+                    "surface-container-lowest": "#060e20",
+                    "secondary-fixed": "#cce5ff",
+                    "on-secondary-container": "#002c47",
+                    "outline": "#879391",
+                    "on-secondary": "#003351",
+                    "tertiary-fixed": "#6ffbbe",
+                    "on-tertiary-fixed": "#002113",
+                    "secondary": "#93ccff",
+                    "on-primary-container": "#00302b",
+                    "on-surface-variant": "#bcc9c6",
+                    "surface-container-highest": "#2d3449",
+                    "on-background": "#dae2fd",
+                    "on-primary-fixed": "#00201d",
+                    "secondary-fixed-dim": "#93ccff",
+                    "surface-dim": "#0b1326",
+                    "on-surface": "#dae2fd",
+                    "on-tertiary": "#003824",
+                    "on-tertiary-container": "#00311f",
+                    "surface-container": "#171f33",
+                    "surface-tint": "#6bd8cb",
+                    "surface-container-low": "#131b2e",
+                    "primary": "#6bd8cb",
+                    "tertiary-container": "#00a572",
+                    "surface-bright": "#31394d",
+                    "tertiary": "#4edea3",
+                    "on-secondary-fixed-variant": "#004b73",
+                    "background": "#0b1326",
+                    "outline-variant": "#3d4947",
+                    "secondary-container": "#3198dc",
+                    "on-primary": "#003732",
+                    "surface-variant": "#2d3449",
+                    "primary-fixed": "#89f5e7",
+                    "on-error-container": "#ffdad6",
+                    "surface-container-high": "#222a3d"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "4px",
+                    "xs": "4px",
+                    "margin-desktop": "48px",
+                    "gutter": "24px",
+                    "md": "16px",
+                    "margin-mobile": "16px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "sm": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "title-md": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<nav class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shadow-sm w-full sticky top-0 z-50">
+<div class="flex justify-between items-center px-margin-desktop w-full h-16">
+<!-- Brand -->
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary dark:text-primary text-2xl" data-icon="security" data-weight="fill">security</span>
+<span class="font-headline-lg text-headline-lg font-bold text-primary dark:text-primary tracking-tight hidden md:block">ConfigGuard</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary tracking-tight md:hidden">ConfigGuard</span>
+</div>
+<!-- Nav Links (Desktop) -->
+<div class="hidden md:flex items-center gap-gutter h-full">
+<a class="h-full flex items-center font-body-md text-body-md text-primary dark:text-primary border-b-2 border-primary pb-1 font-medium transition-colors" href="#">
+                    Scans
+                </a>
+<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">
+                    Rulesets
+                </a>
+<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">
+                    Settings
+                </a>
+</div>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-sm md:gap-md">
+<button aria-label="Help" class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors p-sm rounded-full hover:bg-surface-variant active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<button aria-label="Notifications" class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors p-sm rounded-full hover:bg-surface-variant active:scale-95 transition-transform relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border border-surface"></span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant cursor-pointer active:scale-95 transition-transform ml-sm">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="A professional headshot of a network security administrator in a high-tech corporate environment, cool blue and teal lighting, shallow depth of field." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsGS2fTTPbSL1KRi_SrM9jEAyCckgmvith4FcGaGWkuEk_gBleCYBmcrjLOh5eDya2SYrP15RiWKnaglnpspN8U1H5SMQCd3UPymrHhzaU_VIRjd9uA1FslyNKBrYK9dUWnLScxlsLq6g7WrIAK_ovfgJD-skhwRaPwP9WCIO4op4dFOMxwsZ4qhKtr5tU2CrvoEEoQsiQdenQQimw23_GLdTS69wWn2lWG3bzjYLQ_fP_mrXvF9Fq"/>
+</div>
+</div>
+</div>
+</nav>
+<!-- Main Content -->
+<main class="flex-grow w-full max-w-7xl mx-auto px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col gap-xl">
+<!-- Header Section -->
+<header class="flex flex-col gap-xs">
+<h1 class="font-display-lg text-display-lg text-on-surface">Upload Configuration</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">Submit your network device configuration files for automated security analysis and compliance auditing against industry standards.</p>
+</header>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Upload & Settings Canvas (Left / Main) -->
+<section class="lg:col-span-8 flex flex-col gap-lg">
+<!-- Drag and Drop Zone -->
+<div class="relative overflow-hidden group bg-surface-container-low rounded-xl border-2 border-dashed border-outline-variant hover:border-primary-container transition-all duration-300 ease-out flex flex-col items-center justify-center p-xl min-h-[320px] shadow-[0_0_15px_rgba(0,0,0,0.1)]" id="dropzone">
+<!-- Ambient Glow Effect -->
+<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+<div class="flex flex-col items-center text-center z-10 gap-md">
+<div class="w-16 h-16 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center text-primary group-hover:scale-110 group-hover:bg-primary/10 transition-transform duration-300">
+<span class="material-symbols-outlined text-4xl" data-icon="cloud_upload">cloud_upload</span>
+</div>
+<div class="flex flex-col gap-xs" id="fileNameDisplay">
+<h3 class="font-title-md text-title-md text-on-surface">Drop your config file here or <span class="text-primary hover:underline cursor-pointer">browse</span></h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Supports .txt, .cfg, .conf, .xml (Max 10MB) — multiple files allowed</p>
+</div>
+</div>
+<!-- Hidden File Input -->
+<input accept=".txt,.cfg,.conf,.xml" aria-label="Upload configuration file" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" id="fileInput" multiple="" type="file"/>
+</div>
+<p id="errorMsg" class="font-body-sm text-body-sm text-error hidden"></p>
+<!-- Settings & CTA Container -->
+<div class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-md shadow-[0_8px_32px_rgba(0,0,0,0.2)]">
+<!-- Vendor Dropdown -->
+<div class="flex flex-col gap-xs relative">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase" for="vendor-select">Vendor (Optional)</label>
+<div class="relative group">
+<select class="w-full appearance-none bg-surface-container-highest border border-outline-variant rounded-lg py-sm px-md pr-xl font-body-md text-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors cursor-pointer" id="vendor-select">
+<option value="auto">Auto-detect</option>
+<option value="cisco">Cisco IOS / NX-OS</option>
+<option value="juniper">Juniper Junos</option>
+<option value="palo-alto">Palo Alto PAN-OS</option>
+<option value="fortinet">Fortinet FortiOS</option>
+</select>
+<span class="material-symbols-outlined absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none group-focus-within:text-primary transition-colors" data-icon="expand_more">expand_more</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline flex items-center gap-xs mt-1">
+<span class="material-symbols-outlined text-[16px]" data-icon="info">info</span>
+                            Not sure? Leave blank — we'll detect it automatically.
+                        </p>
+</div>
+<!-- CTA Button -->
+<button class="mt-sm w-full bg-gradient-to-r from-primary-container to-[#0f766e] hover:from-primary hover:to-primary-container text-on-primary-container font-title-md text-title-md py-md px-lg rounded-lg shadow-[0_0_20px_rgba(41,161,149,0.2)] hover:shadow-[0_0_25px_rgba(107,216,203,0.4)] transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none" id="analyzeBtn">
+<span class="material-symbols-outlined" data-icon="troubleshoot" data-weight="fill">troubleshoot</span>
+                        Analyze Configuration
+                    </button>
+</div>
+</section>
+<!-- Info Panel (Right / Secondary) -->
+<aside class="lg:col-span-4 flex flex-col gap-lg">
+<!-- System Status Bento Box -->
+<div class="bg-surface-container-high rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-md">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider border-b border-outline-variant pb-xs">Scanner Status</h3>
+<div class="flex items-center gap-md">
+<div class="relative flex h-3 w-3">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-3 w-3 bg-tertiary"></span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-md text-title-md text-on-surface">Engine Online</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">v2.4.1 (Definitions updated 2h ago)</span>
+</div>
+</div>
+</div>
+<!-- Analysis Overview Bento Box -->
+<div class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm flex-grow">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider border-b border-outline-variant pb-xs">What we check</h3>
+<ul class="flex flex-col gap-sm mt-sm">
+<li class="flex items-start gap-sm">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5" data-icon="policy">policy</span>
+<div>
+<h4 class="font-body-md text-body-md text-on-surface font-medium">Access Control Lists (ACLs)</h4>
+<p class="font-body-sm text-body-sm text-outline">Misconfigured rules or overly permissive access.</p>
+</div>
+</li>
+<li class="flex items-start gap-sm">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5" data-icon="lock">lock</span>
+<div>
+<h4 class="font-body-md text-body-md text-on-surface font-medium">Encryption Standards</h4>
+<p class="font-body-sm text-body-sm text-outline">Weak ciphers, cleartext passwords, and legacy protocols.</p>
+</div>
+</li>
+<li class="flex items-start gap-sm">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5" data-icon="router">router</span>
+<div>
+<h4 class="font-body-md text-body-md text-on-surface font-medium">Routing Protocols</h4>
+<p class="font-body-sm text-body-sm text-outline">Authentication and route filtering validation.</p>
+</div>
+</li>
+</ul>
+</div>
+</aside>
+</div>
+<!-- Recent Scans Section -->
+<section class="mt-lg flex flex-col gap-md">
+<div class="flex justify-between items-end border-b border-outline-variant pb-xs">
+<h2 class="font-title-md text-title-md text-on-surface">Recent Scans</h2>
+<button class="font-body-sm text-body-sm text-primary hover:text-primary-fixed transition-colors flex items-center gap-xs">
+                    View All <span class="material-symbols-outlined text-[16px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="bg-surface-container rounded-xl border border-[#ffffff10] overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.15)]">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse whitespace-nowrap">
+<thead>
+<tr class="bg-surface-container-high border-b border-outline-variant">
+<th class="py-sm px-md font-label-caps text-label-caps text-on-surface-variant font-medium">Device Name</th>
+<th class="py-sm px-md font-label-caps text-label-caps text-on-surface-variant font-medium">Vendor</th>
+<th class="py-sm px-md font-label-caps text-label-caps text-on-surface-variant font-medium">Date</th>
+<th class="py-sm px-md font-label-caps text-label-caps text-on-surface-variant font-medium">Status</th>
+<th class="py-sm px-md font-label-caps text-label-caps text-on-surface-variant font-medium text-right">Action</th>
+</tr>
+</thead>
+<tbody class="font-code-md text-code-md text-on-surface divide-y divide-[#ffffff0a]">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="py-sm px-md flex items-center gap-sm">
+<span class="material-symbols-outlined text-outline-variant" data-icon="description">description</span>
+                                    core-router-nyc-01.cfg
+                                </td>
+<td class="py-sm px-md text-on-surface-variant font-body-sm">Cisco IOS</td>
+<td class="py-sm px-md text-on-surface-variant font-body-sm">Oct 24, 2023 - 14:32</td>
+<td class="py-sm px-md">
+<span class="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-error/10 text-error border border-error/20 font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-[14px]" data-icon="cancel">cancel</span>
+                                        Failed (3 Critical)
+                                    </span>
+</td>
+<td class="py-sm px-md text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 rounded hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[20px]" data-icon="visibility">visibility</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="py-sm px-md flex items-center gap-sm">
+<span class="material-symbols-outlined text-outline-variant" data-icon="description">description</span>
+                                    fw-edge-lon-04.xml
+                                </td>
+<td class="py-sm px-md text-on-surface-variant font-body-sm">Palo Alto</td>
+<td class="py-sm px-md text-on-surface-variant font-body-sm">Oct 24, 2023 - 09:15</td>
+<td class="py-sm px-md">
+<span class="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-tertiary/10 text-tertiary border border-tertiary/20 font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle">check_circle</span>
+                                        Passed
+                                    </span>
+</td>
+<td class="py-sm px-md text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 rounded hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[20px]" data-icon="visibility">visibility</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="py-sm px-md flex items-center gap-sm">
+<span class="material-symbols-outlined text-outline-variant" data-icon="description">description</span>
+                                    sw-dist-sfo-02.conf
+                                </td>
+<td class="py-sm px-md text-on-surface-variant font-body-sm">Juniper</td>
+<td class="py-sm px-md text-on-surface-variant font-body-sm">Oct 23, 2023 - 16:45</td>
+<td class="py-sm px-md">
+<span class="inline-flex items-center gap-xs px-2 py-1 rounded-md bg-secondary/10 text-secondary border border-secondary/20 font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-[14px]" data-icon="warning">warning</span>
+                                        Warning (5 Low)
+                                    </span>
+</td>
+<td class="py-sm px-md text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 rounded hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[20px]" data-icon="visibility">visibility</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest dark:bg-surface-container-lowest border-t border-outline-variant dark:border-outline-variant mt-auto">
+<div class="flex flex-col md:flex-row justify-between items-center px-margin-desktop py-sm w-full gap-sm md:gap-0">
+<span class="font-label-caps text-label-caps text-on-surface-variant">© 2024 ConfigGuard. All systems operational.</span>
+<div class="flex gap-md">
+<a class="font-body-sm text-body-sm text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="#">Privacy Policy</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="#">Terms of Service</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="#">Help Center</a>
+</div>
+</div>
+</footer>
+<!-- Interactive Script for Dropzone (Cosmetic) -->
+<script>
+        const dropzone = document.getElementById('dropzone');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropzone.classList.add('border-primary', 'bg-surface-container');
+            dropzone.classList.remove('border-outline-variant', 'bg-surface-container-low');
+        }
+
+        function unhighlight(e) {
+            dropzone.classList.remove('border-primary', 'bg-surface-container');
+            dropzone.classList.add('border-outline-variant', 'bg-surface-container-low');
+        }
+    </script>
+<script src="../shared.js"></script>
+<script>
+    // Maps the friendly dropdown values to the exact vendor names Block 2a
+    // knows about (see converter/parsers/__init__.py's dispatch table).
+    // "auto" and "fortinet" both send no hint -- fortinet has no parser
+    // yet, so sending it as a hint would just cause a guaranteed mismatch.
+    const VENDOR_MAP = {
+      auto: null,
+      cisco: "cisco_ios",
+      juniper: "juniper_junos",
+      "palo-alto": "palo_alto",
+      fortinet: null,
+    };
+
+    const fileInput = document.getElementById("fileInput");
+    const fileNameDisplay = document.getElementById("fileNameDisplay");
+    const analyzeBtn = document.getElementById("analyzeBtn");
+    const errorMsg = document.getElementById("errorMsg");
+    const vendorSelect = document.getElementById("vendor-select");
+
+    let selectedFiles = [];
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.remove("hidden");
+    }
+
+    function clearError() {
+      errorMsg.classList.add("hidden");
+    }
+
+    fileInput.addEventListener("change", () => {
+      selectedFiles = Array.from(fileInput.files);
+      clearError();
+      if (selectedFiles.length === 0) {
+        fileNameDisplay.innerHTML = `
+          <h3 class="font-title-md text-title-md text-on-surface">Drop your config file here or <span class="text-primary hover:underline cursor-pointer">browse</span></h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">Supports .txt, .cfg, .conf, .xml (Max 10MB) — multiple files allowed</p>
+        `;
+      } else {
+        const names = selectedFiles.map((f) => f.name).join(", ");
+        fileNameDisplay.innerHTML = `
+          <h3 class="font-title-md text-title-md text-primary">${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""} selected</h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">${names}</p>
+        `;
+      }
+    });
+
+    analyzeBtn.addEventListener("click", async () => {
+      clearError();
+      if (selectedFiles.length === 0) {
+        showError("Please select at least one config file before analyzing.");
+        return;
+      }
+
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = "Reading files...";
+
+      try {
+        const fileTextEntries = await Promise.all(
+          selectedFiles.map(async (file) => ({
+            filename: file.name,
+            text: await file.text(),
+          }))
+        );
+
+        const vendorHint = VENDOR_MAP[vendorSelect.value];
+
+        // Hand off to the analyzing screen, which does the actual /upload
+        // call -- this page's job is just gathering input.
+        sessionStorage.setItem(
+          "pendingUpload",
+          JSON.stringify({ files: fileTextEntries, vendorHint: vendorHint })
+        );
+        window.location.href = "../analyzing_configuration/index.html";
+      } catch (err) {
+        showError("Couldn't read one of the selected files. Please try again.");
+        analyzeBtn.disabled = false;
+        analyzeBtn.innerHTML = '<span class="material-symbols-outlined" data-icon="troubleshoot" data-weight="fill">troubleshoot</span> Analyze Configuration';
+      }
+    });
+</script>
+</body></html>
