@@ -16,11 +16,20 @@ from typing import Any
 
 import yaml
 
-RULE_PACK_PATH = Path(__file__).resolve().parent / "rules" / "cis_rules.yaml"
+RULES_DIR = Path(__file__).resolve().parent / "rules"
+RULE_PACK_PATH = RULES_DIR / "cis_rules.yaml"
+RULE_PACK_FILES = (
+    "cis_rules.yaml",
+    "nist_rules.yaml",
+    "stig_rules.yaml",
+    "rbi_rules.yaml",
+    "sebi_rules.yaml",
+)
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 JSON_FINDING_KEYS = (
     "rule_id",
+    "framework",
     "status",
     "severity",
     "explanation",
@@ -29,12 +38,30 @@ JSON_FINDING_KEYS = (
 
 
 def load_rule_pack(path: Path | str | None = None) -> tuple[list[dict[str, Any]], str]:
+    """Load one YAML rule pack by path (CIS, NIST, STIG, RBI, or SEBI).
+
+    Each returned rule dict is tagged with a ``framework`` key from the file.
+    """
     pack_path = Path(path) if path else RULE_PACK_PATH
     with pack_path.open(encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
-    rules = data.get("rules") or []
     framework = data.get("framework") or "CIS"
+    rules: list[dict[str, Any]] = []
+    for rule in data.get("rules") or []:
+        tagged = dict(rule)
+        tagged["framework"] = framework
+        rules.append(tagged)
     return rules, framework
+
+
+def load_all_rule_packs(rules_dir: Path | str | None = None) -> list[dict[str, Any]]:
+    """Load CIS, NIST, STIG, RBI, and SEBI packs into one list; each rule is tagged with framework."""
+    base = Path(rules_dir) if rules_dir else RULES_DIR
+    combined: list[dict[str, Any]] = []
+    for filename in RULE_PACK_FILES:
+        rules, _framework = load_rule_pack(base / filename)
+        combined.extend(rules)
+    return combined
 
 
 def _norm(value: Any) -> Any:
@@ -163,6 +190,7 @@ def evaluate_report(
         findings.append(
             {
                 "rule_id": rule["id"],
+                "framework": rule.get("framework"),
                 "status": status,
                 "severity": rule.get("severity"),
                 "explanation": rule.get("explanation"),
@@ -207,7 +235,8 @@ def format_text_report(result: dict[str, Any]) -> str:
         actual = finding.get("actual")
         field = finding.get("field_checked")
         lines.append(
-            f"  {finding['status']:<15} {finding['rule_id']:<12} "
+            f"  {finding['status']:<15} {finding.get('framework') or '':<6} "
+            f"{finding['rule_id']:<16} "
             f"{finding.get('severity', ''):<8} {field}={actual!r}"
         )
     counts = _summarize(result)
@@ -232,7 +261,7 @@ def _fixture_files() -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Evaluate converter JSON against the CIS rule pack.")
+    parser = argparse.ArgumentParser(description="Evaluate converter JSON against CIS/NIST/STIG rule packs.")
     parser.add_argument("config_file", nargs="?", help="Path to one converter-output JSON file")
     parser.add_argument("--all", action="store_true", help="Evaluate every file in fixtures/")
     parser.add_argument(
@@ -241,13 +270,20 @@ def main(argv: list[str] | None = None) -> int:
         dest="as_json",
         help="Print machine-readable JSON (device + findings + warning)",
     )
-    parser.add_argument("--rules", default=None, help="Override path to cis_rules.yaml")
+    parser.add_argument(
+        "--rules",
+        default=None,
+        help="Load a single YAML rule pack by path (default: all CIS+NIST+STIG packs)",
+    )
     args = parser.parse_args(argv)
 
     if not args.all and not args.config_file:
         parser.error("provide a config JSON path or --all")
 
-    rules, _framework = load_rule_pack(args.rules)
+    if args.rules:
+        rules, _framework = load_rule_pack(args.rules)
+    else:
+        rules = load_all_rule_packs()
 
     if args.all:
         paths = _fixture_files()
