@@ -28,3 +28,6 @@ memory.db
 *.pdf
 !docs/architecture.pdf
 
+
+venv312/
+venv312.zip
