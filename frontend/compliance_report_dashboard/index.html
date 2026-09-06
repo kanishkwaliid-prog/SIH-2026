@@ -389,7 +389,6 @@ New Scan
       document.getElementById("assetVendor").textContent = VENDOR_LABELS[session.device.vendor] || session.device.vendor || "Unknown";
       document.getElementById("scanMeta").textContent = `Scan of ${session.filename}`;
       document.getElementById("downloadBtn").disabled = true;
-      document.getElementById("loadingText").classList.remove("hidden");
       document.getElementById("findingsList").innerHTML = `<p class="font-body-sm text-body-sm text-on-surface-variant" id="loadingText">Running compliance evaluation…</p>`;
 
       const selectedFrameworks = Array.from(document.querySelectorAll(".framework-checkbox:checked")).map((el) => el.value);

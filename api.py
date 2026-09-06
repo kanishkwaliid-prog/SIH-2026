@@ -6,7 +6,7 @@ can call them. Also serves the frontend itself (see the bottom of this
 file), so one command runs the whole app.
 
 Run with: uvicorn api:app --reload --port 8000
-Then open: http://localhost:8000/
+Then open: 
 
 This is a hackathon-scoped implementation: sessions are stored in memory
 (a plain dict), not a database, so restarting the server loses in-progress
