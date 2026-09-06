@@ -215,6 +215,7 @@ New Scan
 </svg>
 <div class="absolute inset-0 flex items-center justify-center flex-col">
 <span class="font-headline-lg text-headline-lg text-primary font-bold" id="scorePercent">—</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant mt-1 text-center" id="scoreCoverage"></span>
 </div>
 </div>
 <!-- Stat Pills -->
@@ -413,6 +414,12 @@ New Scan
         document.getElementById("failCount").textContent = failCount;
         document.getElementById("notEvalCount").textContent = notEvalCount;
         document.getElementById("scorePercent").textContent = `${score}%`;
+
+        const totalRules = findings.length;
+        const coverageEl = document.getElementById("scoreCoverage");
+        coverageEl.textContent = notEvalCount > 0
+          ? `of ${scored} evaluated checks (${notEvalCount} of ${totalRules} not evaluated)`
+          : `all ${totalRules} checks evaluated`;
 
         const circumference = 314.159;
         document.getElementById("scoreRing").setAttribute(
