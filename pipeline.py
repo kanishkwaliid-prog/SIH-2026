@@ -74,11 +74,7 @@ def process_config(config_text: str, user_declared_vendor: str = None) -> dict:
         classification = classify_unknown_line(raw_line, vendor_hint=device_info.get("vendor"))
         field = classification.get("field", "unclear")
 
-        if classification.get("confidence") == 1.0 and field != "unclear":
-            # confidence == 1.0 is memory.py's signal that this exact line
-            # was already confirmed by a human before (see check_memory in
-            # memory.py). Auto-apply it and skip asking the human again --
-            # this is the whole point of the memory layer.
+        if classification.get("source") == "memory" and field != "unclear":
             config[field] = classification.get("value")
             continue
 
