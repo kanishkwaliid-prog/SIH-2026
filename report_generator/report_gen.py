@@ -9,7 +9,11 @@ if platform.system() == "Darwin":
     homebrew_lib = "/opt/homebrew/lib" if os.path.exists("/opt/homebrew/lib") else "/usr/local/lib"
     os.environ["DYLD_LIBRARY_PATH"] = f"{homebrew_lib}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
 
-from weasyprint import HTML
+# weasyprint is imported lazily (inside generate_pdf_bytes) rather than here.
+# It needs native GTK/Pango/Cairo libraries that aren't bundled by pip,
+# especially on Windows -- if it's missing, we want the rest of the app
+# (upload/detect/review/evaluate) to keep working, and only the PDF export
+# to fail with a clear, actionable error at request time.
 
 REPORT_TEMPLATE = """
 <!DOCTYPE html>
@@ -272,6 +276,26 @@ def prepare_payload(raw_eval_result: dict, framework: str = "CIS Baseline") -> d
     }
 
 def generate_pdf_bytes(raw_eval_result: dict, framework: str = "CIS Baseline") -> bytes:
+    try:
+        from weasyprint import HTML
+    except OSError as exc:
+        # weasyprint imported fine but couldn't load its native
+        # GTK/Pango/Cairo libraries (common on Windows).
+        raise RuntimeError(
+            "PDF generation is unavailable: WeasyPrint could not load its "
+            "native libraries (Pango/Cairo/GObject). On Windows, install the "
+            "GTK3 runtime from "
+            "https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases "
+            "and restart the terminal, then try again. See "
+            "https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#windows "
+            "for details."
+        ) from exc
+    except ImportError as exc:
+        raise RuntimeError(
+            "PDF generation is unavailable: the 'weasyprint' package is not "
+            "installed. Run: pip install weasyprint"
+        ) from exc
+
     payload = prepare_payload(raw_eval_result, framework)
     template = Template(REPORT_TEMPLATE)
     rendered_html = template.render(**payload)
