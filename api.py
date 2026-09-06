@@ -195,7 +195,10 @@ async def get_report_pdf(session_id: str):
     if "eval_result" not in session:
         raise HTTPException(status_code=400, detail="Call /evaluate/{session_id} before requesting the PDF.")
 
-    pdf_bytes = generate_pdf_bytes(session["eval_result"], framework=session.get("framework", "CIS"))
+    try:
+        pdf_bytes = generate_pdf_bytes(session["eval_result"], framework=session.get("framework", "CIS"))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
     return Response(
         content=pdf_bytes,
