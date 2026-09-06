@@ -206,17 +206,19 @@ New Scan
 <h2 class="font-label-caps text-label-caps text-on-surface-variant mb-md tracking-wider self-start z-10 w-full">OVERALL SCORE</h2>
 <div class="flex items-center gap-xl z-10 w-full justify-around">
 <!-- Ring -->
-<div class="relative w-32 h-32 flex-shrink-0">
+<div class="flex flex-col items-center flex-shrink-0">
+<div class="relative w-32 h-32">
 <svg class="w-full h-full" viewbox="0 0 120 120">
 <!-- Background ring -->
 <circle class="text-surface-variant stroke-current" cx="60" cy="60" fill="transparent" r="50" stroke-width="8"></circle>
 <!-- Progress ring -->
 <circle class="text-primary stroke-current progress-ring__circle" cx="60" cy="60" fill="transparent" r="50" stroke-dasharray="314.159" stroke-dashoffset="314.159" stroke-linecap="round" stroke-width="8" id="scoreRing"></circle>
 </svg>
-<div class="absolute inset-0 flex items-center justify-center flex-col">
+<div class="absolute inset-0 flex items-center justify-center">
 <span class="font-headline-lg text-headline-lg text-primary font-bold" id="scorePercent">—</span>
-<span class="font-body-sm text-body-sm text-on-surface-variant mt-1 text-center" id="scoreCoverage"></span>
 </div>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant mt-2 text-center" id="scoreCoverage"></span>
 </div>
 <!-- Stat Pills -->
 <div class="flex flex-col gap-sm flex-grow max-w-xs">
