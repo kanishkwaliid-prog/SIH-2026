@@ -4,6 +4,9 @@
 
 # Python
 venv/
+venv312/
+test_env/
+__pycache__/
 __pycache__/
 *.pyc
 *.pyo
@@ -24,3 +27,4 @@ memory.db
 /output/
 *.pdf
 !docs/architecture.pdf
+
