@@ -103,6 +103,7 @@ def check_memory(raw_line: str, vendor_hint: str = None) -> Optional[dict]:
         "value": _decode_value(row["value"], row["value_type"]),
         "confidence": 1.0,  # human-confirmed (or previously high-confidence) = treat as certain
         "reasoning": f"From memory (originally {row['source']})",
+        "source": "memory",
     }
 
 

@@ -104,12 +104,14 @@ CLASSIFY_FALLBACK = {
     "value": None,
     "confidence": 0.0,
     "reasoning": None,  # filled in with the error message at call time
+    "source": "llm_fallback",
 }
 
 VENDOR_FALLBACK = {
     "vendor": "Unknown",
     "confidence": 0.0,
     "reasoning": None,
+    "source": "llm_fallback",
 }
 
 # ---------- Helpers ----------
@@ -180,6 +182,8 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
     result = _safe_parse_json(response.choices[0].message.content, CLASSIFY_FALLBACK)
     if result.get("reasoning") == "Failed to parse LLM response":
         raise ValueError("LLM returned malformed JSON")
+    result["source"] = "llm"
+    result["confidence"] = min(result.get("confidence", 0.0), 0.99)
     return result
 
 def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
@@ -218,6 +222,8 @@ def _guess_vendor_inner(config_text: str) -> dict:
     result = _safe_parse_json(response.choices[0].message.content, VENDOR_FALLBACK)
     if result.get("reasoning") == "Failed to parse LLM response":
         raise ValueError("LLM returned malformed JSON")
+    result["source"] = "llm"
+    result["confidence"] = min(result.get("confidence", 0.0), 0.99)
     return result
 
 def guess_vendor(config_text: str) -> dict:
