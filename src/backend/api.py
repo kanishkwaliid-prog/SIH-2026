@@ -28,7 +28,7 @@ from compliance_engine.evaluator import evaluate_report, load_selected_rule_pack
 from report_generator.report_gen import generate_pdf_bytes
 
 BASE_DIR = Path(__file__).resolve().parent
-FRONTEND_DIR = BASE_DIR / "frontend"
+FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
 app = FastAPI(title="Network Compliance Engine API")
 
