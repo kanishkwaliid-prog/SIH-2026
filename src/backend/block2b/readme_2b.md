@@ -24,14 +24,20 @@ double-check instead of being trusted blindly.
 
 ## Files
 
-- `llm_classifier.py` — all core logic (prompts, API calls, JSON parsing,
-  retry handling, confidence check, memory lookup).
-- `memory.py` — SQLite-backed cache of human-confirmed classifications.
-- `test_classifier.py` — a hand-labeled test set to sanity-check the
-  classifier's accuracy against the shared schema fields.
-- `.env` — holds `GROQ_API_KEY` (not committed to git).
-- `.gitignore` — excludes `.env`, `venv/`, `__pycache__/`, `memory.db` from
-  git.
+All paths below are relative to `src/backend/` (this module's parent
+directory once the project moved to the `src/frontend` + `src/backend`
+layout):
+
+- `block2b/llm_classifier.py` — all core logic (prompts, API calls, JSON
+  parsing, retry handling, confidence check, memory lookup).
+- `block2b/memory.py` — SQLite-backed cache of human-confirmed
+  classifications.
+- `block2b/test_classifier.py` — a hand-labeled test set to sanity-check
+  the classifier's accuracy against the shared schema fields.
+- `.env` — holds `GROQ_API_KEY`, lives at the **repo root**, not inside
+  `block2b/` (not committed to git).
+- `.gitignore` — also at the repo root; excludes `.env`, `venv/`,
+  `__pycache__/`, `memory.db` from git for the whole project.
 
 ## Tech stack
 
@@ -43,20 +49,21 @@ double-check instead of being trusted blindly.
 
 ## Setup
 
+From the repo root:
+
 ```bash
-python -m venv venv
-venv\Scripts\activate
+python3 -m venv venv
+source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env          # then fill in your Groq API key
 ```
 
-Add your key to `.env`:
-```
-GROQ_API_KEY=your_key_here
-```
+Run the test suite (from `src/backend/`, so `block2b` resolves as a
+package — see `test_classifier.py`'s `sys.path` handling):
 
-Run the test suite:
 ```bash
-python test_classifier.py
+cd src/backend
+python3 block2b/test_classifier.py
 ```
 
 ## The functions I built
@@ -104,6 +111,23 @@ the JSON) and safely converts it into a usable Python dictionary. If the
 AI's reply is broken or unreadable, this also returns a safe fallback
 instead of crashing.
 
+### The Groq client is built lazily (`get_client()`, not a plain `client`)
+`llm_classifier.py` doesn't create the `Groq` client at import time.
+Constructing it eagerly meant importing this module at all would crash
+immediately for anyone without a `GROQ_API_KEY` in their `.env` — and
+since `pipeline.py` imports this module, that took down the whole app (and
+every test) for any teammate who hadn't set up a key yet.
+
+Instead, `get_client()` builds the client the first time it's actually
+needed and caches it in a private module-level `_client`. If no key is
+set, it raises `LLMUnavailable` (a dedicated exception, kept separate from
+transient API errors so `call_with_retry` doesn't waste retries + sleep
+time on a condition that can't possibly resolve mid-run). The practical
+effect: the app boots fine with no key at all, and any line that would've
+needed the LLM instead comes back `unclear` for a human to resolve on the
+review screen — this is the Tier 3 path `pipeline.py`'s docstring
+describes.
+
 ## Memory (`memory.py`)
 
 - `check_memory(raw_line, vendor_hint=None)` — returns a cached result if
@@ -121,26 +145,31 @@ team discussion before changing the cache key.
 
 ## Testing done so far
 
-**1. Accuracy test** — 16 hand-picked config lines with known correct
-`(field, value)` answers run through `classify_unknown_line()`. Typically
-scores 16/17 to 17/17; the one recurring near-miss (`no logging console`)
-is a genuinely ambiguous line — it only disables console output, not
-logging overall — and the LLM correctly flags it as low-confidence
-(`⚠ NEEDS REVIEW`) rather than confidently guessing wrong. The vendor guess
-function was also tested on a sample config and correctly identified it as
-Palo Alto PAN-OS with 98% confidence.
+**1. Accuracy test** — 17 hand-picked config lines with known correct
+`(field, value)` answers run through `classify_unknown_line()`. Latest
+run: **16/17**. The one miss (`no logging console`) is a genuinely
+ambiguous line — it only disables console output, not logging overall —
+and this run the LLM confidently guessed `logging_enabled: False` instead
+of flagging it `unclear`. This line is expected to be borderline and is
+called out in the test file itself; it isn't a sign of a broken
+classifier. The vendor guess function was also tested on a sample config
+and correctly identified it as Palo Alto PAN-OS with 98% confidence.
 
-**2. Failure tests** — deliberately used a broken/invalid API key to check
-that the program doesn't crash when the AI service fails. Tested
-separately for both `classify_unknown_line` (falls back to
-`field: "unclear"`) and `guess_vendor` (falls back to `vendor: "Unknown"`),
-since they use different fallback shapes. Both correctly caught the error,
-retried, and returned a safe fallback instead of crashing.
+**2. Failure tests** — deliberately swapped in a client built with an
+invalid API key to check that the program doesn't crash when the AI
+service rejects the request. Tested separately for both
+`classify_unknown_line` (falls back to `field: "unclear"`) and
+`guess_vendor` (falls back to `vendor: "Unknown"`), since they use
+different fallback shapes. Both correctly caught the `401 Invalid API Key`
+error, retried, and returned a safe fallback instead of crashing.
 
 **3. Edge case test** — tested weird/messy inputs: an empty line, a
 whitespace-only line, random gibberish symbols, a very long meaningless
 line, and a comment line. All were safely classified as `unclear` instead
 of confidently guessing a wrong field.
+
+Run it yourself with `python3 block2b/test_classifier.py` (from
+`src/backend/`) — see Setup above.
 
 ## Current status
 
@@ -150,5 +179,7 @@ Core work is complete and tested:
 - Confidence scoring works, so low-confidence answers can be flagged
 - The program survives API failures without crashing, with correct
   per-function fallback shapes
+- The client is built lazily, so the app and its imports survive a
+  missing `GROQ_API_KEY` entirely rather than crashing on startup
 - Handles messy/garbage input safely
 - Confirmed answers are cached in SQLite so repeat lines skip the LLM call
