@@ -5,8 +5,8 @@
 # Python
 venv/
 venv312/
+venv312.zip
 test_env/
-__pycache__/
 __pycache__/
 *.pyc
 *.pyo
@@ -27,7 +27,4 @@ memory.db
 /output/
 *.pdf
 !docs/architecture.pdf
-
-
-venv312/
-venv312.zip
+!submission/*.pdf
