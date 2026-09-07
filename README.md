@@ -95,40 +95,50 @@ PDF report (Simple + Technical view, vendor-specific remediation)
 ## 7. Repository Structure
 
 ```
-api.py                   FastAPI backend -- wires everything below into HTTP endpoints
-pipeline.py               Orchestrates vendor detection -> parsing -> LLM fallback
-main.py                    Standalone CLI test script (no server needed)
-DESIGN.md                   Design notes for the human-review / hash-chain system
+SIH-2026/
+├── README.md
+├── DESIGN.md
+├── requirements.txt
+├── .env.example
+├── docs/
+│   ├── architecture.md
+│   └── architecture.pdf
+├── submission/
+│   ├── PRESENTATION.md
+│   └── DEMO.md
+├── assets/
+│   └── screenshots/
+└── src/
+    ├── frontend/                    Wired frontend -- calls api.py directly, no mock data
+    │   shared.js                        API calls, session storage, page-to-page routing
+    │   upload_configuration/
+    │   analyzing_configuration/
+    │   vendor_detection_result/
+    │   review_unknown_lines/
+    │   compliance_report_dashboard/       Multi-framework ruleset picker
+    │
+    └── backend/
+        api.py                      FastAPI backend -- wires everything below into HTTP endpoints
+        pipeline.py                  Orchestrates vendor detection -> parsing -> LLM fallback
+        main.py                       Standalone CLI test script (no server needed)
 
-converter/                 Vendor detection + hardcoded parsers
-  parsers/                     cisco.py, juniper.py, paloalto.py
-  block2a_main.py               Entry point: run_block2a()
-  detection.py                    Vendor signature detection
+        converter/                    Vendor detection + hardcoded parsers
+          parsers/                        cisco.py, juniper.py, paloalto.py
+          block2a_main.py                  Entry point: run_block2a()
+          detection.py                       Vendor signature detection
 
-block2b/                    LLM fallback + memory + human review/consensus system
-  llm_classifier.py             Groq-based classification, redacts sensitive values first
-  memory.py                       Permanent confirmed-line cache
-  review_system.py                 Staged voting, promotion threshold, hash-chained audit log
+        block2b/                       LLM fallback + memory + human review/consensus system
+          llm_classifier.py                Groq-based classification, redacts sensitive values first
+          memory.py                          Permanent confirmed-line cache
+          review_system.py                    Staged voting, promotion threshold, hash-chained audit log
 
-compliance_engine/
-  evaluator.py                Rule evaluation logic, loads one or several rule packs
-  rules/                        cis_rules.yaml, nist_rules.yaml, stig_rules.yaml, rbi_rules.yaml, sebi_rules.yaml
-  fixtures/                      Sample converter-output JSON for testing the evaluator alone
+        compliance_engine/
+          evaluator.py                   Rule evaluation logic, loads one or several rule packs
+          rules/                           cis_rules.yaml, nist_rules.yaml, stig_rules.yaml, rbi_rules.yaml, sebi_rules.yaml
+          fixtures/                         Sample converter-output JSON for testing the evaluator alone
 
-report_generator/           PDF report generation (Jinja2 + WeasyPrint)
-
-frontend/                    Wired frontend -- calls api.py directly, no mock data
-  shared.js                     API calls, session storage, page-to-page routing
-  upload_configuration/
-  analyzing_configuration/
-  vendor_detection_result/
-  review_unknown_lines/
-  compliance_report_dashboard/    Multi-framework ruleset picker
-
-shared/                       Shared JSON schema + sample configs
-docs/                            architecture.md, architecture.pdf
-submission/                       PRESENTATION.md, DEMO.md
-assets/screenshots/                 App screenshots for submission
+        report_generator/               PDF report generation (Jinja2 + WeasyPrint)
+        shared/                          Shared JSON schema + sample configs
 ```
 
 ## 8. Final Presentation
@@ -166,12 +176,13 @@ Two terminals, run at the same time:
 ```bash
 # Terminal 1 -- backend API
 source venv/bin/activate
+cd src/backend
 uvicorn api:app --reload --port 8000
 ```
 
 ```bash
 # Terminal 2 -- frontend
-cd frontend
+cd src/frontend
 python3 -m http.server 5500
 ```
 

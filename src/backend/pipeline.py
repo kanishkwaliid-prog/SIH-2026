@@ -142,7 +142,7 @@ if __name__ == "__main__":
     import sys
     from pathlib import Path
 
-    default_sample = Path("shared/sample_configs/cisco_mixed_unrecognized.txt")
+    default_sample = Path(__file__).parent / "shared" / "sample_configs" / "cisco_mixed_unrecognized.txt"
     sample_path = Path(sys.argv[1]) if len(sys.argv) > 1 else default_sample
 
     if not sample_path.exists():
