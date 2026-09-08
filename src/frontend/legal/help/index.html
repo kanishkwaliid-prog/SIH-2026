@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ConfigGuard - Help Centre</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#005236",
+                    "on-error": "#690005",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "inverse-primary": "#006a61",
+                    "primary-fixed-dim": "#6bd8cb",
+                    "on-primary-fixed-variant": "#005049",
+                    "inverse-on-surface": "#283044",
+                    "error-container": "#93000a",
+                    "error": "#ffb4ab",
+                    "surface": "#0b1326",
+                    "on-secondary-fixed": "#001d31",
+                    "primary-container": "#29a195",
+                    "inverse-surface": "#dae2fd",
+                    "surface-container-lowest": "#060e20",
+                    "secondary-fixed": "#cce5ff",
+                    "on-secondary-container": "#002c47",
+                    "outline": "#879391",
+                    "on-secondary": "#003351",
+                    "tertiary-fixed": "#6ffbbe",
+                    "on-tertiary-fixed": "#002113",
+                    "secondary": "#93ccff",
+                    "on-primary-container": "#00302b",
+                    "on-surface-variant": "#bcc9c6",
+                    "surface-container-highest": "#2d3449",
+                    "on-background": "#dae2fd",
+                    "on-primary-fixed": "#00201d",
+                    "secondary-fixed-dim": "#93ccff",
+                    "surface-dim": "#0b1326",
+                    "on-surface": "#dae2fd",
+                    "on-tertiary": "#003824",
+                    "on-tertiary-container": "#00311f",
+                    "surface-container": "#171f33",
+                    "surface-tint": "#6bd8cb",
+                    "surface-container-low": "#131b2e",
+                    "primary": "#6bd8cb",
+                    "tertiary-container": "#00a572",
+                    "surface-bright": "#31394d",
+                    "tertiary": "#4edea3",
+                    "on-secondary-fixed-variant": "#004b73",
+                    "background": "#0b1326",
+                    "outline-variant": "#3d4947",
+                    "secondary-container": "#3198dc",
+                    "on-primary": "#003732",
+                    "surface-variant": "#2d3449",
+                    "primary-fixed": "#89f5e7",
+                    "on-error-container": "#ffdad6",
+                    "surface-container-high": "#222a3d"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "4px",
+                    "xs": "4px",
+                    "margin-desktop": "48px",
+                    "gutter": "24px",
+                    "md": "16px",
+                    "margin-mobile": "16px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "sm": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "title-md": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
+<nav class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shadow-sm w-full sticky top-0 z-50">
+<div class="flex justify-between items-center px-margin-desktop w-full h-16">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary dark:text-primary text-2xl" data-icon="security" data-weight="fill">security</span>
+<span class="font-headline-lg text-headline-lg font-bold text-primary dark:text-primary tracking-tight hidden md:block">ConfigGuard</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary tracking-tight md:hidden">ConfigGuard</span>
+</div>
+<div class="hidden md:flex items-center gap-gutter h-full">
+<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="../upload_configuration/index.html">Scans</a>
+<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">Rulesets</a>
+<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">Settings</a>
+</div>
+</div>
+</nav>
+
+<main class="flex-grow w-full max-w-4xl mx-auto px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col gap-xl">
+
+<header class="flex flex-col gap-xs">
+<h1 class="font-display-lg text-display-lg text-on-surface">Help Centre</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">Answers to common questions about uploading configs, understanding your report, and how your data is handled.</p>
+</header>
+
+<!-- Quick links -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<a href="#getting-started" class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-primary" data-icon="rocket_launch">rocket_launch</span>
+<h3 class="font-title-md text-title-md text-on-surface">Getting Started</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Uploading your first config file.</p>
+</a>
+<a href="#understanding-reports" class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-primary" data-icon="fact_check">fact_check</span>
+<h3 class="font-title-md text-title-md text-on-surface">Understanding Reports</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Frameworks, severity, and remediation.</p>
+</a>
+<a href="#data-privacy" class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-primary" data-icon="shield_lock">shield_lock</span>
+<h3 class="font-title-md text-title-md text-on-surface">Data &amp; Privacy</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">What happens to your uploaded files.</p>
+</a>
+</div>
+
+<!-- Getting Started -->
+<section id="getting-started" class="flex flex-col gap-md scroll-mt-20">
+<h2 class="font-title-md text-title-md text-on-surface border-b border-outline-variant pb-sm">Getting Started</h2>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+What file types can I upload?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">ConfigGuard accepts .txt, .cfg, .conf, and .xml files up to 10MB each, and supports uploading multiple files at once. These should be raw configuration exports from your device (e.g. "show running-config" output on Cisco, or a Junos/PAN-OS config export).</p>
+</details>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+Do I need to tell ConfigGuard which vendor my device is?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">No — vendor selection is optional. ConfigGuard will attempt to auto-detect your vendor (Cisco IOS, Juniper Junos, Palo Alto PAN-OS) from the config's syntax. If confidence is low, you'll be shown a confirmation screen with its best guess and the reason for it, so you can confirm or correct it.</p>
+</details>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+What happens if my vendor isn't recognized at all?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">If no known vendor signature matches, ConfigGuard flags the config for AI-assisted review. Unrecognized lines are shown to you with an AI-suggested category, which you confirm or correct in the "Review Unknown Lines" screen before a report is generated.</p>
+</details>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+Why is a field in my report showing "Not Evaluated" instead of Pass/Fail?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">"Not Evaluated" means the converter couldn't determine that value from your config file — it's different from a pass or fail, and means that control simply couldn't be automatically checked. It's shown so nothing is silently skipped from your report.</p>
+</details>
+</section>
+
+<!-- Understanding Reports -->
+<section id="understanding-reports" class="flex flex-col gap-md scroll-mt-20">
+<h2 class="font-title-md text-title-md text-on-surface border-b border-outline-variant pb-sm">Understanding Your Report</h2>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+Which compliance frameworks does ConfigGuard check against?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">CIS Benchmarks, NIST 800-53, DISA STIG, and India-specific frameworks (RBI Cyber Security Framework, SEBI Cybersecurity and Cyber Resilience Framework). RBI/SEBI checks are our own technical interpretation of those frameworks' general principles for device-level config settings — not an official or certified regulatory mapping.</p>
+</details>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+Are the remediation CLI commands safe to run directly on my device?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">Remediation commands are sourced directly from our rule pack (never generated or altered by AI), but you should always review and test any change in a non-production or lab environment before applying it to a live device. ConfigGuard cannot account for your specific network topology or dependencies.</p>
+</details>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+Can I download my report as a PDF?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">Yes — the compliance report dashboard provides a downloadable PDF containing device identification, the findings table, and full remediation paths.</p>
+</details>
+</section>
+
+<!-- Data & Privacy -->
+<section id="data-privacy" class="flex flex-col gap-md scroll-mt-20">
+<h2 class="font-title-md text-title-md text-on-surface border-b border-outline-variant pb-sm">Data &amp; Privacy</h2>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+Is my uploaded config file sent to an external AI?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">Only unrecognized individual lines — not your whole file — may be sent to a third-party AI provider to suggest a category, and a filtering step is applied first to withhold known-sensitive values like passwords or keys. Every AI suggestion requires your manual confirmation before it's used. See our <a class="text-primary hover:underline" href="../legal/privacy/index.html">Privacy Policy</a> for full details.</p>
+</details>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+How long is my data stored?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">Uploaded files and reports are stored to power your scan history for as long as this prototype is being evaluated. You can request deletion at any time — see below.</p>
+</details>
+
+<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
+How do I request deletion of my data?
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</summary>
+<p class="text-on-surface-variant text-body-sm mt-sm">Contact the project team using the details below with the scan ID or filename you'd like removed, and we'll delete the associated files, reports, and any confirmed line mappings tied to it.</p>
+</details>
+</section>
+
+<!-- Contact -->
+<section class="bg-surface-container-high rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm">
+<h2 class="font-title-md text-title-md text-on-surface">Still need help?</h2>
+<p class="text-on-surface-variant text-body-sm">Reach out to the ConfigGuard team directly.</p>
+<div class="flex items-center gap-sm text-primary">
+<span class="material-symbols-outlined" data-icon="mail">mail</span>
+<a class="hover:underline" href="mailto:[TEAM EMAIL]">[TEAM EMAIL]</a>
+</div>
+</section>
+
+</main>
+
+<footer class="w-full border-t border-outline-variant py-lg px-margin-mobile md:px-margin-desktop">
+<div class="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-md text-on-surface-variant font-body-sm text-body-sm">
+<span>© [YEAR] ConfigGuard — SIH 2026 Prototype</span>
+<div class="flex gap-lg">
+<a class="hover:text-primary transition-colors" href="../legal/terms/index.html">Terms</a>
+<a class="hover:text-primary transition-colors" href="../legal/privacy/index.html">Privacy</a>
+<a class="hover:text-primary transition-colors" href="../legal/help/index.html">Help Centre</a>
+</div>
+</div>
+</footer>
+</body></html>
