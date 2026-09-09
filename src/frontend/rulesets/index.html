@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ConfigGuard - Rulesets</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#005236",
+                    "on-error": "#690005",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "inverse-primary": "#006a61",
+                    "primary-fixed-dim": "#6bd8cb",
+                    "on-primary-fixed-variant": "#005049",
+                    "inverse-on-surface": "#283044",
+                    "error-container": "#93000a",
+                    "error": "#ffb4ab",
+                    "surface": "#0b1326",
+                    "on-secondary-fixed": "#001d31",
+                    "primary-container": "#29a195",
+                    "inverse-surface": "#dae2fd",
+                    "surface-container-lowest": "#060e20",
+                    "secondary-fixed": "#cce5ff",
+                    "on-secondary-container": "#002c47",
+                    "outline": "#879391",
+                    "on-secondary": "#003351",
+                    "tertiary-fixed": "#6ffbbe",
+                    "on-tertiary-fixed": "#002113",
+                    "secondary": "#93ccff",
+                    "on-primary-container": "#00302b",
+                    "on-surface-variant": "#bcc9c6",
+                    "surface-container-highest": "#2d3449",
+                    "on-background": "#dae2fd",
+                    "on-primary-fixed": "#00201d",
+                    "secondary-fixed-dim": "#93ccff",
+                    "surface-dim": "#0b1326",
+                    "on-surface": "#dae2fd",
+                    "on-tertiary": "#003824",
+                    "on-tertiary-container": "#00311f",
+                    "surface-container": "#171f33",
+                    "surface-tint": "#6bd8cb",
+                    "surface-container-low": "#131b2e",
+                    "primary": "#6bd8cb",
+                    "tertiary-container": "#00a572",
+                    "surface-bright": "#31394d",
+                    "tertiary": "#4edea3",
+                    "on-secondary-fixed-variant": "#004b73",
+                    "background": "#0b1326",
+                    "outline-variant": "#3d4947",
+                    "secondary-container": "#3198dc",
+                    "on-primary": "#003732",
+                    "surface-variant": "#2d3449",
+                    "primary-fixed": "#89f5e7",
+                    "on-error-container": "#ffdad6",
+                    "surface-container-high": "#222a3d"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "4px",
+                    "xs": "4px",
+                    "margin-desktop": "48px",
+                    "gutter": "24px",
+                    "md": "16px",
+                    "margin-mobile": "16px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "sm": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "title-md": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
+<nav class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shadow-sm w-full sticky top-0 z-50">
+<div class="flex justify-between items-center px-margin-desktop w-full h-16">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary dark:text-primary text-2xl" data-icon="security" data-weight="fill">security</span>
+<span class="font-headline-lg text-headline-lg font-bold text-primary dark:text-primary tracking-tight hidden md:block">ConfigGuard</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary tracking-tight md:hidden">ConfigGuard</span>
+</div>
+<div class="hidden md:flex items-center gap-gutter h-full">
+<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="../upload_configuration/index.html">Scans</a>
+<a class="h-full flex items-center font-body-md text-body-md text-primary dark:text-primary border-b-2 border-primary transition-colors" href="../rulesets/index.html">Rulesets</a>
+<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">Settings</a>
+</div>
+<div class="flex items-center gap-sm md:gap-md">
+<a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors p-sm rounded-full hover:bg-surface-variant active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</a>
+</div>
+</div>
+</nav>
+
+<main class="flex-grow w-full max-w-4xl mx-auto px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col gap-xl">
+
+<header class="flex flex-col gap-xs">
+<h1 class="font-display-lg text-display-lg text-on-surface">Rulesets</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">Every compliance framework ConfigGuard checks your device configuration against, and the rules within each.</p>
+</header>
+
+<!-- Summary stats -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-gutter">
+<div class="bg-surface-container rounded-xl border border-[#ffffff10] p-md flex flex-col gap-1">
+<span class="font-display-sm text-display-sm text-primary">5</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Frameworks</span>
+</div>
+<div class="bg-surface-container rounded-xl border border-[#ffffff10] p-md flex flex-col gap-1">
+<span class="font-display-sm text-display-sm text-primary">47</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Total Rules</span>
+</div>
+<div class="bg-surface-container rounded-xl border border-[#ffffff10] p-md flex flex-col gap-1">
+<span class="font-display-sm text-display-sm text-on-surface">3</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Vendors Covered</span>
+</div>
+<div class="bg-surface-container rounded-xl border border-[#ffffff10] p-md flex flex-col gap-1">
+<span class="font-display-sm text-display-sm text-on-surface">7</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Config Fields Checked</span>
+</div>
+<div class="bg-surface-container rounded-xl border border-[#ffffff10] p-md flex flex-col gap-1 col-span-2 md:col-span-1">
+<span class="font-display-sm text-display-sm text-on-surface">Cisco · Juniper · Palo Alto</span>
+</div>
+</div>
+
+<div class="bg-surface-container-high border border-[#ffffff10] rounded-xl p-lg flex items-start gap-md">
+<span class="material-symbols-outlined text-tertiary mt-1" data-icon="info">info</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">RBI and SEBI rules below are ConfigGuard's own technical interpretation of those frameworks' general principles, mapped onto device configuration checks — not an official or certified regulatory mapping. See our <a class="text-primary hover:underline" href="../legal/terms/index.html">Terms</a> for details.</p>
+</div>
+
+<!-- Framework sections -->
+<section class="flex flex-col gap-md">
+
+<details class="bg-surface-container rounded-xl border border-[#ffffff10] overflow-hidden group" open>
+<summary class="cursor-pointer list-none p-lg flex items-center justify-between hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-primary text-2xl" data-icon="shield">shield</span>
+<div class="flex flex-col">
+<h3 class="font-title-md text-title-md text-on-surface">CIS Benchmarks</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Center for Internet Security benchmarks for secure device configuration.</p>
+</div>
+</div>
+<div class="flex items-center gap-md shrink-0">
+<span class="font-body-sm text-body-sm text-on-surface-variant hidden md:block">16 rules</span>
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</div>
+</summary>
+<div class="border-t border-outline-variant flex flex-col">
+
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.1.1</span>
+<span class="text-body-sm text-on-surface">SSH Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.1.2</span>
+<span class="text-body-sm text-on-surface">Telnet Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.2.1</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.2.2</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.2.3</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.2.4</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.3.1</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.3.2</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.3.3</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.3.4</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-4.3.5</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-5.1.1</span>
+<span class="text-body-sm text-on-surface">Login Banner</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-5.1.2</span>
+<span class="text-body-sm text-on-surface">Login Banner</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-6.1.1</span>
+<span class="text-body-sm text-on-surface">Logging Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-6.1.2</span>
+<span class="text-body-sm text-on-surface">Logging Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">CIS-7.1.1</span>
+<span class="text-body-sm text-on-surface">SNMP Community String</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+</div>
+</details>
+
+<details class="bg-surface-container rounded-xl border border-[#ffffff10] overflow-hidden group" >
+<summary class="cursor-pointer list-none p-lg flex items-center justify-between hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-primary text-2xl" data-icon="account_balance">account_balance</span>
+<div class="flex flex-col">
+<h3 class="font-title-md text-title-md text-on-surface">NIST 800-53</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">U.S. National Institute of Standards and Technology security & privacy controls.</p>
+</div>
+</div>
+<div class="flex items-center gap-md shrink-0">
+<span class="font-body-sm text-body-sm text-on-surface-variant hidden md:block">9 rules</span>
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</div>
+</summary>
+<div class="border-t border-outline-variant flex flex-col">
+
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">NIST-AC-17</span>
+<span class="text-body-sm text-on-surface">SSH Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">NIST-CM-7</span>
+<span class="text-body-sm text-on-surface">Telnet Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">NIST-AC-12</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">NIST-AU-2</span>
+<span class="text-body-sm text-on-surface">Logging Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">NIST-IA-5</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">NIST-IA-5-1</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">NIST-IA-5-1C</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">NIST-AC-8</span>
+<span class="text-body-sm text-on-surface">Login Banner</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">NIST-IA-5-D</span>
+<span class="text-body-sm text-on-surface">SNMP Community String</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+</div>
+</details>
+
+<details class="bg-surface-container rounded-xl border border-[#ffffff10] overflow-hidden group" >
+<summary class="cursor-pointer list-none p-lg flex items-center justify-between hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-primary text-2xl" data-icon="military_tech">military_tech</span>
+<div class="flex flex-col">
+<h3 class="font-title-md text-title-md text-on-surface">DISA STIG</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Defense Information Systems Agency Security Technical Implementation Guides.</p>
+</div>
+</div>
+<div class="flex items-center gap-md shrink-0">
+<span class="font-body-sm text-body-sm text-on-surface-variant hidden md:block">8 rules</span>
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</div>
+</summary>
+<div class="border-t border-outline-variant flex flex-col">
+
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">STIG-V-220524</span>
+<span class="text-body-sm text-on-surface">SSH Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">STIG-V-220537</span>
+<span class="text-body-sm text-on-surface">Telnet Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">STIG-V-220525</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">STIG-V-216654</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">STIG-V-220549</span>
+<span class="text-body-sm text-on-surface">Logging Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">STIG-V-220548</span>
+<span class="text-body-sm text-on-surface">Login Banner</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">STIG-V-220531</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">STIG-V-220559</span>
+<span class="text-body-sm text-on-surface">SNMP Community String</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+</div>
+</details>
+
+<details class="bg-surface-container rounded-xl border border-[#ffffff10] overflow-hidden group" >
+<summary class="cursor-pointer list-none p-lg flex items-center justify-between hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-primary text-2xl" data-icon="currency_rupee">currency_rupee</span>
+<div class="flex flex-col">
+<h3 class="font-title-md text-title-md text-on-surface">RBI Cyber Security Framework</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Reserve Bank of India cyber security guidance for regulated financial entities. Our own technical interpretation — not an official mapping.</p>
+</div>
+</div>
+<div class="flex items-center gap-md shrink-0">
+<span class="font-body-sm text-body-sm text-on-surface-variant hidden md:block">7 rules</span>
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</div>
+</summary>
+<div class="border-t border-outline-variant flex flex-col">
+
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">RBI-CSF-1</span>
+<span class="text-body-sm text-on-surface">SSH Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">RBI-CSF-2</span>
+<span class="text-body-sm text-on-surface">Telnet Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">RBI-CSF-3</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">RBI-CSF-4</span>
+<span class="text-body-sm text-on-surface">Logging Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">RBI-CSF-5</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">RBI-CSF-6</span>
+<span class="text-body-sm text-on-surface">Login Banner</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">RBI-CSF-7</span>
+<span class="text-body-sm text-on-surface">SNMP Community String</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+</div>
+</details>
+
+<details class="bg-surface-container rounded-xl border border-[#ffffff10] overflow-hidden group" >
+<summary class="cursor-pointer list-none p-lg flex items-center justify-between hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-primary text-2xl" data-icon="monitoring">monitoring</span>
+<div class="flex flex-col">
+<h3 class="font-title-md text-title-md text-on-surface">SEBI CSCRF</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Securities and Exchange Board of India Cybersecurity and Cyber Resilience Framework. Our own technical interpretation — not an official mapping.</p>
+</div>
+</div>
+<div class="flex items-center gap-md shrink-0">
+<span class="font-body-sm text-body-sm text-on-surface-variant hidden md:block">7 rules</span>
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</div>
+</summary>
+<div class="border-t border-outline-variant flex flex-col">
+
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">SEBI-CSCRF-1</span>
+<span class="text-body-sm text-on-surface">SSH Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">SEBI-CSCRF-2</span>
+<span class="text-body-sm text-on-surface">Telnet Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">SEBI-CSCRF-3</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">SEBI-CSCRF-4</span>
+<span class="text-body-sm text-on-surface">Logging Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">SEBI-CSCRF-5</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">SEBI-CSCRF-6</span>
+<span class="text-body-sm text-on-surface">Login Banner</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-[#f59e0b]/20 text-[#fbbf24] border-[#f59e0b]/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">SEBI-CSCRF-7</span>
+<span class="text-body-sm text-on-surface">SNMP Community String</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+</div>
+</details>
+</section>
+
+</main>
+
+<footer class="w-full border-t border-outline-variant py-lg px-margin-mobile md:px-margin-desktop">
+<div class="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-md text-on-surface-variant font-body-sm text-body-sm">
+<span>© [YEAR] ConfigGuard — SIH 2026 Prototype</span>
+<div class="flex gap-lg">
+<a class="hover:text-primary transition-colors" href="../legal/terms/index.html">Terms</a>
+<a class="hover:text-primary transition-colors" href="../legal/privacy/index.html">Privacy</a>
+<a class="hover:text-primary transition-colors" href="../legal/help/index.html">Help Centre</a>
+</div>
+</div>
+</footer>
+</body></html>
