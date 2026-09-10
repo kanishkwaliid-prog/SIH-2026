@@ -11,6 +11,7 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+src/backend/simulate_reviewers.py
 
 # Database
 *.db
