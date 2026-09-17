@@ -99,7 +99,7 @@ function routeToNextStep() {
 
   const needsVendorConfirm = sessions.find((s) => s.device && s.device.needs_confirmation);
   if (needsVendorConfirm) {
-    window.location.href = `../vendor_detection_result/index.html?session=${needsVendorConfirm.session_id}`;
+    goTo(`../vendor_detection_result/index.html?session=${needsVendorConfirm.session_id}`);
     return;
   }
 
@@ -107,10 +107,83 @@ function routeToNextStep() {
     (s) => s.pending_confirmations && s.pending_confirmations.length > 0
   );
   if (needsLineReview) {
-    window.location.href = `../review_unknown_lines/index.html?session=${needsLineReview.session_id}`;
+    goTo(`../review_unknown_lines/index.html?session=${needsLineReview.session_id}`);
     return;
   }
 
   // Everything resolved -- go generate reports.
-  window.location.href = `../compliance_report_dashboard/index.html`;
+  goTo(`../compliance_report_dashboard/index.html`);
+}
+
+// ---------- Page transitions ----------
+// The app is a set of static, separately-loaded HTML pages (no SPA
+// router), so a true in-place transition isn't possible -- a real
+// navigation always happens between them. This simulates one: the outer
+// #app-shell fades/slides out before the browser navigates away, and
+// fades/slides in on the next page's load, so it reads as a soft
+// transition instead of a hard cut. Respects prefers-reduced-motion.
+
+const PAGE_TRANSITION_MS = 220;
+
+function prefersReducedMotion() {
+  return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// Use this instead of a raw `window.location.href = url` assignment for
+// any same-app navigation (sidebar links, redirects after an action,
+// etc.) so the exit transition plays consistently everywhere.
+function goTo(url) {
+  const shell = document.getElementById("app-shell");
+  if (!shell || prefersReducedMotion()) {
+    window.location.href = url;
+    return;
+  }
+  shell.style.transition = `opacity ${PAGE_TRANSITION_MS}ms ease-in, transform ${PAGE_TRANSITION_MS}ms ease-in`;
+  shell.style.opacity = "0";
+  shell.style.transform = "translateY(-8px)";
+  window.setTimeout(() => {
+    window.location.href = url;
+  }, PAGE_TRANSITION_MS);
+}
+
+function initPageTransitions() {
+  const shell = document.getElementById("app-shell");
+  if (!shell) return;
+
+  if (prefersReducedMotion()) {
+    shell.style.opacity = "1";
+  } else {
+    // Starts hidden via inline style="opacity:0" in the HTML (so there's
+    // no flash before this runs), then eases in on the next frame.
+    shell.style.transform = "translateY(8px)";
+    requestAnimationFrame(() => {
+      shell.style.transition = `opacity ${PAGE_TRANSITION_MS}ms ease-out, transform ${PAGE_TRANSITION_MS}ms ease-out`;
+      requestAnimationFrame(() => {
+        shell.style.opacity = "1";
+        shell.style.transform = "translateY(0)";
+      });
+    });
+  }
+
+  // Any same-app link (relative .html href, no modifier keys, not
+  // opening in a new tab) gets the fade-out treatment before navigating.
+  document.addEventListener("click", (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+    const link = e.target.closest("a[href]");
+    if (!link) return;
+    if (link.target === "_blank" || link.hasAttribute("download")) return;
+
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("#") || href.startsWith("mailto:") || /^https?:\/\//.test(href)) return;
+
+    e.preventDefault();
+    goTo(link.href);
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initPageTransitions);
+} else {
+  initPageTransitions();
 }
