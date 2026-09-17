@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="dark" lang="en"><head>
+<html lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>ConfigGuard - Vendor Detection</title>
@@ -13,61 +13,70 @@
             darkMode: "class",
             theme: {
                 extend: {
-                    "colors": {
-                        "on-tertiary-fixed-variant": "#005236",
-                        "on-error": "#690005",
-                        "tertiary-fixed-dim": "#4edea3",
-                        "inverse-primary": "#006a61",
-                        "primary-fixed-dim": "#6bd8cb",
-                        "on-primary-fixed-variant": "#005049",
-                        "inverse-on-surface": "#283044",
-                        "error-container": "#93000a",
-                        "error": "#ffb4ab",
-                        "surface": "#0b1326",
-                        "on-secondary-fixed": "#001d31",
-                        "primary-container": "#29a195",
-                        "inverse-surface": "#dae2fd",
-                        "surface-container-lowest": "#060e20",
-                        "secondary-fixed": "#cce5ff",
-                        "on-secondary-container": "#002c47",
-                        "outline": "#879391",
-                        "on-secondary": "#003351",
-                        "tertiary-fixed": "#6ffbbe",
-                        "on-tertiary-fixed": "#002113",
-                        "secondary": "#93ccff",
-                        "on-primary-container": "#00302b",
-                        "on-surface-variant": "#bcc9c6",
-                        "surface-container-highest": "#2d3449",
-                        "on-background": "#dae2fd",
-                        "on-primary-fixed": "#00201d",
-                        "secondary-fixed-dim": "#93ccff",
-                        "surface-dim": "#0b1326",
-                        "on-surface": "#dae2fd",
-                        "on-tertiary": "#003824",
-                        "on-tertiary-container": "#00311f",
-                        "surface-container": "#171f33",
-                        "surface-tint": "#6bd8cb",
-                        "surface-container-low": "#131b2e",
-                        "primary": "#6bd8cb",
-                        "tertiary-container": "#00a572",
-                        "surface-bright": "#31394d",
-                        "tertiary": "#4edea3",
-                        "on-secondary-fixed-variant": "#004b73",
-                        "background": "#0b1326",
-                        "outline-variant": "#3d4947",
-                        "secondary-container": "#3198dc",
-                        "on-primary": "#003732",
-                        "surface-variant": "#2d3449",
-                        "primary-fixed": "#89f5e7",
-                        "on-error-container": "#ffdad6",
-                        "surface-container-high": "#222a3d"
-                    },
-                    "borderRadius": {
-                        "DEFAULT": "0.25rem",
-                        "lg": "0.5rem",
-                        "xl": "0.75rem",
-                        "full": "9999px"
-                    },
+                                                    "colors": {
+                    "on-tertiary-fixed-variant": "#6FCB8D",
+                    "on-error": "#0A0A0A",
+                    "tertiary-fixed-dim": "#6FCB8D",
+                    "inverse-primary": "#0A0A0A",
+                    "primary-fixed-dim": "#F3EEE3",
+                    "on-primary-fixed-variant": "#0A0A0A",
+                    "inverse-on-surface": "#0A0A0A",
+                    "error-container": "#22141B",
+                    "error": "#E8829E",
+                    "surface": "#0D0D0D",
+                    "on-secondary-fixed": "#0A0A0A",
+                    "primary-container": "#2A2822",
+                    "inverse-surface": "#F3EEE3",
+                    "surface-container-lowest": "#0A0A0A",
+                    "secondary-fixed": "#171A2C",
+                    "on-secondary-container": "#8D93E8",
+                    "outline": "#33312C",
+                    "on-secondary": "#0A0A0A",
+                    "tertiary-fixed": "#131D16",
+                    "on-tertiary-fixed": "#6FCB8D",
+                    "secondary": "#8D93E8",
+                    "on-primary-container": "#F3EEE3",
+                    "on-surface-variant": "#9C9686",
+                    "surface-container-highest": "#232323",
+                    "on-background": "#F3EEE3",
+                    "on-primary-fixed": "#0A0A0A",
+                    "secondary-fixed-dim": "#8D93E8",
+                    "surface-dim": "#0A0A0A",
+                    "on-surface": "#F3EEE3",
+                    "on-tertiary": "#0A0A0A",
+                    "on-tertiary-container": "#6FCB8D",
+                    "surface-container": "#161616",
+                    "surface-tint": "#F3EEE3",
+                    "surface-container-low": "#131313",
+                    "primary": "#F3EEE3",
+                    "tertiary-container": "#131D16",
+                    "surface-bright": "#1C1C1C",
+                    "tertiary": "#6FCB8D",
+                    "on-secondary-fixed-variant": "#8D93E8",
+                    "background": "#0A0A0A",
+                    "outline-variant": "rgba(243,238,227,0.09)",
+                    "secondary-container": "#171A2C",
+                    "on-primary": "#0A0A0A",
+                    "surface-variant": "#1A1A1A",
+                    "primary-fixed": "#F3EEE3",
+                    "on-error-container": "#E8829E",
+                    "surface-container-high": "#1C1C1C",
+                    "page": "#050505",
+                    "ink": "#F3EEE3",
+                    "on-ink": "#0A0A0A",
+                    "high": "#E89158",
+                    "high-container": "#241A10",
+                    "on-high-container": "#E89158",
+                    "medium": "#E8B84B",
+                    "medium-container": "#211A0C",
+                    "on-medium-container": "#E8B84B"
+                },
+                                                    "borderRadius": {
+                    "DEFAULT": "0.75rem",
+                    "lg": "1rem",
+                    "xl": "1.5rem",
+                    "full": "9999px"
+                },
                     "spacing": {
                         "base": "4px",
                         "xs": "4px",
@@ -105,38 +114,56 @@
     </script>
 <style>
         .ambient-shadow {
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
     </style>
 </head>
-<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md text-body-md">
-<nav class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shadow-sm flex justify-between items-center px-margin-desktop w-full h-16 shrink-0 relative z-50">
-<div class="flex items-center gap-gutter">
-<a href="../upload_configuration/index.html" class="font-headline-lg text-headline-lg font-bold text-primary dark:text-primary md:block hidden">
-                ConfigGuard
-            </a>
-<a href="../upload_configuration/index.html" class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary md:hidden block">
-                ConfigGuard
-            </a>
-<div class="hidden md:flex items-center gap-md ml-lg">
-<a class="text-primary dark:text-primary border-b-2 border-primary pb-1 hover:text-primary dark:hover:text-primary transition-colors active:scale-95 transition-transform font-label-caps text-label-caps" href="../upload_configuration/index.html">Scans</a>
-<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors active:scale-95 transition-transform font-label-caps text-label-caps" href="../rulesets/index.html">Rulesets</a>
-<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors active:scale-95 transition-transform font-label-caps text-label-caps" href="#">Settings</a>
+<body class="bg-page text-on-background min-h-screen flex flex-col font-body-md text-body-md p-2 md:p-6">
+<div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
+<!-- Sidebar -->
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
+<a href="../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
+<div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="security">security</span>
 </div>
-</div>
-<div class="flex items-center gap-md text-on-surface-variant">
-<button class="hover:text-primary transition-colors active:scale-95 flex items-center justify-center">
-<span class="material-symbols-outlined" data-icon="help">help</span>
-</button>
-<button class="hover:text-primary transition-colors active:scale-95 flex items-center justify-center relative">
-<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
-<span class="absolute top-0 right-0 w-2 h-2 bg-primary rounded-full"></span>
-</button>
-<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center overflow-hidden ml-sm">
-<span class="material-symbols-outlined text-on-surface-variant" data-icon="person">person</span>
-</div>
-</div>
+<span class="font-headline-lg-mobile font-bold text-on-surface tracking-tight hidden md:block">ConfigGuard</span>
+</a>
+<span class="hidden md:block font-label-caps text-label-caps text-on-surface-variant px-sm mb-sm tracking-wider relative z-10">WORKSPACE</span>
+<nav class="flex flex-row md:flex-col gap-1 relative z-10 ml-auto md:ml-0">
+<a href="../upload_configuration/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full bg-primary text-on-primary font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="troubleshoot">troubleshoot</span>
+<span class="hidden md:inline">Scans</span>
+</a>
+<a href="../rulesets/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
+<span class="hidden md:inline">Rulesets</span>
+</a>
+<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+<span class="hidden md:inline">Settings</span>
+</a>
 </nav>
+<div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
+<div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
+<span class="relative flex h-2 w-2 shrink-0">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+</div>
+<div class="flex items-center gap-sm px-sm">
+<a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="help">help</span>
+</a>
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center overflow-hidden ml-auto">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]" data-icon="person">person</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Content column -->
+<div class="flex flex-col flex-grow min-w-0">
 <main class="flex-grow flex justify-center items-start pt-xl pb-margin-desktop px-margin-mobile md:px-margin-desktop">
 <div class="w-full max-w-4xl flex flex-col gap-lg">
 <a href="../upload_configuration/index.html" class="flex items-center gap-sm text-on-surface-variant hover:text-primary cursor-pointer transition-colors w-fit">
@@ -182,15 +209,15 @@
 </div>
 </div>
 <div class="flex flex-col sm:flex-row justify-end items-center gap-md mt-sm pt-lg border-t border-outline-variant/30" id="actionRow">
-<button id="proceedBtn" class="w-full sm:w-auto border border-outline text-on-surface-variant hover:border-primary hover:text-primary transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg bg-transparent">
+<button id="proceedBtn" class="w-full sm:w-auto border border-outline text-on-surface-variant hover:border-primary hover:text-primary transition-colors font-label-caps text-label-caps px-lg py-3 rounded-full bg-transparent">
                     Proceed anyway
                 </button>
-<select id="switchVendorSelect" class="w-full sm:w-auto bg-surface-container-highest border border-outline-variant rounded-lg py-3 px-md font-body-sm text-body-sm text-on-surface">
+<select id="switchVendorSelect" class="w-full sm:w-auto bg-surface-container-highest border border-outline-variant rounded-full py-3 px-md font-body-sm text-body-sm text-on-surface">
 <option value="cisco_ios">Cisco IOS / NX-OS</option>
 <option value="juniper_junos">Juniper Junos</option>
 <option value="palo_alto">Palo Alto PAN-OS</option>
 </select>
-<button id="switchBtn" class="w-full sm:w-auto bg-primary text-on-primary hover:bg-primary-fixed-dim transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
+<button id="switchBtn" class="w-full sm:w-auto bg-primary text-on-primary hover:bg-primary-fixed-dim transition-colors font-label-caps text-label-caps px-lg py-3 rounded-full shadow-sm flex items-center justify-center gap-2">
                     Switch vendor
                     <span class="material-symbols-outlined text-sm">arrow_forward</span>
 </button>
@@ -198,16 +225,18 @@
 <p id="switchError" class="font-body-sm text-body-sm text-error hidden px-lg pb-md"></p>
 </div>
 </main>
-<footer class="bg-surface-container-lowest dark:bg-surface-container-lowest border-t border-outline-variant dark:border-outline-variant flex flex-col md:flex-row justify-between items-center px-margin-desktop py-sm w-full mt-auto">
-<div class="font-body-sm text-body-sm text-tertiary dark:text-tertiary mb-2 md:mb-0">
+<footer class="bg-surface-container-lowest border-t border-outline-variant flex flex-col md:flex-row justify-between items-center px-margin-desktop py-sm w-full mt-auto rounded-br-[1.75rem]">
+<div class="font-body-sm text-body-sm text-on-surface-variant mb-2 md:mb-0">
             © 2026 ConfigGuard. All systems operational.
         </div>
-<div class="flex gap-md font-label-caps text-label-caps text-on-surface-variant dark:text-on-surface-variant">
-<a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="../legal/privacy/index.html">Privacy Policy</a>
-<a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="../legal/terms/index.html">Terms of Service</a>
-<a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="../legal/help/index.html">Help Center</a>
+<div class="flex gap-md font-label-caps text-label-caps text-on-surface-variant">
+<a class="opacity-80 hover:opacity-100 hover:text-primary transition-opacity" href="../legal/privacy/index.html">Privacy Policy</a>
+<a class="opacity-80 hover:opacity-100 hover:text-primary transition-opacity" href="../legal/terms/index.html">Terms of Service</a>
+<a class="opacity-80 hover:opacity-100 hover:text-primary transition-opacity" href="../legal/help/index.html">Help Center</a>
 </div>
 </footer>
+</div>
+</div>
 <script src="../shared.js"></script>
 <script>
     const sessionId = getUrlParam("session");
