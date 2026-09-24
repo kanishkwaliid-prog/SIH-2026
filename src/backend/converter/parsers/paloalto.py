@@ -32,19 +32,45 @@ def parse_paloalto(config_text: str) -> tuple[dict, list[str]]:
         "banner_configured": None,
         "snmp_default_community": None,
     }
-
+    has_system_section = "set deviceconfig system" in config_text
     if "disable-telnet yes" in config_text:
         fields["telnet_enabled"] = False
     elif "disable-telnet no" in config_text:
         fields["telnet_enabled"] = True
 
-    # PAN-OS doesn't have a clear "enable ssh" line, so we leave this
-    # blank instead of guessing, same as the other fields.
+    if "disable-ssh yes" in config_text:
+        fields["ssh_enabled"] = False
+    elif "disable-ssh no" in config_text:
+        fields["ssh_enabled"] = True
 
     idle_match = re.search(r"idle-timeout (\d+)", config_text)
     if idle_match:
         fields["session_timeout_seconds"] = int(idle_match.group(1)) * 60
 
+        
+
+    if re.search(r"deviceconfig system login-banner\s+\S", config_text):
+        fields["banner_configured"] = True
+    elif has_system_section:
+        fields["banner_configured"] = False
+
+    if re.search(r"log-settings\s+syslog", config_text):
+        fields["logging_enabled"] = True
+    elif has_system_section:
+        fields["logging_enabled"] = False
+    
+    phash_match = re.search(r'mgt-config users \S+ phash\s+"?(\$\w+\$)', config_text)
+    if phash_match:
+        if phash_match.group(1) == "$1$":
+            fields["password_encryption"] = "md5"
+
+    KNOWN_WEAK_COMMUNITIES = {"public", "private", "cisco", "community"}
+    all_communities = re.findall(r'snmp-community-string\s+"?([^\s"]+)', config_text)
+    if all_communities:
+        fields["snmp_default_community"] = [
+            c for c in all_communities if c.lower() in KNOWN_WEAK_COMMUNITIES
+        ]
+        
     unrecognized_lines = []
     for line in config_text.splitlines():
         stripped = line.strip()

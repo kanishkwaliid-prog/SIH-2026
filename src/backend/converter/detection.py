@@ -36,6 +36,10 @@ def detect_vendor(config_text: str) -> tuple[str, str, str]:
     if re.search(r"^\s*system\s*\{", stripped, re.MULTILINE):
         return "juniper_junos", "high", "Detected curly-brace hierarchical syntax"
 
+    # Fortinet FortiOS: 'config system ...' blocks or the config-version header
+    if re.search(r"^#config-version=FG|^config system (global|interface)", stripped, re.MULTILINE):
+        return "fortinet_fortios", "high", "Detected FortiOS 'config system' syntax"
+
     # Cisco IOS: line vty/con blocks are a strong, near-unique signature
     if re.search(r"^line (vty|con)", stripped, re.MULTILINE):
         return "cisco_ios", "high", "Detected 'line vty/con' block syntax"

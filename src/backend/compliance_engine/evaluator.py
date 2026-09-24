@@ -152,6 +152,19 @@ def condition_holds(actual: Any, condition: Any) -> bool:
         raise ValueError(f"Unsupported condition: {condition!r}")
     return all(clauses)
 
+def _shared_remediation(vendor: str | None, field: str | None) -> str | None:
+    """Fix commands shared by all rules for a vendor, keyed by the checked field."""
+    if not vendor or not field:
+        return None
+    import yaml
+
+    path = Path(__file__).parent / "vendor_remediation.yaml"
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return None
+    return (data.get(vendor) or {}).get(field)
 
 def _remediation_cli(rule: dict[str, Any], vendor: str | None, failed: bool) -> str | None:
     if not failed:
@@ -162,7 +175,7 @@ def _remediation_cli(rule: dict[str, Any], vendor: str | None, failed: bool) -> 
     if vendor and vendor in rem:
         text = rem[vendor]
     else:
-        text = None
+        text = _shared_remediation(vendor, rule.get("field"))
     if isinstance(text, str):
         return text.strip() or None
     return None
