@@ -554,4 +554,50 @@
 </div>
 </div>
 <script src="../shared.js"></script>
+<script>
+  const REFERENCE_LINKS = {
+    "CIS Benchmarks": [
+      ["CIS Benchmarks", "https://www.cisecurity.org/cis-benchmarks"],
+    ],
+    "NIST 800-53": [
+      ["NIST SP 800-53 control catalog", "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final"],
+      ["NIST Cybersecurity Framework", "https://www.nist.gov/cyberframework"],
+    ],
+    "DISA STIG": [
+      ["DISA STIGs", "https://public.cyber.mil/stigs/"],
+    ],
+    "RBI Cyber Security Framework": [
+      ["RBI Cyber Security Framework for Banks", "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=10435"],
+    ],
+    "SEBI CSCRF": [
+      ["SEBI Cybersecurity and Cyber Resilience Framework", "https://www.sebi.gov.in/legal/circulars/aug-2024/cybersecurity-and-cyber-resilience-framework-cscrf-for-sebi-regulated-entities-res-_85964.html"],
+    ],
+  };
+
+  document.querySelectorAll("details").forEach((card) => {
+    const title = card.querySelector("h3").textContent.trim();
+    const links = REFERENCE_LINKS[title];
+    if (!links) return;
+
+    const row = document.createElement("div");
+    row.className = "py-sm px-md border-t border-outline-variant/50 flex flex-wrap items-center gap-x-md gap-y-xs font-body-sm text-body-sm";
+
+    const label = document.createElement("span");
+    label.className = "text-on-surface-variant";
+    label.textContent = "Official documentation:";
+    row.appendChild(label);
+
+    links.forEach(([text, url]) => {
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.className = "text-primary hover:underline";
+      a.textContent = text;
+      row.appendChild(a);
+    });
+
+    card.lastElementChild.appendChild(row);
+  });
+</script>
 </body></html>
