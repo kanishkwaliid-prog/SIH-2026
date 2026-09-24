@@ -279,7 +279,7 @@ New Scan
 </div>
 <!-- Findings List -->
 <div class="mb-xl">
-<h2 class="font-title-md text-title-md text-on-surface mb-md">Findings (Failed)</h2>
+<h2 class="font-title-md text-title-md text-on-surface mb-md">Findings</h2>
 <div class="space-y-md" id="findingsList">
 <p class="font-body-sm text-body-sm text-on-surface-variant" id="loadingText">Running compliance evaluation…</p>
 </div>
@@ -370,12 +370,7 @@ New Scan
       const failed = findings.filter((f) => f.status === "FAIL");
       const list = document.getElementById("findingsList");
 
-      if (failed.length === 0) {
-        list.innerHTML = `<p class="font-body-md text-body-md text-tertiary">No failed checks — this device passed every evaluated rule.</p>`;
-        return;
-      }
-
-      list.innerHTML = failed
+      const failedHtml = failed
         .map((f) => {
           const style = SEVERITY_STYLE[f.severity] || SEVERITY_STYLE.low;
           const remediation = f.remediation_cli
@@ -413,6 +408,31 @@ New Scan
             </div>`;
         })
         .join("");
+
+          const notEval = findings.filter((f) => f.status === "NOT_EVALUATED");
+
+          const failedPart = failed.length === 0
+            ? `<p class="font-body-md text-body-md text-tertiary">No failed checks — this device passed every evaluated rule.</p>`
+            : `<h3 class="font-label-caps text-label-caps text-error tracking-wider">FAILED (${failed.length})</h3>` + failedHtml;
+
+          const notEvalPart = notEval.length === 0 ? "" :
+            `<h3 class="font-label-caps text-label-caps text-medium tracking-wider mt-lg">NOT EVALUATED (${notEval.length})</h3>` +
+            notEval.map((f) => `
+              <div class="bg-surface-container-low rounded-xl border border-medium/30 overflow-hidden shadow-sm">
+                <div class="p-md bg-surface-container border-b border-outline-variant flex flex-wrap items-center gap-md">
+                  <div class="bg-medium/20 text-medium border-medium/30 px-sm py-xs rounded font-label-caps text-label-caps border flex items-center gap-xs">
+                    <span class="material-symbols-outlined text-[16px]">help</span>
+                    NOT EVALUATED
+                  </div>
+                  <span class="font-code-md text-code-md text-on-surface bg-surface-variant px-sm py-xs rounded border border-outline-variant">${f.rule_id}</span>
+                  <span class="font-title-md text-title-md text-on-surface">${f.field_checked}</span>
+                </div>
+                <div class="p-md">
+                  <p class="font-body-md text-body-md text-on-surface-variant">${f.reason || f.explanation || "This check could not be evaluated for this device."}</p>
+                </div>
+              </div>`).join("");
+
+          list.innerHTML = failedPart + notEvalPart;
     }
 
     async function loadReport(sessionId) {
