@@ -7,6 +7,7 @@ detail.
 """
 
 from .detection import resolve_vendor
+from .device_details import extract_device_details
 from .parsers import PARSER_DISPATCH
 
 
@@ -61,6 +62,7 @@ def run_block2a(config_text: str, user_declared_vendor: str | None = None) -> di
         }
 
     fields, unrecognized_lines = parser_fn(config_text)
+    device_info.update(extract_device_details(vendor_result["vendor"], config_text))
 
     return {
         "device": device_info,
