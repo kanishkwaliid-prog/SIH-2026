@@ -9,9 +9,11 @@ else in the pipeline needs to change.
 from .cisco import parse_cisco
 from .juniper import parse_juniper
 from .paloalto import parse_paloalto
+from .fortinet import parse_fortinet
 
 PARSER_DISPATCH = {
     "cisco_ios": parse_cisco,
     "juniper_junos": parse_juniper,
     "palo_alto": parse_paloalto,
+    "fortinet_fortios": parse_fortinet,
 }

@@ -1,0 +1,49 @@
+# Shared fix commands per vendor, keyed by the config field a rule checks.
+#
+# The evaluator looks here when a rule has no vendor-specific remediation of
+# its own. One note per field is written to satisfy the STRICTEST rule that
+# checks that field (for example a 5-minute timeout passes every timeout rule).
+#
+# To add a vendor: add a new top-level key (same name as in PARSER_DISPATCH)
+# and list the fields it can fix. Fields left out simply show no fix commands.
+
+fortinet_fortios:
+  ssh_enabled: |
+    # Replace port1 with your management interface
+    config system interface
+        edit "port1"
+            append allowaccess ssh
+        next
+    end
+  telnet_enabled: |
+    # Replace port1 with your management interface
+    config system global
+        set admin-telnet disable
+    end
+    config system interface
+        edit "port1"
+            unselect allowaccess telnet
+        next
+    end
+  session_timeout_seconds: |
+    config system global
+        set admintimeout 5
+    end
+  logging_enabled: |
+    config log syslogd setting
+        set status enable
+        set server "<syslog-server-ip>"
+    end
+  banner_configured: |
+    config system global
+        set pre-login-banner enable
+    end
+    config system replacemsg admin "pre_admin-disclaimer-text"
+        set buffer "Authorized access only. Activity may be monitored."
+    end
+  snmp_default_community: |
+    # Remove the default community (use the id shown in your config)
+    config system snmp community
+        delete 1
+    end
+    # If SNMP is still needed, use SNMPv3 (config system snmp user)
