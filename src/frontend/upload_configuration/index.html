@@ -201,6 +201,15 @@
 <input accept=".txt,.cfg,.conf,.xml" aria-label="Upload configuration file" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" id="fileInput" multiple="" type="file"/>
 </div>
 <p id="errorMsg" class="font-body-sm text-body-sm text-error hidden"></p>
+<button type="button" id="removeAllBtn" class="hidden self-end text-error hover:underline font-body-sm">Remove all</button>
+<div id="fileList" class="flex flex-col gap-sm"></div>
+<div id="previewBox" class="hidden bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+  <div class="flex justify-between items-center mb-sm">
+    <span id="previewName" class="font-label-caps text-label-caps text-on-surface-variant"></span>
+    <button type="button" id="previewClose" class="text-on-surface-variant hover:text-primary font-body-sm">Close</button>
+  </div>
+  <pre id="previewText" class="font-code-md text-code-md text-on-surface overflow-auto max-h-80 whitespace-pre-wrap"></pre>
+</div>
 <!-- Settings & CTA Container -->
 <div class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-md shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
 <!-- Vendor Dropdown -->
@@ -435,21 +444,75 @@
       errorMsg.classList.add("hidden");
     }
 
+    function renderFiles() {
+      const list = document.getElementById("fileList");
+      list.innerHTML = "";
+      selectedFiles.forEach((f, i) => {
+        const row = document.createElement("div");
+        row.className = "flex items-center justify-between gap-md bg-surface-container rounded-xl border border-outline-variant px-md py-sm";
+        const name = document.createElement("span");
+        name.className = "font-code-md text-code-md text-on-surface truncate";
+        name.textContent = f.name;
+        const btns = document.createElement("div");
+        btns.className = "flex gap-md shrink-0 font-body-sm";
+        const p = document.createElement("button");
+        p.type = "button";
+        p.textContent = "Preview";
+        p.className = "text-primary hover:underline";
+        p.onclick = async () => {
+          document.getElementById("previewName").textContent = f.name;
+          const t = await f.text();
+          document.getElementById("previewText").textContent =
+            t.length > 20000 ? t.slice(0, 20000) + "\n\n... (preview cut short)" : t;
+          document.getElementById("previewBox").classList.remove("hidden");
+        };
+        const r = document.createElement("button");
+        r.type = "button";
+        r.textContent = "Remove";
+        r.className = "text-error hover:underline";
+        r.onclick = () => {
+          selectedFiles.splice(i, 1);
+          document.getElementById("previewBox").classList.add("hidden");
+          renderFiles();
+        };
+        btns.append(p, r);
+        row.append(name, btns);
+        list.appendChild(row);
+      });
+
+      document.getElementById("removeAllBtn").classList.toggle("hidden", selectedFiles.length === 0);
+      fileNameDisplay.innerHTML = selectedFiles.length === 0
+        ? `<h3 class="font-title-md text-title-md text-on-surface">Drop your config file here or <span class="text-primary hover:underline cursor-pointer">browse</span></h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">Supports .txt, .cfg, .conf, .xml (Max 10MB) — multiple files allowed</p>`
+        : `<h3 class="font-title-md text-title-md text-primary">${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""} selected</h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">Drop or browse to add more</p>`;
+    }
+
+    document.getElementById("previewClose").onclick = () =>
+      document.getElementById("previewBox").classList.add("hidden");
+    document.getElementById("removeAllBtn").onclick = () => {
+      selectedFiles = [];
+      document.getElementById("previewBox").classList.add("hidden");
+      renderFiles();
+    };
+
     fileInput.addEventListener("change", () => {
-      selectedFiles = Array.from(fileInput.files);
       clearError();
-      if (selectedFiles.length === 0) {
-        fileNameDisplay.innerHTML = `
-          <h3 class="font-title-md text-title-md text-on-surface">Drop your config file here or <span class="text-primary hover:underline cursor-pointer">browse</span></h3>
-          <p class="font-body-sm text-body-sm text-on-surface-variant">Supports .txt, .cfg, .conf, .xml (Max 10MB) — multiple files allowed</p>
-        `;
-      } else {
-        const names = selectedFiles.map((f) => f.name).join(", ");
-        fileNameDisplay.innerHTML = `
-          <h3 class="font-title-md text-title-md text-primary">${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""} selected</h3>
-          <p class="font-body-sm text-body-sm text-on-surface-variant">${names}</p>
-        `;
-      }
+      Array.from(fileInput.files).forEach((f) => {
+        const already = selectedFiles.some((x) => x.name === f.name && x.size === f.size);
+        if (!already) selectedFiles.push(f);
+      });
+      fileInput.value = "";
+      renderFiles();
+    });
+
+    dropzone.addEventListener("drop", (e) => {
+      Array.from(e.dataTransfer.files).forEach((f) => {
+        const already = selectedFiles.some((x) => x.name === f.name && x.size === f.size);
+        if (!already) selectedFiles.push(f);
+      });
+      clearError();
+      renderFiles();
     });
 
     analyzeBtn.addEventListener("click", async () => {
