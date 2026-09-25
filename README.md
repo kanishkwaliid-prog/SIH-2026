@@ -161,8 +161,11 @@ cd SIH-2026
 python3 -m venv venv
 source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env          # then fill in your Groq API key
+cp .env.example .env          # then fill in GROQ_API_KEY, JWT_SECRET, DEMO_PASSWORD
 ```
+
+Generate a `JWT_SECRET` with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+The backend refuses to start without one.
 
 If PDF generation fails to install, install these system libraries first:
 ```bash
@@ -186,7 +189,15 @@ cd src/frontend
 python3 -m http.server 5500
 ```
 
-Open `http://localhost:5500/upload_configuration/` in your browser.
+Open `http://localhost:5500/upload_configuration/` in your browser. You'll be
+sent to the sign-in page first.
+
+**Demo accounts** (created at startup when `DEMO_PASSWORD` is set, all using that
+password): `admin@`, `senior@`, `engineer@` and `viewer@` at `alpha.demo` and
+`beta.demo` -- e.g. `engineer@alpha.demo`. Or create a new organization from the
+sign-in page. Auth design and API shapes: `docs/auth_decisions.md`.
+
+**Tests:** `cd src/backend && pytest auth/ -q`
 
 ## 13. Future Scope
 

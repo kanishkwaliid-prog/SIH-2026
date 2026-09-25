@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ConfigGuard - Activity log</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+                                            "colors": {
+                    "on-tertiary-fixed-variant": "#6FCB8D",
+                    "on-error": "#0A0A0A",
+                    "tertiary-fixed-dim": "#6FCB8D",
+                    "inverse-primary": "#0A0A0A",
+                    "primary-fixed-dim": "#F3EEE3",
+                    "on-primary-fixed-variant": "#0A0A0A",
+                    "inverse-on-surface": "#0A0A0A",
+                    "error-container": "#22141B",
+                    "error": "#E8829E",
+                    "surface": "#0D0D0D",
+                    "on-secondary-fixed": "#0A0A0A",
+                    "primary-container": "#2A2822",
+                    "inverse-surface": "#F3EEE3",
+                    "surface-container-lowest": "#0A0A0A",
+                    "secondary-fixed": "#171A2C",
+                    "on-secondary-container": "#8D93E8",
+                    "outline": "#33312C",
+                    "on-secondary": "#0A0A0A",
+                    "tertiary-fixed": "#131D16",
+                    "on-tertiary-fixed": "#6FCB8D",
+                    "secondary": "#8D93E8",
+                    "on-primary-container": "#F3EEE3",
+                    "on-surface-variant": "#9C9686",
+                    "surface-container-highest": "#232323",
+                    "on-background": "#F3EEE3",
+                    "on-primary-fixed": "#0A0A0A",
+                    "secondary-fixed-dim": "#8D93E8",
+                    "surface-dim": "#0A0A0A",
+                    "on-surface": "#F3EEE3",
+                    "on-tertiary": "#0A0A0A",
+                    "on-tertiary-container": "#6FCB8D",
+                    "surface-container": "#161616",
+                    "surface-tint": "#F3EEE3",
+                    "surface-container-low": "#131313",
+                    "primary": "#F3EEE3",
+                    "tertiary-container": "#131D16",
+                    "surface-bright": "#1C1C1C",
+                    "tertiary": "#6FCB8D",
+                    "on-secondary-fixed-variant": "#8D93E8",
+                    "background": "#0A0A0A",
+                    "outline-variant": "rgba(243,238,227,0.09)",
+                    "secondary-container": "#171A2C",
+                    "on-primary": "#0A0A0A",
+                    "surface-variant": "#1A1A1A",
+                    "primary-fixed": "#F3EEE3",
+                    "on-error-container": "#E8829E",
+                    "surface-container-high": "#1C1C1C",
+                    "page": "#050505",
+                    "ink": "#F3EEE3",
+                    "on-ink": "#0A0A0A",
+                    "high": "#E89158",
+                    "high-container": "#241A10",
+                    "on-high-container": "#E89158",
+                    "medium": "#E8B84B",
+                    "medium-container": "#211A0C",
+                    "on-medium-container": "#E8B84B"
+                },
+                                            "borderRadius": {
+                    "DEFAULT": "0.75rem",
+                    "lg": "1rem",
+                    "xl": "1.5rem",
+                    "full": "9999px"
+                },
+            "spacing": {
+                    "base": "4px",
+                    "xs": "4px",
+                    "margin-desktop": "48px",
+                    "gutter": "24px",
+                    "md": "16px",
+                    "margin-mobile": "16px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "sm": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "title-md": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-page text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container p-2 md:p-6">
+<div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
+<!-- Sidebar -->
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
+<a href="../../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
+<div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="security">security</span>
+</div>
+<span class="font-headline-lg-mobile font-bold text-on-surface tracking-tight hidden md:block">ConfigGuard</span>
+</a>
+<span class="hidden md:block font-label-caps text-label-caps text-on-surface-variant px-sm mb-sm tracking-wider relative z-10">WORKSPACE</span>
+<nav class="flex flex-row md:flex-col gap-1 relative z-10 ml-auto md:ml-0">
+<a href="../../upload_configuration/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="troubleshoot">troubleshoot</span>
+<span class="hidden md:inline">Scans</span>
+</a>
+<a href="../../rulesets/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
+<span class="hidden md:inline">Rulesets</span>
+</a>
+<a href="../../account/security/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="shield_lock">shield_lock</span>
+<span class="hidden md:inline">Security</span>
+</a>
+</nav>
+<div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
+<div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
+<span class="relative flex h-2 w-2 shrink-0">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+</div>
+<div class="flex items-center gap-sm px-sm">
+<a href="../../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="help">help</span>
+</a>
+<button aria-label="Notifications" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Content column -->
+<div class="flex flex-col flex-grow min-w-0">
+<main class="flex-grow w-full max-w-4xl mx-auto px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col gap-xl">
+
+<header class="flex flex-col gap-xs">
+<h1 class="font-display-lg text-display-lg text-on-surface">Activity log</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">Who did what, and when, across your organization. Every entry is chained to the one before it, so the log can be checked for tampering.</p>
+</header>
+
+<div id="page-error" role="alert" hidden class="rounded-xl bg-error-container text-on-error-container p-md font-body-sm text-body-sm"></div>
+<div id="page-notice" role="status" hidden class="rounded-xl border border-outline-variant bg-surface-container p-md font-body-sm text-body-sm text-on-surface-variant"></div>
+
+<section class="flex flex-col gap-md" aria-labelledby="log-heading">
+<div class="flex flex-wrap items-center justify-between gap-sm">
+<h2 id="log-heading" class="font-title-md text-title-md text-on-surface">Recent activity</h2>
+<span id="chain-badge" class="inline-flex items-center gap-2 px-3 py-1 rounded-full font-body-sm text-body-sm font-medium"></span>
+</div>
+<div class="overflow-x-auto rounded-xl border border-outline-variant">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead class="bg-surface-container text-on-surface-variant">
+<tr>
+<th scope="col" class="px-md py-sm font-medium">Timestamp</th>
+<th scope="col" class="px-md py-sm font-medium">Actor</th>
+<th scope="col" class="px-md py-sm font-medium">Event</th>
+<th scope="col" class="px-md py-sm font-medium">Target</th>
+</tr>
+</thead>
+<tbody id="log-body" class="divide-y divide-outline-variant"></tbody>
+</table>
+</div>
+<p id="log-loading" class="font-body-sm text-body-sm text-on-surface-variant">Loading…</p>
+<p id="log-empty" hidden class="font-body-sm text-body-sm text-on-surface-variant">No activity recorded yet.</p>
+<div>
+<button id="load-more-btn" type="button" hidden class="rounded-full border border-outline-variant px-lg py-2 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant disabled:opacity-60 disabled:cursor-wait focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary transition-colors">Load more</button>
+</div>
+</section>
+
+</main>
+
+<footer class="w-full border-t border-outline-variant py-lg px-margin-mobile md:px-margin-desktop rounded-br-[1.75rem]">
+<div class="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-md text-on-surface-variant font-body-sm text-body-sm">
+<span>&copy; ConfigGuard &mdash; SIH 2026 Prototype</span>
+<div class="flex gap-lg">
+<a class="hover:text-primary transition-colors" href="../../legal/terms/index.html">Terms</a>
+<a class="hover:text-primary transition-colors" href="../../legal/privacy/index.html">Privacy</a>
+<a class="hover:text-primary transition-colors" href="../../legal/help/index.html">Help Centre</a>
+</div>
+</div>
+</footer>
+</div>
+</div>
+<script src="../../shared.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+
+let me = getCurrentUser();
+let nextBeforeId = null;
+const PAGE_SIZE = 50;
+
+function showPageError(message) {
+  $("page-notice").hidden = true;
+  $("page-error").textContent = message;
+  $("page-error").hidden = false;
+}
+
+function showPageNotice(message) {
+  $("page-error").hidden = true;
+  $("page-notice").textContent = message;
+  $("page-notice").hidden = false;
+}
+
+function cell(text, className) {
+  const td = document.createElement("td");
+  td.className = "px-md py-sm " + (className || "");
+  td.textContent = text;
+  return td;
+}
+
+function formatTimestamp(ts) {
+  return new Date(ts * 1000).toLocaleString();
+}
+
+function formatActor(entry) {
+  // A failed login has no authenticated actor (see activity_log.log_event's
+  // docstring) -- actor_user_id/actor_role are both null in that case.
+  if (!entry.actor_user_id) return "(unauthenticated)";
+  return entry.actor_user_id + (entry.actor_role ? " (" + entry.actor_role + ")" : "");
+}
+
+function formatTarget(entry) {
+  if (!entry.target) return "\u2014";
+  return entry.target;
+}
+
+function renderChainBadge(valid) {
+  const badge = $("chain-badge");
+  if (valid) {
+    badge.textContent = "Chain intact";
+    badge.className = "inline-flex items-center gap-2 px-3 py-1 rounded-full font-body-sm text-body-sm font-medium bg-tertiary-container text-on-tertiary-container";
+  } else {
+    badge.textContent = "TAMPERED";
+    badge.className = "inline-flex items-center gap-2 px-3 py-1 rounded-full font-body-sm text-body-sm font-medium bg-error-container text-on-error-container";
+  }
+}
+
+function appendEntries(entries) {
+  const body = $("log-body");
+  entries.forEach((entry) => {
+    const tr = document.createElement("tr");
+    tr.appendChild(cell(formatTimestamp(entry.timestamp), "text-on-surface-variant whitespace-nowrap"));
+    tr.appendChild(cell(formatActor(entry), "text-on-surface"));
+    tr.appendChild(cell(entry.event_type, "text-on-surface"));
+    tr.appendChild(cell(formatTarget(entry), "text-on-surface-variant"));
+    body.appendChild(tr);
+  });
+}
+
+async function loadPage(beforeId) {
+  const data = await activityLog({ limit: PAGE_SIZE, beforeId });
+  appendEntries(data.entries);
+  renderChainBadge(data.chain_valid);
+  nextBeforeId = data.has_more ? data.next_before_id : null;
+  $("load-more-btn").hidden = !nextBeforeId;
+  if (!beforeId && data.entries.length === 0) $("log-empty").hidden = false;
+}
+
+async function load() {
+  try {
+    await loadPage(null);
+  } catch (err) {
+    showPageError(err.message);
+  } finally {
+    $("log-loading").hidden = true;
+  }
+}
+
+$("load-more-btn").addEventListener("click", async () => {
+  const btn = $("load-more-btn");
+  btn.disabled = true;
+  try {
+    await loadPage(nextBeforeId);
+  } catch (err) {
+    showPageError(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Non-senior/admin have no business here; the server would 403 every call anyway.
+(async function init() {
+  me = await refreshCurrentUser();
+  if (!userCan(me, "view_audit_log")) {
+    $("log-loading").hidden = true;
+    showPageError("Only senior engineers and admins can view the activity log.");
+    return;
+  }
+  load();
+})();
+</script>
+</body></html>

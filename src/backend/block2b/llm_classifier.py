@@ -186,10 +186,14 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
     result["confidence"] = min(result.get("confidence", 0.0), 0.99)
     return result
 
-def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
-    cached = check_memory(raw_line, vendor_hint)
-    if cached is not None:
-        return cached
+def classify_unknown_line(raw_line: str, vendor_hint: str = None, org_id: str = None) -> dict:
+    """org_id selects whose learned memory to check first. Without one
+    (standalone scripts, test_classifier.py) memory is skipped entirely and
+    the line goes straight to the LLM -- never a cross-org lookup."""
+    if org_id is not None:
+        cached = check_memory(raw_line, vendor_hint, org_id=org_id)
+        if cached is not None:
+            return cached
 
     return call_with_retry(
         _classify_unknown_line_inner, raw_line, vendor_hint,
@@ -198,13 +202,13 @@ def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
 
 
 def confirm_classification(raw_line: str, field: str, value, vendor_hint: str = None,
-                            confirmed_by: str = None):
+                            confirmed_by: str = None, *, org_id: str):
     """
     Call this from the review-unknown-lines screen once a human confirms
     (or corrects) a classification. Saves it to memory so this exact line
     is never sent to the LLM again.
     """
-    save_confirmed(raw_line, field, value, vendor_hint=vendor_hint, confirmed_by=confirmed_by)
+    save_confirmed(raw_line, field, value, vendor_hint=vendor_hint, confirmed_by=confirmed_by, org_id=org_id)
 
 def _guess_vendor_inner(config_text: str) -> dict:
     snippet = "\n".join(config_text.splitlines()[:40])

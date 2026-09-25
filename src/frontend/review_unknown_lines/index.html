@@ -375,7 +375,7 @@ document.getElementById("confirmAllBtn").addEventListener("click", async () => {
   });
 
   try {
-    const result = await confirmLines(sessionId, confirmations, "demo-user");
+    const result = await confirmLines(sessionId, confirmations);
     updateSession(sessionId, { config: result.config, pending_confirmations: [] });
     routeToNextStep();
   } catch (err) {
