@@ -424,6 +424,25 @@ async function downloadReportPdf(sessionId) {
   setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 }
 
+async function downloadReportFormat(sessionId, format) {
+  const response = await authFetch(`${API_BASE}/report/${sessionId}/${format}`);
+  if (!response.ok) {
+    throw new Error(await readError(response, `${format.toUpperCase()} download failed: ${response.status}`));
+  }
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^";]+)"?/);
+  const filename = match ? match[1] : `compliance_report_${sessionId.slice(0, 8)}.${format}`;
+
+  const blobUrl = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+}
+
 // ---------- Central routing: decides which screen comes next ----------
 // Called after upload, after a vendor confirmation, and after a batch of
 // line confirmations -- always figures out the next unresolved step
