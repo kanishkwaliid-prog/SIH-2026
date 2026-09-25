@@ -1,0 +1,19 @@
+AAA / TACACS+ Configuration
+================================
+!
+aaa new-model
+!
+aaa authentication login default group tacacs+ local
+aaa authorization exec default group tacacs+ local
+aaa accounting exec default start-stop group tacacs+
+aaa accounting commands 15 default start-stop group tacacs+
+!
+tacacs server TACACS1
+ address ipv4 X.X.X.X
+ key CHANGE_ME_TACACS_SECRET
+!
+ip tacacs source-interface VlanX
+!
+! Fallback local admin account (emergency use only)
+!
+username localadmin privilege 15 secret CHANGE_ME_LOCAL_PASSWORD

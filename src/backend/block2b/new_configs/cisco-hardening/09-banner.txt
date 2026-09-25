@@ -1,0 +1,16 @@
+banner motd ^
+************************************************************************
+*                                                                      *
+*  NOTICE TO USERS                                                     *
+*                                                                      *
+*  This computer system is the private property of the organization.  *
+*  It is for authorized use only.                                      *
+*                                                                      *
+*  Users have no expectation of privacy. All actions may be monitored *
+*  and recorded.                                                       *
+*                                                                      *
+*  Unauthorized access or improper use may result in administrative,  *
+*  civil, or criminal penalties.                                       *
+*                                                                      *
+************************************************************************
+^

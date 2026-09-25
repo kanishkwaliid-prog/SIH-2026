@@ -1,0 +1,25 @@
+Cisco IOS Global Hardening
+================================
+! 
+Disable insecure services
+no ip http server
+no ip http secure-server
+no cdp run
+no service pad
+no ip source-route
+no ip bootp server
+! 
+Enable password encryption
+service password-encryption
+!
+Enable AES encryption for stored keys
+key config-key password-encrypt CHANGE_ME_SECURE_KEY
+password encryption aes
+! 
+Enable logging timestamps
+service timestamps debug datetime msec
+service timestamps log datetime msec
+!
+Disable unnecessary services
+no ip domain-lookup
+no ip gratuitous-arps
