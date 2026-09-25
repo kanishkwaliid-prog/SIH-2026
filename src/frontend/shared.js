@@ -434,7 +434,7 @@ function routeToNextStep() {
 
   const needsVendorConfirm = sessions.find((s) => s.device && s.device.needs_confirmation);
   if (needsVendorConfirm) {
-    goTo(`../vendor_detection_result/index.html?session=${needsVendorConfirm.session_id}`);
+    window.location.href = `../vendor_detection_result/index.html?session=${needsVendorConfirm.session_id}`;
     return;
   }
 
@@ -442,7 +442,7 @@ function routeToNextStep() {
     (s) => s.pending_confirmations && s.pending_confirmations.length > 0
   );
   if (needsLineReview) {
-    goTo(`../review_unknown_lines/index.html?session=${needsLineReview.session_id}`);
+    window.location.href = `../review_unknown_lines/index.html?session=${needsLineReview.session_id}`;
     return;
   }
 
