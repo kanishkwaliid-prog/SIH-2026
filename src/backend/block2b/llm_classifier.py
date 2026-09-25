@@ -208,8 +208,8 @@ CACHE_FILE = "block2b/llm_cache.json"
 _cache = json.load(open(CACHE_FILE)) if os.path.exists(CACHE_FILE) else {}
 _quota_exhausted = False
 
-def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
-    cached = check_memory(raw_line, vendor_hint)
+def classify_unknown_line(raw_line: str, vendor_hint: str = None, *, org_id: str) -> dict:
+    cached = check_memory(raw_line, vendor_hint, org_id=org_id)
     if cached is not None:
         return cached
     local_result = classify_locally(raw_line)    
