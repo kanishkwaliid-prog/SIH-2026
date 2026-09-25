@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="dark" lang="en"><head>
+<html lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>ConfigGuard - Upload Configuration</title>
@@ -124,43 +124,56 @@
       }
     </script>
 </head>
-<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
-<!-- TopNavBar -->
-<nav class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shadow-sm w-full sticky top-0 z-50">
-<div class="flex justify-between items-center px-margin-desktop w-full h-16">
-<!-- Brand -->
-<div class="flex items-center gap-sm">
-<span class="material-symbols-outlined text-primary dark:text-primary text-2xl" data-icon="security" data-weight="fill">security</span>
-<span class="font-headline-lg text-headline-lg font-bold text-primary dark:text-primary tracking-tight hidden md:block">ConfigGuard</span>
-<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary tracking-tight md:hidden">ConfigGuard</span>
+<body class="bg-page text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container p-2 md:p-6">
+<div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
+<!-- Sidebar -->
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
+<a href="../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
+<div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="security">security</span>
 </div>
-<!-- Nav Links (Desktop) -->
-<div class="hidden md:flex items-center gap-gutter h-full">
-<a class="h-full flex items-center font-body-md text-body-md text-primary dark:text-primary border-b-2 border-primary pb-1 font-medium transition-colors" href="#">
-                    Scans
-                </a>
-<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="../rulesets/index.html">
-                    Rulesets
-                </a>
-<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">
-                    Settings
-                </a>
-</div>
-<!-- Trailing Actions -->
-<div class="flex items-center gap-sm md:gap-md">
-<a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors p-sm rounded-full hover:bg-surface-variant active:scale-95 transition-transform">
-<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-headline-lg-mobile font-bold text-on-surface tracking-tight hidden md:block">ConfigGuard</span>
 </a>
-<button aria-label="Notifications" class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors p-sm rounded-full hover:bg-surface-variant active:scale-95 transition-transform relative">
-<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
-<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border border-surface"></span>
-</button>
-<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant cursor-pointer active:scale-95 transition-transform ml-sm">
-<img alt="User profile" class="w-full h-full object-cover" data-alt="A professional headshot of a network security administrator in a high-tech corporate environment, cool blue and teal lighting, shallow depth of field." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsGS2fTTPbSL1KRi_SrM9jEAyCckgmvith4FcGaGWkuEk_gBleCYBmcrjLOh5eDya2SYrP15RiWKnaglnpspN8U1H5SMQCd3UPymrHhzaU_VIRjd9uA1FslyNKBrYK9dUWnLScxlsLq6g7WrIAK_ovfgJD-skhwRaPwP9WCIO4op4dFOMxwsZ4qhKtr5tU2CrvoEEoQsiQdenQQimw23_GLdTS69wWn2lWG3bzjYLQ_fP_mrXvF9Fq"/>
-</div>
-</div>
-</div>
+<span class="hidden md:block font-label-caps text-label-caps text-on-surface-variant px-sm mb-sm tracking-wider relative z-10">WORKSPACE</span>
+<nav class="flex flex-row md:flex-col gap-1 relative z-10 ml-auto md:ml-0">
+<a href="../upload_configuration/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full bg-primary text-on-primary font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="troubleshoot">troubleshoot</span>
+<span class="hidden md:inline">Scans</span>
+</a>
+<a href="../rulesets/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
+<span class="hidden md:inline">Rulesets</span>
+</a>
+<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+<span class="hidden md:inline">Settings</span>
+</a>
 </nav>
+<div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
+<div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
+<span class="relative flex h-2 w-2 shrink-0">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+</div>
+<div class="flex items-center gap-sm px-sm">
+<a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="help">help</span>
+</a>
+<button aria-label="Notifications" class="text-on-surface-variant hover:text-primary transition-colors relative">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-error rounded-full border border-surface"></span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant ml-auto">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="A professional headshot of a network security administrator." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsGS2fTTPbSL1KRi_SrM9jEAyCckgmvith4FcGaGWkuEk_gBleCYBmcrjLOh5eDya2SYrP15RiWKnaglnpspN8U1H5SMQCd3UPymrHhzaU_VIRjd9uA1FslyNKBrYK9dUWnLScxlsLq6g7WrIAK_ovfgJD-skhwRaPwP9WCIO4op4dFOMxwsZ4qhKtr5tU2CrvoEEoQsiQdenQQimw23_GLdTS69wWn2lWG3bzjYLQ_fP_mrXvF9Fq"/>
+</div>
+</div>
+</div>
+</aside>
+<!-- Content column -->
+<div class="flex flex-col flex-grow min-w-0">
 <!-- Main Content -->
 <main class="flex-grow w-full max-w-7xl mx-auto px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col gap-xl">
 <!-- Header Section -->
@@ -175,7 +188,7 @@
 <div class="relative overflow-hidden group bg-surface-container-low rounded-xl border-2 border-dashed border-outline-variant hover:border-primary-container transition-all duration-300 ease-out flex flex-col items-center justify-center p-xl min-h-[320px] shadow-[0_0_15px_rgba(0,0,0,0.1)]" id="dropzone">
 <!-- Ambient Glow Effect -->
 <div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-<div class="flex flex-col items-center text-center z-10 gap-md">
+<div class="flex flex-col items-center text-center z-10 gap-md pointer-events-none">
 <div class="w-16 h-16 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center text-primary group-hover:scale-110 group-hover:bg-primary/10 transition-transform duration-300">
 <span class="material-symbols-outlined text-4xl" data-icon="cloud_upload">cloud_upload</span>
 </div>
@@ -188,13 +201,22 @@
 <input accept=".txt,.cfg,.conf,.xml" aria-label="Upload configuration file" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" id="fileInput" multiple="" type="file"/>
 </div>
 <p id="errorMsg" class="font-body-sm text-body-sm text-error hidden"></p>
+<button type="button" id="removeAllBtn" class="hidden self-end text-error hover:underline font-body-sm">Remove all</button>
+<div id="fileList" class="flex flex-col gap-sm"></div>
+<div id="previewBox" class="hidden bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+  <div class="flex justify-between items-center mb-sm">
+    <span id="previewName" class="font-label-caps text-label-caps text-on-surface-variant"></span>
+    <button type="button" id="previewClose" class="text-on-surface-variant hover:text-primary font-body-sm">Close</button>
+  </div>
+  <pre id="previewText" class="font-code-md text-code-md text-on-surface overflow-auto max-h-80 whitespace-pre-wrap"></pre>
+</div>
 <!-- Settings & CTA Container -->
-<div class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-md shadow-[0_8px_32px_rgba(0,0,0,0.2)]">
+<div class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-md shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
 <!-- Vendor Dropdown -->
 <div class="flex flex-col gap-xs relative">
 <label class="font-label-caps text-label-caps text-on-surface-variant uppercase" for="vendor-select">Vendor (Optional)</label>
 <div class="relative group">
-<select class="w-full appearance-none bg-surface-container-highest border border-outline-variant rounded-lg py-sm px-md pr-xl font-body-md text-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors cursor-pointer" id="vendor-select">
+<select class="w-full appearance-none bg-surface-container-highest border border-outline-variant rounded-full py-sm px-md pr-xl font-body-md text-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors cursor-pointer" id="vendor-select">
 <option value="auto">Auto-detect</option>
 <option value="cisco">Cisco IOS / NX-OS</option>
 <option value="juniper">Juniper Junos</option>
@@ -209,7 +231,7 @@
                         </p>
 </div>
 <!-- CTA Button -->
-<button class="mt-sm w-full bg-gradient-to-r from-primary-container to-[#0f766e] hover:from-primary hover:to-primary-container text-on-primary-container font-title-md text-title-md py-md px-lg rounded-lg shadow-[0_0_20px_rgba(41,161,149,0.2)] hover:shadow-[0_0_25px_rgba(107,216,203,0.4)] transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none" id="analyzeBtn">
+<button class="mt-sm w-full bg-primary hover:bg-[#e8e2d2] text-on-primary font-title-md text-title-md py-md px-lg rounded-full shadow-[0_8px_20px_rgba(243,238,227,0.18)] hover:shadow-[0_8px_24px_rgba(243,238,227,0.28)] transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none" id="analyzeBtn">
 <span class="material-symbols-outlined" data-icon="troubleshoot" data-weight="fill">troubleshoot</span>
                         Analyze Configuration
                     </button>
@@ -218,7 +240,7 @@
 <!-- Info Panel (Right / Secondary) -->
 <aside class="lg:col-span-4 flex flex-col gap-lg">
 <!-- System Status Bento Box -->
-<div class="bg-surface-container-high rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-md">
+<div class="bg-surface-container-high rounded-xl border border-white/5 p-lg flex flex-col gap-md">
 <h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider border-b border-outline-variant pb-xs">Scanner Status</h3>
 <div class="flex items-center gap-md">
 <div class="relative flex h-3 w-3">
@@ -232,7 +254,7 @@
 </div>
 </div>
 <!-- Analysis Overview Bento Box -->
-<div class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm flex-grow">
+<div class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-sm flex-grow">
 <h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider border-b border-outline-variant pb-xs">What we check</h3>
 <ul class="flex flex-col gap-sm mt-sm">
 <li class="flex items-start gap-sm">
@@ -268,7 +290,7 @@
                     View All <span class="material-symbols-outlined text-[16px]" data-icon="arrow_forward">arrow_forward</span>
 </button>
 </div>
-<div class="bg-surface-container rounded-xl border border-[#ffffff10] overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.15)]">
+<div class="bg-surface-container rounded-xl border border-white/5 overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.35)]">
 <div class="overflow-x-auto">
 <table class="w-full text-left border-collapse whitespace-nowrap">
 <thead>
@@ -280,7 +302,7 @@
 <th class="py-sm px-md font-label-caps text-label-caps text-on-surface-variant font-medium text-right">Action</th>
 </tr>
 </thead>
-<tbody class="font-code-md text-code-md text-on-surface divide-y divide-[#ffffff0a]">
+<tbody class="font-code-md text-code-md text-on-surface divide-y divide-white/5">
 <!-- Row 1 -->
 <tr class="hover:bg-surface-container-highest transition-colors group">
 <td class="py-sm px-md flex items-center gap-sm">
@@ -348,16 +370,18 @@
 </section>
 </main>
 <!-- Footer -->
-<footer class="bg-surface-container-lowest dark:bg-surface-container-lowest border-t border-outline-variant dark:border-outline-variant mt-auto">
+<footer class="bg-surface-container-lowest border-t border-outline-variant mt-auto rounded-br-[1.75rem]">
 <div class="flex flex-col md:flex-row justify-between items-center px-margin-desktop py-sm w-full gap-sm md:gap-0">
 <span class="font-label-caps text-label-caps text-on-surface-variant">© 2026 ConfigGuard. All systems operational.</span>
 <div class="flex gap-md">
-<a class="font-body-sm text-body-sm text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/privacy/index.html">Privacy Policy</a>
-<a class="font-body-sm text-body-sm text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/terms/index.html">Terms of Service</a>
-<a class="font-body-sm text-body-sm text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/help/index.html">Help Center</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/privacy/index.html">Privacy Policy</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/terms/index.html">Terms of Service</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/help/index.html">Help Center</a>
 </div>
 </div>
 </footer>
+</div>
+</div>
 <!-- Interactive Script for Dropzone (Cosmetic) -->
 <script>
         const dropzone = document.getElementById('dropzone');
@@ -420,21 +444,75 @@
       errorMsg.classList.add("hidden");
     }
 
+    function renderFiles() {
+      const list = document.getElementById("fileList");
+      list.innerHTML = "";
+      selectedFiles.forEach((f, i) => {
+        const row = document.createElement("div");
+        row.className = "flex items-center justify-between gap-md bg-surface-container rounded-xl border border-outline-variant px-md py-sm";
+        const name = document.createElement("span");
+        name.className = "font-code-md text-code-md text-on-surface truncate";
+        name.textContent = f.name;
+        const btns = document.createElement("div");
+        btns.className = "flex gap-md shrink-0 font-body-sm";
+        const p = document.createElement("button");
+        p.type = "button";
+        p.textContent = "Preview";
+        p.className = "text-primary hover:underline";
+        p.onclick = async () => {
+          document.getElementById("previewName").textContent = f.name;
+          const t = await f.text();
+          document.getElementById("previewText").textContent =
+            t.length > 20000 ? t.slice(0, 20000) + "\n\n... (preview cut short)" : t;
+          document.getElementById("previewBox").classList.remove("hidden");
+        };
+        const r = document.createElement("button");
+        r.type = "button";
+        r.textContent = "Remove";
+        r.className = "text-error hover:underline";
+        r.onclick = () => {
+          selectedFiles.splice(i, 1);
+          document.getElementById("previewBox").classList.add("hidden");
+          renderFiles();
+        };
+        btns.append(p, r);
+        row.append(name, btns);
+        list.appendChild(row);
+      });
+
+      document.getElementById("removeAllBtn").classList.toggle("hidden", selectedFiles.length === 0);
+      fileNameDisplay.innerHTML = selectedFiles.length === 0
+        ? `<h3 class="font-title-md text-title-md text-on-surface">Drop your config file here or <span class="text-primary hover:underline cursor-pointer">browse</span></h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">Supports .txt, .cfg, .conf, .xml (Max 10MB) — multiple files allowed</p>`
+        : `<h3 class="font-title-md text-title-md text-primary">${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""} selected</h3>
+          <p class="font-body-sm text-body-sm text-on-surface-variant">Drop or browse to add more</p>`;
+    }
+
+    document.getElementById("previewClose").onclick = () =>
+      document.getElementById("previewBox").classList.add("hidden");
+    document.getElementById("removeAllBtn").onclick = () => {
+      selectedFiles = [];
+      document.getElementById("previewBox").classList.add("hidden");
+      renderFiles();
+    };
+
     fileInput.addEventListener("change", () => {
-      selectedFiles = Array.from(fileInput.files);
       clearError();
-      if (selectedFiles.length === 0) {
-        fileNameDisplay.innerHTML = `
-          <h3 class="font-title-md text-title-md text-on-surface">Drop your config file here or <span class="text-primary hover:underline cursor-pointer">browse</span></h3>
-          <p class="font-body-sm text-body-sm text-on-surface-variant">Supports .txt, .cfg, .conf, .xml (Max 10MB) — multiple files allowed</p>
-        `;
-      } else {
-        const names = selectedFiles.map((f) => f.name).join(", ");
-        fileNameDisplay.innerHTML = `
-          <h3 class="font-title-md text-title-md text-primary">${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""} selected</h3>
-          <p class="font-body-sm text-body-sm text-on-surface-variant">${names}</p>
-        `;
-      }
+      Array.from(fileInput.files).forEach((f) => {
+        const already = selectedFiles.some((x) => x.name === f.name && x.size === f.size);
+        if (!already) selectedFiles.push(f);
+      });
+      fileInput.value = "";
+      renderFiles();
+    });
+
+    dropzone.addEventListener("drop", (e) => {
+      Array.from(e.dataTransfer.files).forEach((f) => {
+        const already = selectedFiles.some((x) => x.name === f.name && x.size === f.size);
+        if (!already) selectedFiles.push(f);
+      });
+      clearError();
+      renderFiles();
     });
 
     analyzeBtn.addEventListener("click", async () => {
@@ -463,7 +541,7 @@
           "pendingUpload",
           JSON.stringify({ files: fileTextEntries, vendorHint: vendorHint })
         );
-        window.location.href = "../analyzing_configuration/index.html";
+        goTo("../analyzing_configuration/index.html");
       } catch (err) {
         showError("Couldn't read one of the selected files. Please try again.");
         analyzeBtn.disabled = false;

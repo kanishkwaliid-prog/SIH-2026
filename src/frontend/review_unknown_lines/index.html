@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="dark" lang="en"><head>
+<html lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>ConfigGuard - Unknown Lines Review</title>
@@ -88,49 +88,144 @@
                     "sm": "8px"
             },
             "fontFamily": {
-                    "label-caps": ["Inter"],
-                    "code-md": ["JetBrains Mono"],
-                    "title-md": ["Inter"],
-                    "display-lg": ["Inter"],
-                    "headline-lg": ["Inter"],
-                    "body-md": ["Inter"],
-                    "body-sm": ["Inter"],
-                    "headline-lg-mobile": ["Inter"]
+                    "label-caps": [
+                            "Inter"
+                    ],
+                    "code-md": [
+                            "JetBrains Mono"
+                    ],
+                    "title-md": [
+                            "Inter"
+                    ],
+                    "display-lg": [
+                            "Inter"
+                    ],
+                    "headline-lg": [
+                            "Inter"
+                    ],
+                    "body-md": [
+                            "Inter"
+                    ],
+                    "body-sm": [
+                            "Inter"
+                    ],
+                    "headline-lg-mobile": [
+                            "Inter"
+                    ]
             },
             "fontSize": {
-                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
-                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
-                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
-                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
-                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
-                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
-                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
-                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+                    "label-caps": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "code-md": [
+                            "14px",
+                            {
+                                    "lineHeight": "22px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "title-md": [
+                            "20px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "display-lg": [
+                            "48px",
+                            {
+                                    "lineHeight": "56px",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "headline-lg": [
+                            "32px",
+                            {
+                                    "lineHeight": "40px",
+                                    "letterSpacing": "-0.01em",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "body-sm": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-lg-mobile": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "fontWeight": "600"
+                            }
+                    ]
             }
-          }
-        }
+    },
+        },
       }
     </script>
 </head>
-<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md">
-<!-- TopNavBar -->
-<nav class="bg-surface border-b border-outline-variant shadow-sm w-full h-16 flex justify-between items-center px-margin-desktop top-0 z-50">
-<div class="flex items-center gap-lg">
-<span class="font-headline-lg font-bold text-primary">ConfigGuard</span>
+<body class="bg-page text-on-surface min-h-screen flex flex-col font-body-md p-2 md:p-6">
+<div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
+<!-- Sidebar -->
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
+<a href="../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
+<div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="security">security</span>
 </div>
-<div class="hidden md:flex items-center gap-gutter">
-<div class="flex space-x-md">
-<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md active:scale-95 transition-transform" href="../upload_configuration/index.html">Scans</a>
-<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md active:scale-95 transition-transform" href="../rulesets/index.html">Rulesets</a>
-<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md active:scale-95 transition-transform" href="#">Settings</a>
-</div>
-</div>
-<div class="flex items-center gap-md">
-<button class="text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="help">help</span></button>
-<button class="text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="notifications">notifications</span></button>
-<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant object-cover" data-alt="A small circular user profile avatar showing a stylized, abstract digital portrait of a network security administrator. The avatar is in a dark mode aesthetic with deep teal and charcoal tones, fitting a professional cyber security theme. Soft glowing outlines emphasize a modern, tech-forward feel." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAovMawkJLp60WxIlYw3Sx5HZ7N6WgQHM5lZHc_lDMX80Z7kX5InwS-UNDJvYu_kDQxXkl5kSfyL5Pg0RbntslbFv8CqGNGtGBWD2mvFquC1SqhGXvf4I0DsixDgH2tI6bXhAijpEoeqmNSCvqjyHGwAlt12tI1AE_SVFmZWb_XN_yUpQKJBOmqFJh3KxGJASEzycRHUAIc-JFUhKYt7XaOqJeibgSrT0XiX4hefwgvlkA9GZw2invt"/>
-</div>
+<span class="font-headline-lg-mobile font-bold text-on-surface tracking-tight hidden md:block">ConfigGuard</span>
+</a>
+<span class="hidden md:block font-label-caps text-label-caps text-on-surface-variant px-sm mb-sm tracking-wider relative z-10">WORKSPACE</span>
+<nav class="flex flex-row md:flex-col gap-1 relative z-10 ml-auto md:ml-0">
+<a href="../upload_configuration/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full bg-primary text-on-primary font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="troubleshoot">troubleshoot</span>
+<span class="hidden md:inline">Scans</span>
+</a>
+<a href="../rulesets/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
+<span class="hidden md:inline">Rulesets</span>
+</a>
+<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+<span class="hidden md:inline">Settings</span>
+</a>
 </nav>
+<div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
+<div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
+<span class="relative flex h-2 w-2 shrink-0">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+</div>
+<div class="flex items-center gap-sm px-sm">
+<a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="help">help</span>
+</a>
+<button aria-label="Notifications" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant object-cover ml-auto" data-alt="A small circular user profile avatar." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAovMawkJLp60WxIlYw3Sx5HZ7N6WgQHM5lZHc_lDMX80Z7kX5InwS-UNDJvYu_kDQxXkl5kSfyL5Pg0RbntslbFv8CqGNGtGBWD2mvFquC1SqhGXvf4I0DsixDgH2tI6bXhAijpEoeqmNSCvqjyHGwAlt12tI1AE_SVFmZWb_XN_yUpQKJBOmqFJh3KxGJASEzycRHUAIc-JFUhKYt7XaOqJeibgSrT0XiX4hefwgvlkA9GZw2invt"/>
+</div>
+</div>
+</aside>
+<!-- Content column -->
+<div class="flex flex-col flex-grow min-w-0">
 <!-- Main Content -->
 <main class="flex-grow flex flex-col px-margin-mobile md:px-margin-desktop py-xl gap-xl max-w-7xl mx-auto w-full">
 <header class="flex flex-col gap-sm">
@@ -138,7 +233,7 @@
 <p class="font-body-md text-on-surface-variant">Review the unknown configuration lines below to categorize them correctly.</p>
 </header>
 <!-- Data Table Container -->
-<div class="bg-surface-container rounded-xl border border-outline-variant shadow-[0_4px_24px_rgba(0,0,0,0.1)] overflow-hidden">
+<div class="bg-surface-container rounded-xl border border-outline-variant shadow-[0_4px_24px_rgba(0,0,0,0.3)] overflow-hidden">
 <div class="overflow-x-auto">
 <table class="w-full text-left border-collapse">
 <thead class="bg-surface-container-high border-b border-outline-variant">
@@ -157,7 +252,7 @@
 <!-- Footer Actions -->
 <div class="bg-surface-container-high border-t border-outline-variant p-lg flex flex-col sm:flex-row justify-between items-center gap-md">
 <p class="font-body-sm text-on-surface-variant">You'll only need to do this once per line type — we'll remember it next time.</p>
-<button id="confirmAllBtn" class="bg-primary text-on-primary-fixed font-title-md text-title-md px-xl py-sm rounded-lg transition-colors w-full sm:w-auto" disabled="">
+<button id="confirmAllBtn" class="bg-primary text-on-primary-fixed font-title-md text-title-md px-xl py-sm rounded-full transition-colors w-full sm:w-auto disabled:opacity-40" disabled="">
                     Confirm All &amp; Continue
                 </button>
 </div>
@@ -192,8 +287,8 @@ let pendingConfirmations = session ? session.pending_confirmations.slice() : [];
 function confidenceStyle(confidence) {
   // Real percentage, color-coded so a shaky guess LOOKS different from a
   // confident one -- not just a flat "AI suggested this" label every time.
-  if (confidence >= 0.85) return "bg-primary/10 text-primary border-primary/20";
-  if (confidence >= 0.5)  return "bg-secondary/10 text-secondary border-secondary/20";
+  if (confidence >= 0.85) return "bg-tertiary/10 text-tertiary border-tertiary/20";
+  if (confidence >= 0.5)  return "bg-medium/10 text-medium border-medium/20";
   return "bg-error/10 text-error border-error/20";
 }
 
@@ -292,12 +387,14 @@ document.getElementById("confirmAllBtn").addEventListener("click", async () => {
 </script>
 </main>
 <!-- Footer -->
-<footer class="bg-surface-container-lowest border-t border-outline-variant w-full flex flex-col sm:flex-row justify-between items-center px-margin-desktop py-sm mt-auto z-50">
+<footer class="bg-surface-container-lowest border-t border-outline-variant w-full flex flex-col sm:flex-row justify-between items-center px-margin-desktop py-sm mt-auto z-50 rounded-br-[1.75rem]">
 <span class="font-label-caps text-label-caps text-on-surface-variant">© 2026 ConfigGuard. All systems operational.</span>
 <div class="flex gap-lg mt-sm sm:mt-0">
-<a class="font-body-sm text-body-sm text-tertiary hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/privacy/index.html">Privacy Policy</a>
-<a class="font-body-sm text-body-sm text-tertiary hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/terms/index.html">Terms of Service</a>
-<a class="font-body-sm text-body-sm text-tertiary hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/help/index.html">Help Center</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/privacy/index.html">Privacy Policy</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/terms/index.html">Terms of Service</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary opacity-80 hover:opacity-100 transition-opacity" href="../legal/help/index.html">Help Center</a>
 </div>
 </footer>
+</div>
+</div>
 </body></html>

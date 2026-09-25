@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="dark" lang="en"><head>
+<html lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>ConfigGuard - Vendor Detection</title>
@@ -9,11 +9,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script id="tailwind-config">
-      tailwind.config = {
-        darkMode: "class",
-        theme: {
-          extend: {
-                                            "colors": {
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                                                    "colors": {
                     "on-tertiary-fixed-variant": "#6FCB8D",
                     "on-error": "#0A0A0A",
                     "tertiary-fixed-dim": "#6FCB8D",
@@ -71,87 +71,105 @@
                     "medium-container": "#211A0C",
                     "on-medium-container": "#E8B84B"
                 },
-                                            "borderRadius": {
+                                                    "borderRadius": {
                     "DEFAULT": "0.75rem",
                     "lg": "1rem",
                     "xl": "1.5rem",
                     "full": "9999px"
                 },
-            "spacing": {
-                    "base": "4px",
-                    "xs": "4px",
-                    "margin-desktop": "48px",
-                    "gutter": "24px",
-                    "md": "16px",
-                    "margin-mobile": "16px",
-                    "lg": "24px",
-                    "xl": "32px",
-                    "sm": "8px"
-            },
-            "fontFamily": {
-                    "label-caps": ["Inter"],
-                    "code-md": ["JetBrains Mono"],
-                    "title-md": ["Inter"],
-                    "display-lg": ["Inter"],
-                    "headline-lg": ["Inter"],
-                    "body-md": ["Inter"],
-                    "body-sm": ["Inter"],
-                    "headline-lg-mobile": ["Inter"]
-            },
-            "fontSize": {
-                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
-                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
-                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
-                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
-                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
-                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
-                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
-                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+                    "spacing": {
+                        "base": "4px",
+                        "xs": "4px",
+                        "margin-desktop": "48px",
+                        "gutter": "24px",
+                        "md": "16px",
+                        "margin-mobile": "16px",
+                        "lg": "24px",
+                        "xl": "32px",
+                        "sm": "8px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "title-md": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg-mobile": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "code-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "title-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }]
+                    }
+                }
             }
-          }
         }
-      }
     </script>
 <style>
         .ambient-shadow {
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
     </style>
 </head>
-<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md text-body-md">
-<nav class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shadow-sm flex justify-between items-center px-margin-desktop w-full h-16 shrink-0 relative z-50">
-<div class="flex items-center gap-gutter">
-<div class="font-headline-lg text-headline-lg font-bold text-primary dark:text-primary md:block hidden">
-                ConfigGuard
-            </div>
-<div class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary md:hidden block">
-                ConfigGuard
-            </div>
-<div class="hidden md:flex items-center gap-md ml-lg">
-<a class="text-primary dark:text-primary border-b-2 border-primary pb-1 hover:text-primary dark:hover:text-primary transition-colors active:scale-95 transition-transform font-label-caps text-label-caps" href="../upload_configuration/index.html">Scans</a>
-<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors active:scale-95 transition-transform font-label-caps text-label-caps" href="../rulesets/index.html">Rulesets</a>
-<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors active:scale-95 transition-transform font-label-caps text-label-caps" href="#">Settings</a>
+<body class="bg-page text-on-background min-h-screen flex flex-col font-body-md text-body-md p-2 md:p-6">
+<div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
+<!-- Sidebar -->
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
+<a href="../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
+<div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="security">security</span>
 </div>
-</div>
-<div class="flex items-center gap-md text-on-surface-variant">
-<button class="hover:text-primary transition-colors active:scale-95 flex items-center justify-center">
-<span class="material-symbols-outlined" data-icon="help">help</span>
-</button>
-<button class="hover:text-primary transition-colors active:scale-95 flex items-center justify-center relative">
-<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
-<span class="absolute top-0 right-0 w-2 h-2 bg-primary rounded-full"></span>
-</button>
-<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center overflow-hidden ml-sm">
-<span class="material-symbols-outlined text-on-surface-variant" data-icon="person">person</span>
-</div>
-</div>
+<span class="font-headline-lg-mobile font-bold text-on-surface tracking-tight hidden md:block">ConfigGuard</span>
+</a>
+<span class="hidden md:block font-label-caps text-label-caps text-on-surface-variant px-sm mb-sm tracking-wider relative z-10">WORKSPACE</span>
+<nav class="flex flex-row md:flex-col gap-1 relative z-10 ml-auto md:ml-0">
+<a href="../upload_configuration/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full bg-primary text-on-primary font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="troubleshoot">troubleshoot</span>
+<span class="hidden md:inline">Scans</span>
+</a>
+<a href="../rulesets/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
+<span class="hidden md:inline">Rulesets</span>
+</a>
+<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+<span class="hidden md:inline">Settings</span>
+</a>
 </nav>
+<div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
+<div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
+<span class="relative flex h-2 w-2 shrink-0">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+</div>
+<div class="flex items-center gap-sm px-sm">
+<a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="help">help</span>
+</a>
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center overflow-hidden ml-auto">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]" data-icon="person">person</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Content column -->
+<div class="flex flex-col flex-grow min-w-0">
 <main class="flex-grow flex justify-center items-start pt-xl pb-margin-desktop px-margin-mobile md:px-margin-desktop">
 <div class="w-full max-w-4xl flex flex-col gap-lg">
-<div class="flex items-center gap-sm text-on-surface-variant hover:text-primary cursor-pointer transition-colors w-fit">
+<a href="../upload_configuration/index.html" class="flex items-center gap-sm text-on-surface-variant hover:text-primary cursor-pointer transition-colors w-fit">
 <span class="material-symbols-outlined text-lg">arrow_back</span>
 <span class="font-label-caps text-label-caps">Back to Scan Setup</span>
-</div>
+</a>
 <div class="bg-surface-container border border-outline-variant rounded-xl ambient-shadow overflow-hidden">
 <div class="p-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-md border-b border-outline-variant/50">
 <div class="flex items-center gap-md">
@@ -191,15 +209,15 @@
 </div>
 </div>
 <div class="flex flex-col sm:flex-row justify-end items-center gap-md mt-sm pt-lg border-t border-outline-variant/30" id="actionRow">
-<button id="proceedBtn" class="w-full sm:w-auto border border-outline text-on-surface-variant hover:border-primary hover:text-primary transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg bg-transparent">
+<button id="proceedBtn" class="w-full sm:w-auto border border-outline text-on-surface-variant hover:border-primary hover:text-primary transition-colors font-label-caps text-label-caps px-lg py-3 rounded-full bg-transparent">
                     Proceed anyway
                 </button>
-<select id="switchVendorSelect" class="w-full sm:w-auto bg-surface-container-highest border border-outline-variant rounded-lg py-3 px-md font-body-sm text-body-sm text-on-surface">
+<select id="switchVendorSelect" class="w-full sm:w-auto bg-surface-container-highest border border-outline-variant rounded-full py-3 px-md font-body-sm text-body-sm text-on-surface">
 <option value="cisco_ios">Cisco IOS / NX-OS</option>
 <option value="juniper_junos">Juniper Junos</option>
 <option value="palo_alto">Palo Alto PAN-OS</option>
 </select>
-<button id="switchBtn" class="w-full sm:w-auto bg-primary text-on-primary hover:bg-primary-fixed-dim transition-colors font-label-caps text-label-caps px-lg py-3 rounded-lg shadow-sm flex items-center justify-center gap-2">
+<button id="switchBtn" class="w-full sm:w-auto bg-primary text-on-primary hover:bg-primary-fixed-dim transition-colors font-label-caps text-label-caps px-lg py-3 rounded-full shadow-sm flex items-center justify-center gap-2">
                     Switch vendor
                     <span class="material-symbols-outlined text-sm">arrow_forward</span>
 </button>
@@ -207,16 +225,18 @@
 <p id="switchError" class="font-body-sm text-body-sm text-error hidden px-lg pb-md"></p>
 </div>
 </main>
-<footer class="bg-surface-container-lowest dark:bg-surface-container-lowest border-t border-outline-variant dark:border-outline-variant flex flex-col md:flex-row justify-between items-center px-margin-desktop py-sm w-full mt-auto">
-<div class="font-body-sm text-body-sm text-tertiary dark:text-tertiary mb-2 md:mb-0">
+<footer class="bg-surface-container-lowest border-t border-outline-variant flex flex-col md:flex-row justify-between items-center px-margin-desktop py-sm w-full mt-auto rounded-br-[1.75rem]">
+<div class="font-body-sm text-body-sm text-on-surface-variant mb-2 md:mb-0">
             © 2026 ConfigGuard. All systems operational.
         </div>
-<div class="flex gap-md font-label-caps text-label-caps text-on-surface-variant dark:text-on-surface-variant">
-<a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="../legal/privacy/index.html">Privacy Policy</a>
-<a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="../legal/terms/index.html">Terms of Service</a>
-<a class="opacity-80 hover:opacity-100 hover:text-primary dark:hover:text-primary transition-opacity" href="../legal/help/index.html">Help Center</a>
+<div class="flex gap-md font-label-caps text-label-caps text-on-surface-variant">
+<a class="opacity-80 hover:opacity-100 hover:text-primary transition-opacity" href="../legal/privacy/index.html">Privacy Policy</a>
+<a class="opacity-80 hover:opacity-100 hover:text-primary transition-opacity" href="../legal/terms/index.html">Terms of Service</a>
+<a class="opacity-80 hover:opacity-100 hover:text-primary transition-opacity" href="../legal/help/index.html">Help Center</a>
 </div>
 </footer>
+</div>
+</div>
 <script src="../shared.js"></script>
 <script>
     const sessionId = getUrlParam("session");
