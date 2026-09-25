@@ -44,7 +44,12 @@ import activity_log
 from pipeline import apply_confirmation, process_config
 from shared.schema import NormalizedConfig
 from compliance_engine.evaluator import FRAMEWORK_FILE_MAP, evaluate_report, load_selected_rule_packs
-from report_generator.report_gen import generate_pdf_bytes
+from report_generator.report_gen import (
+    generate_pdf_bytes,
+    generate_json_bytes,
+    generate_csv_bytes,
+    generate_markdown_bytes,
+)
 from auth import store as auth_store
 from auth.admin_routes import router as admin_router
 from auth.config import Permission, get_jwt_secret
@@ -330,7 +335,58 @@ async def get_report_pdf(session_id: str, user: User = Depends(require_permissio
         headers={"Content-Disposition": f'attachment; filename="compliance_report_{session_id[:8]}.pdf"'},
     )
 
+# ---------- GET /report/{session_id}/json ----------
 
+@app.get("/report/{session_id}/json")
+async def get_report_json(session_id: str, user: User = Depends(require_permission(Permission.VIEW_REPORTS))):
+    session = _get_session_for(session_id, user)
+    if "eval_result" not in session:
+        raise HTTPException(status_code=400, detail="Call /evaluate/{session_id} before requesting the report.")
+
+    json_bytes = generate_json_bytes(session["eval_result"], framework=session.get("framework", "CIS"))
+    activity_log.log_event(user, "report_json_download", target=session_id)
+
+    return Response(
+        content=json_bytes,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="compliance_report_{session_id[:8]}.json"'},
+    )
+
+
+# ---------- GET /report/{session_id}/csv ----------
+
+@app.get("/report/{session_id}/csv")
+async def get_report_csv(session_id: str, user: User = Depends(require_permission(Permission.VIEW_REPORTS))):
+    session = _get_session_for(session_id, user)
+    if "eval_result" not in session:
+        raise HTTPException(status_code=400, detail="Call /evaluate/{session_id} before requesting the report.")
+
+    csv_bytes = generate_csv_bytes(session["eval_result"], framework=session.get("framework", "CIS"))
+    activity_log.log_event(user, "report_csv_download", target=session_id)
+
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="compliance_report_{session_id[:8]}.csv"'},
+    )
+
+
+# ---------- GET /report/{session_id}/md ----------
+
+@app.get("/report/{session_id}/md")
+async def get_report_markdown(session_id: str, user: User = Depends(require_permission(Permission.VIEW_REPORTS))):
+    session = _get_session_for(session_id, user)
+    if "eval_result" not in session:
+        raise HTTPException(status_code=400, detail="Call /evaluate/{session_id} before requesting the report.")
+
+    md_bytes = generate_markdown_bytes(session["eval_result"], framework=session.get("framework", "CIS"))
+    activity_log.log_event(user, "report_md_download", target=session_id)
+
+    return Response(
+        content=md_bytes,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="compliance_report_{session_id[:8]}.md"'},
+    )
 # ---------- GET /sessions ----------
 
 @app.get("/sessions")

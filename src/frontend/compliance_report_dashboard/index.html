@@ -287,10 +287,24 @@ New Scan
 </main>
 <!-- Sticky Bottom Actions -->
 <div class="sticky bottom-0 bg-surface/90 backdrop-blur-md border-t border-outline-variant p-md flex justify-center z-40 shadow-[0_-4px_24px_rgba(0,0,0,0.35)]">
+<div class="flex flex-wrap gap-sm justify-center">
 <button id="downloadBtn" class="bg-primary text-on-primary px-xl py-sm rounded-full font-title-md text-title-md shadow-lg hover:shadow-primary/15 transition-all flex items-center gap-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed" disabled="">
 <span class="material-symbols-outlined" data-icon="download">download</span>
-            Download Full Report (PDF)
+            PDF
         </button>
+<button id="downloadJsonBtn" class="bg-secondary-container text-on-secondary-container px-xl py-sm rounded-full font-title-md text-title-md shadow-lg transition-all flex items-center gap-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed" disabled="">
+<span class="material-symbols-outlined" data-icon="download">download</span>
+            JSON
+        </button>
+<button id="downloadCsvBtn" class="bg-secondary-container text-on-secondary-container px-xl py-sm rounded-full font-title-md text-title-md shadow-lg transition-all flex items-center gap-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed" disabled="">
+<span class="material-symbols-outlined" data-icon="download">download</span>
+            CSV
+        </button>
+<button id="downloadMdBtn" class="bg-secondary-container text-on-secondary-container px-xl py-sm rounded-full font-title-md text-title-md shadow-lg transition-all flex items-center gap-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed" disabled="">
+<span class="material-symbols-outlined" data-icon="download">download</span>
+            Markdown
+        </button>
+</div>
 </div>
 <!-- Footer -->
 <footer class="bg-surface-container-lowest border-t border-outline-variant w-full mt-auto relative z-10 rounded-br-[1.75rem]">
@@ -463,6 +477,9 @@ New Scan
 
         renderFindings(findings);
         document.getElementById("downloadBtn").disabled = false;
+                document.getElementById("downloadJsonBtn").disabled = false;
+        document.getElementById("downloadCsvBtn").disabled = false;
+        document.getElementById("downloadMdBtn").disabled = false;
       } catch (err) {
         document.getElementById("findingsList").innerHTML =
           `<p class="font-body-sm text-body-sm text-error">Couldn't run compliance evaluation. Make sure the backend is running and try again.</p>`;
@@ -477,6 +494,45 @@ New Scan
         await downloadReportPdf(currentSessionId);
       } catch (err) {
         alert(err.message || "Couldn't download the PDF. Check the backend is running and try again.");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    
+    document.getElementById("downloadJsonBtn").addEventListener("click", async () => {
+      if (!currentSessionId) return;
+      const btn = document.getElementById("downloadJsonBtn");
+      btn.disabled = true;
+      try {
+        await downloadReportFormat(currentSessionId, "json");
+      } catch (err) {
+        alert(err.message || "Couldn't download the JSON. Check the backend is running and try again.");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById("downloadCsvBtn").addEventListener("click", async () => {
+      if (!currentSessionId) return;
+      const btn = document.getElementById("downloadCsvBtn");
+      btn.disabled = true;
+      try {
+        await downloadReportFormat(currentSessionId, "csv");
+      } catch (err) {
+        alert(err.message || "Couldn't download the CSV. Check the backend is running and try again.");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById("downloadMdBtn").addEventListener("click", async () => {
+      if (!currentSessionId) return;
+      const btn = document.getElementById("downloadMdBtn");
+      btn.disabled = true;
+      try {
+        await downloadReportFormat(currentSessionId, "md");
+      } catch (err) {
+        alert(err.message || "Couldn't download the Markdown. Check the backend is running and try again.");
       } finally {
         btn.disabled = false;
       }
