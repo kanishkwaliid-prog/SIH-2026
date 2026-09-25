@@ -1,0 +1,13 @@
+set hostname "CP-GW-DEMO"
+set domainname "example.local"
+set timezone "Asia/Kolkata"
+set ntp active on
+set ntp server primary 10.0.0.1 version 4
+set banner "Authorized access only."
+set snmp agent on
+set snmp community-string public
+set net-access telnet off
+set inactivity-timeout 10
+set user admin password-hash $1$abcdefgh$XXXXXXXXXXXXXXXXXXXXXX
+set interface eth0 ipv4-address 10.10.10.1 mask-length 30
+set static-route default nexthop gateway address 10.10.10.2 priority 1 on

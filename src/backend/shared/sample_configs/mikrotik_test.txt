@@ -1,0 +1,21 @@
+# software id = ABCD-EFGH
+# model = CCR2004-1G-12S+2XS
+/interface bridge
+add name=bridge1
+/ip address
+add address=192.168.88.1/24 interface=bridge1
+/ip service
+set telnet disabled=yes
+set ssh disabled=no port=22
+set www disabled=yes
+set winbox disabled=no
+/snmp community
+set [find default=yes] name=public
+/system logging action
+set 0 name=remote target=remote remote=10.0.0.5
+/system logging
+add action=remote topics=info
+/system note
+set show-at-login=yes note="Authorized access only."
+/system identity
+set name=MIKROTIK-DEMO
