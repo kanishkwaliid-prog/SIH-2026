@@ -29,3 +29,5 @@ memory.db
 *.pdf
 !docs/architecture.pdf
 !submission/*.pdf
+
+Scratch-configs/

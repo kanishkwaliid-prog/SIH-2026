@@ -1,0 +1,50 @@
+line,label
+set interfaces ge-0/0/0 description OUTSIDE,unclear
+snmp-server traps mpls traffic-eng reroute,unclear
+service password-encryption,password_encryption:type7
+ip ssh version 2,ssh_enabled:true
+!,unclear
+enable password 7 0822455D0A16,password_encryption:type7
+access-list 101 permit tcp any any eq 22,unclear
+logging buffered 8192 debugging,logging_enabled:true
+logging buffered 50000,logging_enabled:true
+ip ssh time-out 60,unclear
+enable secret 5 $1$gfBh$F03uIBpoiUPOIu897$JKZ13IUh,password_encryption:type5
+enable password xyz,password_encryption:none
+set deviceconfig system default-gateway 192.168.1.254,unclear
+ip http server,unclear
+snmp-server traps ospfv3 state-comange restart-status-comange,unclear
+set interfaces ge-0/0/1 description INSIDE,unclear
+configure terminal,unclear
+set deviceconfig system type static,unclear
+banner login ^C,banner_configured:true
+set system services ssh,ssh_enabled:true
+set deviceconfig system timezone US/Pacific,unclear
+ip ssh disable,ssh_enabled:false
+logging on,logging_enabled:true
+set system services web-management http,unclear
+ip route 0.0.0.0 0.0.0.0 192.168.10.1,unclear
+secret 5 $1$FXeb$aLMudSH4.B8BK1IYlIm.j.,password_encryption:type5
+"set rulebase decryption rules ""NO-Decrypt URL Categories"" to any",unclear
+transport input telnet ssh,telnet_enabled:true
+banner exec /,banner_configured:true
+banner motd Test banner for $(hostname),banner_configured:true
+switchport access vlan 2,unclear
+spanning-tree port type edge trunk,unclear
+set deviceconfig system ip-address 192.168.1.103,unclear
+set system name-server 8.8.8.8,unclear
+class-map ma-com-any CM-NQ-L2-COS1,unclear
+vlan 10,unclear
+password pwdTelnet,unclear
+router bgp 65413,unclear
+router ospf udx,unclear
+ntp server 10.0.0.1,unclear
+service timestamps log datetime,logging_enabled:true
+line con 0,unclear
+class-map ma-com-any CM-NQ-QG4-OUT,unclear
+ip route 0.0.0.0 0.0.0.0 10.0.0.1,unclear
+exit,unclear
+no telnet,telnet_enabled:false
+spanning-tree mode pvst,unclear
+logging console discriminator EXCESS,logging_enabled:true
+ip address 192.168.10.1 255.255.255.0,unclear

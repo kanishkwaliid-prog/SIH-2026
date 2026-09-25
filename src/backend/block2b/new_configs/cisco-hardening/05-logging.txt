@@ -1,0 +1,15 @@
+Logging & Audit Configuration
+================================
+!
+logging buffered 16384 warnings
+logging trap warnings
+logging host X.X.X.X
+logging source-interface VlanX
+!
+archive
+ log config
+  logging enable
+  notify syslog
+!
+service timestamps log datetime msec
+service timestamps debug datetime msec

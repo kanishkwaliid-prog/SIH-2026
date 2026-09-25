@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from groq import Groq
 
 from .memory import check_memory, save_confirmed, init_db
+from .prefilter import classify_locally 
 
 load_dotenv()
 
@@ -45,7 +46,7 @@ def get_client():
 
 init_db()  # safe to call every import -- CREATE TABLE IF NOT EXISTS
 
-MODEL = "openai/gpt-oss-120b"   # good default Groq model, fast + capable
+MODEL = "openai/gpt-oss-20b"  # good default Groq model, fast + capable
 
 # ---------- Prompts ----------
 
@@ -60,7 +61,7 @@ Valid fields and their value types:
 - ssh_enabled (bool): line enables/disables SSH access (e.g. "ip ssh version 2", "transport input ssh")
 - telnet_enabled (bool): line enables/disables Telnet access (e.g. "transport input telnet")
 - session_timeout_seconds (int): line sets a session/exec timeout, converted to total seconds
-  (e.g. "exec-timeout 10 0" means 10 minutes 0 seconds -> 600)
+  (e.g. "exec-timeout 10 0" means 10 minutes 0 seconds -> 600; "ip ssh time-out 60" -> 60)
 - logging_enabled (bool): line turns logging/syslog on or off (e.g. "logging trap informational" -> true,
   "no logging on" -> false)
 - password_encryption (str): line sets a password encryption/hashing scheme -- use the short form
@@ -82,6 +83,7 @@ Line: "exec-timeout 10 0" -> {"field": "session_timeout_seconds", "value": 600, 
 Line: "logging trap informational" -> {"field": "logging_enabled", "value": true, "confidence": 0.9, "reasoning": "Enables syslog trap output"}
 Line: "service password-encryption" -> {"field": "password_encryption", "value": "type7", "confidence": 0.9, "reasoning": "Enables Cisco type7 weak encryption"}
 Line: "banner motd ^Authorized access only^" -> {"field": "banner_configured", "value": true, "confidence": 0.95, "reasoning": "Sets a login banner"}
+Line: "transport input ssh telnet" -> {"field": "telnet_enabled", "value": true, "confidence": 0.9, "reasoning": "Telnet is allowed alongside SSH"}
 Line: "router ospf 1" -> {"field": "unclear", "value": null, "confidence": 0.9, "reasoning": "Routing config, not in NormalizedConfig"}
 """
 
@@ -145,6 +147,12 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
     retries fail. Pass CLASSIFY_FALLBACK or VENDOR_FALLBACK depending on
     which function you're wrapping -- don't reuse one shape for both.
     """
+    global _quota_exhausted
+    if _quota_exhausted:
+        result = dict(fallback)
+        result["reasoning"] = "Groq daily quota exhausted"
+        return result
+
     if fallback is None:
         fallback = CLASSIFY_FALLBACK
 
@@ -157,11 +165,18 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
             result["reasoning"] = str(e)
             return result
         except Exception as e:
+            print(f"Groq attempt {attempt} failed: {type(e).__name__}: {e}")
+            if "tokens per day" in str(e):
+                _quota_exhausted = True
+                result = dict(fallback)
+                result["reasoning"] = "Groq daily quota exhausted"
+                return result
             if attempt == retries:
                 result = dict(fallback)
                 result["reasoning"] = f"API error after retries: {str(e)}"
                 return result
             time.sleep(delay)
+            print(f"Groq attempt {attempt} failed: {type(e).__name__}: {e}")
 
 # ---------- Main functions ----------
 
@@ -173,7 +188,9 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
 
     response = get_client().chat.completions.create(
         model=MODEL,
-        max_tokens=200,
+        max_tokens=1000,
+        temperature=0,
+        reasoning_effort="low",
         messages=[
             {"role": "system", "content": LINE_CLASSIFY_SYSTEM_PROMPT},
             {"role": "user", "content": user_msg}
@@ -182,19 +199,37 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
     result = _safe_parse_json(response.choices[0].message.content, CLASSIFY_FALLBACK)
     if result.get("reasoning") == "Failed to parse LLM response":
         raise ValueError("LLM returned malformed JSON")
+    
     result["source"] = "llm"
     result["confidence"] = min(result.get("confidence", 0.0), 0.99)
     return result
+
+CACHE_FILE = "block2b/llm_cache.json"
+_cache = json.load(open(CACHE_FILE)) if os.path.exists(CACHE_FILE) else {}
+_quota_exhausted = False
 
 def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
     cached = check_memory(raw_line, vendor_hint)
     if cached is not None:
         return cached
+    local_result = classify_locally(raw_line)    
+    if local_result is not None:
+        return local_result
 
-    return call_with_retry(
+    key = f"{vendor_hint}|{raw_line}"
+    if key in _cache:
+        return _cache[key]
+
+    result = call_with_retry(
         _classify_unknown_line_inner, raw_line, vendor_hint,
         fallback=CLASSIFY_FALLBACK
     )
+    # only cache real answers, never the fallback from a failed call
+    if result.get("confidence", 0) > 0:
+        _cache[key] = result
+        with open(CACHE_FILE, "w") as f:
+            json.dump(_cache, f)
+    return result
 
 
 def confirm_classification(raw_line: str, field: str, value, vendor_hint: str = None,

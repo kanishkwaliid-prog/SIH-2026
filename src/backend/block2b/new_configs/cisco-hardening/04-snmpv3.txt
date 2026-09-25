@@ -1,0 +1,12 @@
+SNMPv3 Secure Configuration
+================================
+
+
+no snmp-server community public
+no snmp-server community private
+
+snmp-server group SECURE v3 priv
+snmp-server user snmpadmin SECURE v3 auth sha AUTH_PASSWORD priv aes 256 PRIV_PASSWORD
+
+snmp-server location SECURE_DATACENTER
+snmp-server contact companyemail@domain.com

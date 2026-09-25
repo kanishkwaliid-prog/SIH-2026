@@ -1,0 +1,2 @@
+﻿guess,line,source_file,line_no,matched_pattern
+logging_enabled:false,no logging console,cisco_switch_real.txt,12,cisco: no logging console/buffered (often paired w/ full disable)
