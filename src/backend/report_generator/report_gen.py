@@ -3,6 +3,9 @@ import sys
 import platform
 from datetime import datetime, timezone
 from jinja2 import Template
+import json
+import io
+import csv
 
 # macOS Homebrew Library Path Fix for WeasyPrint
 if platform.system() == "Darwin":
@@ -306,3 +309,82 @@ def generate_pdf_file(raw_eval_result: dict, output_filename: str = "compliance_
     with open(output_filename, "wb") as f:
         f.write(pdf_bytes)
     print(f"✅ PDF successfully generated: {output_filename}")
+
+def generate_json_bytes(raw_eval_result: dict, framework: str = "CIS Baseline") -> bytes:
+    payload = prepare_payload(raw_eval_result, framework)
+    return json.dumps(payload, indent=2, default=str).encode("utf-8")
+
+
+def generate_csv_bytes(raw_eval_result: dict, framework: str = "CIS Baseline") -> bytes:
+    payload = prepare_payload(raw_eval_result, framework)
+    device = payload["device"]
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # One row per finding; device + score info repeated on each row
+    # so the file is self-contained for SIEM/GRC ingestion.
+    writer.writerow([
+        "hostname", "vendor", "os_version", "score",
+        "rule_id", "framework", "status", "severity",
+        "field_checked", "observed_value", "explanation", "remediation_cli"
+    ])
+    for f in payload["findings"]:
+        writer.writerow([
+            device.get("hostname", "N/A"),
+            device.get("vendor", "N/A"),
+            device.get("os_version", "N/A"),
+            payload["summary"]["score"],
+            f.get("rule_id"),
+            f.get("framework"),
+            f.get("status"),
+            f.get("severity"),
+            f.get("field_checked"),
+            f.get("observed_value"),
+            f.get("explanation"),
+            f.get("remediation_cli"),
+        ])
+    return output.getvalue().encode("utf-8")
+
+
+def generate_markdown_bytes(raw_eval_result: dict, framework: str = "CIS Baseline") -> bytes:
+    payload = prepare_payload(raw_eval_result, framework)
+    d, s, m = payload["device"], payload["summary"], payload["meta"]
+    lines = [
+        f"# Network Compliance Audit Report",
+        f"**Target Standard:** {payload['framework']}  ",
+        f"**Scan Date:** {m['scan_date']}  |  **Job ID:** {m['job_id']}",
+        "",
+        f"## Compliance Score: {s['score']}%",
+        f"- Total Checks: {s['total_checks']}",
+        f"- Passed: {s['passed_count']}  |  Failed: {s['failed_count']}  |  Not Evaluated: {s['not_evaluated_count']}",
+        f"- Critical: {s['critical_count']}  |  High: {s['high_count']}  |  Medium: {s['medium_count']}",
+        "",
+        "## 1. Device Identification",
+        f"| Field | Value |",
+        f"|---|---|",
+        f"| Hostname | {d.get('hostname', 'N/A')} |",
+        f"| Vendor | {d.get('vendor', 'N/A')} |",
+        f"| OS Version | {d.get('os_version', 'N/A')} |",
+        f"| IP Address | {d.get('ip_address', 'N/A')} |",
+        "",
+        "## 2. Compliance Findings Summary",
+        "| Rule ID | Status | Severity | Field | Explanation |",
+        "|---|---|---|---|---|",
+    ]
+    for f in payload["findings"]:
+        lines.append(
+            f"| {f.get('rule_id')} | {f.get('status')} | {f.get('severity', 'INFO')} "
+            f"| `{f.get('field_checked')}` | {f.get('explanation', '')} |"
+        )
+
+    lines.append("\n## 3. Remediation (Failed Checks Only)")
+    for f in payload["findings"]:
+        if f.get("status") == "FAIL":
+            lines.append(f"\n### {f.get('rule_id')} — {f.get('explanation', '')}")
+            lines.append(f"**Severity:** {f.get('severity', 'INFO')}  |  **Observed:** `{f.get('observed_value')}`")
+            lines.append(f"\n```\n{f.get('remediation_cli') or '# No remediation script provided.'}\n```")
+
+    if payload.get("warning"):
+        lines.insert(2, f"\n> **Engine Warning:** {payload['warning']}\n")
+
+    return "\n".join(lines).encode("utf-8")
