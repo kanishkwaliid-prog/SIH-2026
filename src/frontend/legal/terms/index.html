@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="dark" lang="en"><head>
+<html lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>ConfigGuard - Terms & Conditions</title>
@@ -124,27 +124,41 @@
       }
     </script>
 </head>
-<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
-<!-- TopNavBar -->
-<nav class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shadow-sm w-full sticky top-0 z-50">
-<div class="flex justify-between items-center px-margin-desktop w-full h-16">
-<div class="flex items-center gap-sm">
-<span class="material-symbols-outlined text-primary dark:text-primary text-2xl" data-icon="security" data-weight="fill">security</span>
-<span class="font-headline-lg text-headline-lg font-bold text-primary dark:text-primary tracking-tight hidden md:block">ConfigGuard</span>
-<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary tracking-tight md:hidden">ConfigGuard</span>
+<body class="bg-page text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container p-2 md:p-6">
+<div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
+<!-- Sidebar -->
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
+<a href="../../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
+<div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="security">security</span>
 </div>
-<div class="hidden md:flex items-center gap-gutter h-full">
-<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="../../upload_configuration/index.html">Scans</a>
-<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">Rulesets</a>
-<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">Settings</a>
-</div>
-<div class="flex items-center gap-sm md:gap-md">
-<a href="../help/index.html" aria-label="Help" class="text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors p-sm rounded-full hover:bg-surface-variant active:scale-95 transition-transform">
-<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-headline-lg-mobile font-bold text-on-surface tracking-tight hidden md:block">ConfigGuard</span>
+</a>
+<span class="hidden md:block font-label-caps text-label-caps text-on-surface-variant px-sm mb-sm tracking-wider relative z-10">WORKSPACE</span>
+<nav class="flex flex-row md:flex-col gap-1 relative z-10 ml-auto md:ml-0">
+<a href="../../upload_configuration/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="troubleshoot">troubleshoot</span>
+<span class="hidden md:inline">Scans</span>
+</a>
+<a href="../../rulesets/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
+<span class="hidden md:inline">Rulesets</span>
+</a>
+<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+<span class="hidden md:inline">Settings</span>
+</a>
+</nav>
+<div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
+<a href="../help/index.html" class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="help">help</span>
+<span class="font-body-sm text-body-sm">Help Centre</span>
 </a>
 </div>
-</div>
-</nav>
+</aside>
+<!-- Content column -->
+<div class="flex flex-col flex-grow min-w-0">
 
 <!-- Main Content -->
 <main class="flex-grow w-full max-w-4xl mx-auto px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col gap-xl">
@@ -154,7 +168,7 @@
 <p class="font-body-sm text-body-sm text-on-surface-variant">Last updated: [DATE] &nbsp;•&nbsp; Effective for the ConfigGuard hackathon prototype (SIH 2026)</p>
 </header>
 
-<div class="bg-surface-container-high border border-[#ffffff10] rounded-xl p-lg flex items-start gap-md">
+<div class="bg-surface-container-high border border-white/5 rounded-xl p-lg flex items-start gap-md">
 <span class="material-symbols-outlined text-tertiary mt-1" data-icon="info">info</span>
 <p class="font-body-sm text-body-sm text-on-surface-variant">ConfigGuard is a prototype built for Smart India Hackathon 2026. It is provided for demonstration and evaluation purposes only and is not a certified or production-grade security product. Do not upload configuration files from live production infrastructure that you cannot afford to expose.</p>
 </div>
@@ -216,7 +230,7 @@
 
 </main>
 
-<footer class="w-full border-t border-outline-variant py-lg px-margin-mobile md:px-margin-desktop">
+<footer class="w-full border-t border-outline-variant py-lg px-margin-mobile md:px-margin-desktop rounded-br-[1.75rem]">
 <div class="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-md text-on-surface-variant font-body-sm text-body-sm">
 <span>© 2026 ConfigGuard — SIH 2026 Prototype</span>
 <div class="flex gap-lg">
@@ -226,4 +240,7 @@
 </div>
 </div>
 </footer>
+</div>
+</div>
+<script src="../../shared.js"></script>
 </body></html>

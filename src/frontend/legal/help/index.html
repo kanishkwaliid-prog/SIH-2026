@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="dark" lang="en"><head>
+<html lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>ConfigGuard - Help Centre</title>
@@ -124,21 +124,41 @@
       }
     </script>
 </head>
-<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
-<nav class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shadow-sm w-full sticky top-0 z-50">
-<div class="flex justify-between items-center px-margin-desktop w-full h-16">
-<div class="flex items-center gap-sm">
-<span class="material-symbols-outlined text-primary dark:text-primary text-2xl" data-icon="security" data-weight="fill">security</span>
-<span class="font-headline-lg text-headline-lg font-bold text-primary dark:text-primary tracking-tight hidden md:block">ConfigGuard</span>
-<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary tracking-tight md:hidden">ConfigGuard</span>
+<body class="bg-page text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container p-2 md:p-6">
+<div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
+<!-- Sidebar -->
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
+<a href="../../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
+<div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="security">security</span>
 </div>
-<div class="hidden md:flex items-center gap-gutter h-full">
-<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="../../upload_configuration/index.html">Scans</a>
-<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">Rulesets</a>
-<a class="h-full flex items-center font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:text-primary dark:hover:text-primary transition-colors" href="#">Settings</a>
-</div>
-</div>
+<span class="font-headline-lg-mobile font-bold text-on-surface tracking-tight hidden md:block">ConfigGuard</span>
+</a>
+<span class="hidden md:block font-label-caps text-label-caps text-on-surface-variant px-sm mb-sm tracking-wider relative z-10">WORKSPACE</span>
+<nav class="flex flex-row md:flex-col gap-1 relative z-10 ml-auto md:ml-0">
+<a href="../../upload_configuration/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="troubleshoot">troubleshoot</span>
+<span class="hidden md:inline">Scans</span>
+</a>
+<a href="../../rulesets/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
+<span class="hidden md:inline">Rulesets</span>
+</a>
+<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+<span class="hidden md:inline">Settings</span>
+</a>
 </nav>
+<div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
+<a href="../help/index.html" class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="help">help</span>
+<span class="font-body-sm text-body-sm">Help Centre</span>
+</a>
+</div>
+</aside>
+<!-- Content column -->
+<div class="flex flex-col flex-grow min-w-0">
 
 <main class="flex-grow w-full max-w-4xl mx-auto px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col gap-xl">
 
@@ -149,17 +169,17 @@
 
 <!-- Quick links -->
 <div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
-<a href="#getting-started" class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm hover:border-primary transition-colors">
+<a href="#getting-started" class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-sm hover:border-primary transition-colors">
 <span class="material-symbols-outlined text-primary" data-icon="rocket_launch">rocket_launch</span>
 <h3 class="font-title-md text-title-md text-on-surface">Getting Started</h3>
 <p class="font-body-sm text-body-sm text-on-surface-variant">Uploading your first config file.</p>
 </a>
-<a href="#understanding-reports" class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm hover:border-primary transition-colors">
+<a href="#understanding-reports" class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-sm hover:border-primary transition-colors">
 <span class="material-symbols-outlined text-primary" data-icon="fact_check">fact_check</span>
 <h3 class="font-title-md text-title-md text-on-surface">Understanding Reports</h3>
 <p class="font-body-sm text-body-sm text-on-surface-variant">Frameworks, severity, and remediation.</p>
 </a>
-<a href="#data-privacy" class="bg-surface-container rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm hover:border-primary transition-colors">
+<a href="#data-privacy" class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-sm hover:border-primary transition-colors">
 <span class="material-symbols-outlined text-primary" data-icon="shield_lock">shield_lock</span>
 <h3 class="font-title-md text-title-md text-on-surface">Data &amp; Privacy</h3>
 <p class="font-body-sm text-body-sm text-on-surface-variant">What happens to your uploaded files.</p>
@@ -170,7 +190,7 @@
 <section id="getting-started" class="flex flex-col gap-md scroll-mt-20">
 <h2 class="font-title-md text-title-md text-on-surface border-b border-outline-variant pb-sm">Getting Started</h2>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 What file types can I upload?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -178,7 +198,7 @@ What file types can I upload?
 <p class="text-on-surface-variant text-body-sm mt-sm">ConfigGuard accepts .txt, .cfg, .conf, and .xml files up to 10MB each, and supports uploading multiple files at once. These should be raw configuration exports from your device (e.g. "show running-config" output on Cisco, or a Junos/PAN-OS config export).</p>
 </details>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 Do I need to tell ConfigGuard which vendor my device is?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -186,7 +206,7 @@ Do I need to tell ConfigGuard which vendor my device is?
 <p class="text-on-surface-variant text-body-sm mt-sm">No — vendor selection is optional. ConfigGuard will attempt to auto-detect your vendor (Cisco IOS, Juniper Junos, Palo Alto PAN-OS) from the config's syntax. If confidence is low, you'll be shown a confirmation screen with its best guess and the reason for it, so you can confirm or correct it.</p>
 </details>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 What happens if my vendor isn't recognized at all?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -194,7 +214,7 @@ What happens if my vendor isn't recognized at all?
 <p class="text-on-surface-variant text-body-sm mt-sm">If no known vendor signature matches, ConfigGuard flags the config for AI-assisted review. Unrecognized lines are shown to you with an AI-suggested category, which you confirm or correct in the "Review Unknown Lines" screen before a report is generated.</p>
 </details>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 Why is a field in my report showing "Not Evaluated" instead of Pass/Fail?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -207,7 +227,7 @@ Why is a field in my report showing "Not Evaluated" instead of Pass/Fail?
 <section id="understanding-reports" class="flex flex-col gap-md scroll-mt-20">
 <h2 class="font-title-md text-title-md text-on-surface border-b border-outline-variant pb-sm">Understanding Your Report</h2>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 Which compliance frameworks does ConfigGuard check against?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -215,7 +235,7 @@ Which compliance frameworks does ConfigGuard check against?
 <p class="text-on-surface-variant text-body-sm mt-sm">CIS Benchmarks, NIST 800-53, DISA STIG, and India-specific frameworks (RBI Cyber Security Framework, SEBI Cybersecurity and Cyber Resilience Framework). RBI/SEBI checks are our own technical interpretation of those frameworks' general principles for device-level config settings — not an official or certified regulatory mapping.</p>
 </details>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 Are the remediation CLI commands safe to run directly on my device?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -223,7 +243,7 @@ Are the remediation CLI commands safe to run directly on my device?
 <p class="text-on-surface-variant text-body-sm mt-sm">Remediation commands are sourced directly from our rule pack (never generated or altered by AI), but you should always review and test any change in a non-production or lab environment before applying it to a live device. ConfigGuard cannot account for your specific network topology or dependencies.</p>
 </details>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 Can I download my report as a PDF?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -236,7 +256,7 @@ Can I download my report as a PDF?
 <section id="data-privacy" class="flex flex-col gap-md scroll-mt-20">
 <h2 class="font-title-md text-title-md text-on-surface border-b border-outline-variant pb-sm">Data &amp; Privacy</h2>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 Is my uploaded config file sent to an external AI?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -244,7 +264,7 @@ Is my uploaded config file sent to an external AI?
 <p class="text-on-surface-variant text-body-sm mt-sm">Only unrecognized individual lines — not your whole file — may be sent to a third-party AI provider to suggest a category, and a filtering step is applied first to withhold known-sensitive values like passwords or keys. Every AI suggestion requires your manual confirmation before it's used. See our <a class="text-primary hover:underline" href="../privacy/index.html">Privacy Policy</a> for full details.</p>
 </details>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 How long is my data stored?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -252,7 +272,7 @@ How long is my data stored?
 <p class="text-on-surface-variant text-body-sm mt-sm">Uploaded files and reports are stored to power your scan history for as long as this prototype is being evaluated. You can request deletion at any time — see below.</p>
 </details>
 
-<details class="bg-surface-container-low rounded-lg border border-[#ffffff10] p-md group">
+<details class="bg-surface-container-low rounded-lg border border-white/5 p-md group">
 <summary class="cursor-pointer font-body-md text-on-surface flex justify-between items-center list-none">
 How do I request deletion of my data?
 <span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
@@ -262,7 +282,7 @@ How do I request deletion of my data?
 </section>
 
 <!-- Contact -->
-<section class="bg-surface-container-high rounded-xl border border-[#ffffff10] p-lg flex flex-col gap-sm">
+<section class="bg-surface-container-high rounded-xl border border-white/5 p-lg flex flex-col gap-sm">
 <h2 class="font-title-md text-title-md text-on-surface">Still need help?</h2>
 <p class="text-on-surface-variant text-body-sm">Reach out to the ConfigGuard team directly.</p>
 <div class="flex items-center gap-sm text-primary">
@@ -273,7 +293,7 @@ How do I request deletion of my data?
 
 </main>
 
-<footer class="w-full border-t border-outline-variant py-lg px-margin-mobile md:px-margin-desktop">
+<footer class="w-full border-t border-outline-variant py-lg px-margin-mobile md:px-margin-desktop rounded-br-[1.75rem]">
 <div class="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-md text-on-surface-variant font-body-sm text-body-sm">
 <span>© 2026 ConfigGuard — SIH 2026 Prototype</span>
 <div class="flex gap-lg">
@@ -283,4 +303,7 @@ How do I request deletion of my data?
 </div>
 </div>
 </footer>
+</div>
+</div>
+<script src="../../shared.js"></script>
 </body></html>
