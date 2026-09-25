@@ -1,0 +1,56 @@
+Layer 2 Protection Controls
+================================
+
+!
+! -------------------------------
+! Spanning Tree Configuration
+! -------------------------------
+!
+spanning-tree mode rapid-pvst
+spanning-tree portfast default
+spanning-tree portfast bpduguard default
+spanning-tree vlan 1-4094 priority 61440
+auto qos srnd4
+errdisable recovery cause udld
+errdisable recovery cause bpduguard 
+errdisable recovery cause  link-flap
+errdisable recovery cause  security-violation
+errdisable recovery interval 300
+!
+! -------------------------------
+! Root Guard (Prevents Rogue Root)
+! Apply on access uplinks toward distribution
+! -------------------------------
+!
+interface GigabitEthernet1/0/48
+ description Uplink-to-Distribution
+ spanning-tree guard root
+!
+! -------------------------------
+! Loop Guard (Protects Non-Designated Ports)
+! Apply on distribution/core downlinks
+! -------------------------------
+!
+interface GigabitEthernet1/0/47
+ description Downlink-to-Access
+ spanning-tree guard loop
+!
+! -------------------------------
+! UDLD (Fiber Link Protection)
+! Aggressive mode recommended for fiber uplinks
+! -------------------------------
+!
+udld aggressive
+!
+! -------------------------------
+! EtherChannel Best Practice (LACP)
+! Use active/active for redundancy
+! -------------------------------
+!
+interface range GigabitEthernet1/0/1-24
+ description Access-Port-Channel-Members
+ channel-group 1 mode active
+!
+interface Port-channel1
+ description Uplink-PortChannel
+ switchport mode trunk
