@@ -177,8 +177,10 @@ async def upload_configs(
             "owner_id": user.user_id,
             "filename": upload.filename,
             "raw_text": raw_text,
+            "raw_bytes": raw_bytes,
             "device": result["device"],
             "config": result["config"],
+            "pending_confirmations": result.get("pending_confirmations") or [],
         }
         activity_log.log_event(user, "upload", target=session_id,
                                 detail={"filename": upload.filename, "vendor": result["device"].get("vendor")})
@@ -288,7 +290,13 @@ async def evaluate_session(
         )
     rules = load_selected_rule_packs(framework_list)
     converter_output = {"device": session["device"], "config": session["config"]}
-    eval_result = evaluate_report(converter_output, rules)
+    eval_result = evaluate_report(
+    converter_output,
+    rules,
+    raw_file_bytes=session["raw_bytes"],
+    frameworks_used=framework_list,
+    session_id=session_id,
+    )
 
     session["eval_result"] = eval_result
     session["framework"] = ", ".join(framework_list)
