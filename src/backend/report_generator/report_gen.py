@@ -125,17 +125,17 @@ REPORT_TEMPLATE = """
             <td class="grid-cell" style="width: 50%;">
                 <h3 style="margin-top:0;">Hardware & OS Details</h3>
                 <table class="info-table">
-                    <tr><td class="info-label">Hostname:</td><td class="info-value">{{ device.hostname|default('Not in config file') }}</td></tr>
+                    <tr><td class="info-label">Hostname:</td><td class="info-value">{{ device.hostname|default('N/A') }}</td></tr>
                     <tr><td class="info-label">Vendor:</td><td class="info-value">{{ device.vendor|default('Unknown') }}</td></tr>
-                    <tr><td class="info-label">Hardware Model:</td><td class="info-value">{{ device.hardware_model|default('Not in config file') }}</td></tr>
-                    <tr><td class="info-label">Serial Number:</td><td class="info-value">{{ device.serial_number|default('Not in config file') }}</td></tr>
-                    <tr><td class="info-label">OS Version:</td><td class="info-value">{{ device.os_version|default('Not in config file') }}</td></tr>
+                    <tr><td class="info-label">Hardware Model:</td><td class="info-value">{{ device.hardware_model|default('N/A') }}</td></tr>
+                    <tr><td class="info-label">Serial Number:</td><td class="info-value">{{ device.serial_number|default('N/A') }}</td></tr>
+                    <tr><td class="info-label">OS Version:</td><td class="info-value">{{ device.os_version|default('N/A') }}</td></tr>
                 </table>
             </td>
             <td class="grid-cell" style="width: 50%;">
                 <h3 style="margin-top:0;">Audit Metadata</h3>
                 <table class="info-table">
-                    <tr><td class="info-label">IP Address:</td><td class="info-value">{{ device.ip_address|default('Not in config file') }}</td></tr>
+                    <tr><td class="info-label">IP Address:</td><td class="info-value">{{ device.ip_address|default('N/A') }}</td></tr>
                     <tr><td class="info-label">Device Type:</td><td class="info-value">{{ device.device_type|default('Network Device') }}</td></tr>
                     <tr><td class="info-label">Scan Date:</td><td class="info-value">{{ meta.scan_date }}</td></tr>
                     <tr><td class="info-label">Framework:</td><td class="info-value">{{ framework|default('CIS Baseline') }}</td></tr>

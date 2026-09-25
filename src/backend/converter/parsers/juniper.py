@@ -14,7 +14,6 @@ KNOWN_LINE_PATTERNS = [
     r"^set system login", r"^set system max-configuration",
     r"^set interfaces", r"^set routing-options",
     r"^set security zones", r"^set security policies",
-    r"^set snmp", r"^set system root-authentication",
 ]
 
 
@@ -42,34 +41,12 @@ def parse_juniper(config_text: str) -> tuple[dict, list[str]]:
 
     if "set system syslog" in config_text:
         fields["logging_enabled"] = True
-    elif "set system " in config_text:
-        fields["logging_enabled"] = False
 
-    # Idle timeout can be set globally or inside a login class
-    # (e.g. `set system login class ADMIN idle-timeout 10`).
-    timeout_match = re.search(
-        r"set system login (?:class \S+ )?idle-timeout (\d+)", config_text
-    )
+    timeout_match = re.search(r"set system login idle-timeout (\d+)", config_text)
     if timeout_match:
         fields["session_timeout_seconds"] = int(timeout_match.group(1)) * 60
 
     fields["banner_configured"] = "set system login message" in config_text
-
-    # Junos stores passwords as hashes. "$1$" is the old MD5 style; newer
-    # styles ($5$, $6$) are left as not-evaluated until we know which label
-    # the compliance rules expect for a strong hash.
-    hash_match = re.search(r'encrypted-password\s+"?(\$\d\$)', config_text)
-    if hash_match:
-        if hash_match.group(1) == "$1$":
-            fields["password_encryption"] = "md5"
-
-    # Only flag communities from a known-weak/default list, same as Cisco.
-    KNOWN_WEAK_COMMUNITIES = {"public", "private", "cisco", "community"}
-    all_communities = re.findall(r'set snmp community\s+"?([^\s"]+)', config_text)
-    if all_communities:
-        fields["snmp_default_community"] = [
-            c for c in all_communities if c.lower() in KNOWN_WEAK_COMMUNITIES
-        ]
 
     unrecognized_lines = []
     for line in config_text.splitlines():

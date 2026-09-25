@@ -23,16 +23,16 @@ from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from pipeline import apply_confirmation, process_config
-from compliance_engine.evaluator import evaluate_report, load_selected_rule_packs
-from report_generator.report_gen import generate_pdf_bytes
+from .pipeline import apply_confirmation, process_config
+from .compliance_engine.evaluator import evaluate_report, load_selected_rule_packs
+from .report_generator.report_gen import generate_pdf_bytes
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
 app = FastAPI(title="Network Compliance Engine API")
 
-from block2b import review_system
+from .block2b import review_system
 
 review_system.init_review_tables()
 # Demo-scope role assignment. In production this comes from your real
@@ -90,8 +90,10 @@ async def upload_configs(
         SESSIONS[session_id] = {
             "filename": upload.filename,
             "raw_text": raw_text,
+            "raw_bytes": raw_bytes,
             "device": result["device"],
             "config": result["config"],
+            "pending_confirmations": result.get("pending_confirmations") or [],
         }
 
         results.append({
@@ -173,7 +175,13 @@ async def evaluate_session(session_id: str, frameworks: str = "CIS"):
     framework_list = [f.strip().upper() for f in frameworks.split(",") if f.strip()]
     rules = load_selected_rule_packs(framework_list)
     converter_output = {"device": session["device"], "config": session["config"]}
-    eval_result = evaluate_report(converter_output, rules)
+    eval_result = evaluate_report(
+    converter_output,
+    rules,
+    raw_file_bytes=session["raw_bytes"],
+    frameworks_used=framework_list,
+    session_id=session_id,
+    )
 
     session["eval_result"] = eval_result
     session["framework"] = ", ".join(framework_list)
