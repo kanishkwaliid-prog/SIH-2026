@@ -1,0 +1,23 @@
+Secure SSH Management Plane
+================================
+ip domain-name secure.local
+!
+crypto key generate rsa modulus 4096
+!
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+!
+line vty 0 4
+ transport input ssh
+ exec-timeout 5 0
+ login authentication default
+!
+! Restrict VTY Access to Management Subnet
+!
+ip access-list standard MGMT-ACCESS
+ permit <IP>
+ deny any
+!
+line vty 0 4
+ access-class MGMT-ACCESS in
