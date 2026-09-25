@@ -198,7 +198,7 @@
 </div>
 </div>
 <!-- Hidden File Input -->
-<input accept=".txt,.cfg,.conf,.xml" aria-label="Upload configuration file" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" id="fileInput" multiple="" type="file"/>
+<input accept=".txt,.cfg,.conf,.xml,.json" aria-label="Upload configuration file" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" id="fileInput" multiple="" type="file"/>
 </div>
 <p id="errorMsg" class="font-body-sm text-body-sm text-error hidden"></p>
 <button type="button" id="removeAllBtn" class="hidden self-end text-error hover:underline font-body-sm">Remove all</button>
@@ -222,6 +222,12 @@
 <option value="juniper">Juniper Junos</option>
 <option value="palo-alto">Palo Alto PAN-OS</option>
 <option value="fortinet">Fortinet FortiOS</option>
+<option value="arista">Arista EOS</option>
+<option value="huawei">Huawei VRP</option>
+<option value="mikrotik">MikroTik RouterOS</option>
+<option value="checkpoint">Check Point Gaia</option>
+<option value="netgate">Netgate pfSense</option>
+<option value="sonic">SONiC</option>
 </select>
 <span class="material-symbols-outlined absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none group-focus-within:text-primary transition-colors" data-icon="expand_more">expand_more</span>
 </div>
@@ -425,6 +431,12 @@
       juniper: "juniper_junos",
       "palo-alto": "palo_alto",
       fortinet: "fortinet_fortios",
+      arista: "arista_eos",
+      huawei: "huawei_vrp",
+      mikrotik: "mikrotik_routeros",
+      checkpoint: "checkpoint_gaia",
+      netgate: "netgate_pfsense",
+      sonic: "sonic",
     };
 
     const fileInput = document.getElementById("fileInput");

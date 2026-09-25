@@ -47,3 +47,100 @@ fortinet_fortios:
         delete 1
     end
     # If SNMP is still needed, use SNMPv3 (config system snmp user)
+
+arista_eos:
+  ssh_enabled: |
+    management ssh
+       no shutdown
+  telnet_enabled: |
+    management telnet
+       shutdown
+  session_timeout_seconds: |
+    line vty 0 15
+       exec-timeout 5 0
+  logging_enabled: |
+    logging host <syslog-server-ip>
+  banner_configured: |
+    banner login
+    Authorized access only. Activity may be monitored.
+    EOF
+  password_encryption: |
+    username <name> privilege 15 secret sha512 <new-password>
+  snmp_default_community: |
+    no snmp-server community public ro
+    ! Use a non-default, unique community string, or SNMPv3
+
+huawei_vrp:
+  ssh_enabled: |
+    stelnet server enable
+    user-interface vty 0 4
+     protocol inbound ssh
+  telnet_enabled: |
+    user-interface vty 0 4
+     undo protocol inbound telnet
+     protocol inbound ssh
+  session_timeout_seconds: |
+    user-interface vty 0 4
+     idle-timeout 5 0
+  logging_enabled: |
+    info-center enable
+    info-center loghost <syslog-server-ip>
+  banner_configured: |
+    header login information "Authorized access only."
+  password_encryption: |
+    local-user admin password irreversible-cipher <new-password>
+  snmp_default_community: |
+    undo snmp-agent community write public
+    ! Use a non-default, unique community string, or SNMPv3
+
+mikrotik_routeros:
+  ssh_enabled: |
+    /ip service
+    set ssh disabled=no
+  telnet_enabled: |
+    /ip service
+    set telnet disabled=yes
+  logging_enabled: |
+    /system logging action
+    add name=remote target=remote remote=<syslog-server-ip>
+    /system logging
+    add action=remote topics=info
+  banner_configured: |
+    /system note
+    set show-at-login=yes note="Authorized access only."
+  snmp_default_community: |
+    /snmp community
+    remove [find name=public]
+    # Add a non-default, unique community string instead
+
+checkpoint_gaia:
+  banner_configured: |
+    set banner "Authorized access only. Activity may be monitored."
+  snmp_default_community: |
+    set snmp community-string <new-unique-string>
+    # Consider disabling SNMPv1/v2 community strings entirely if not needed
+  telnet_enabled: |
+    set net-access telnet off
+  session_timeout_seconds: |
+    set inactivity-timeout 5
+
+netgate_pfsense:
+  ssh_enabled: |
+    # System > Advanced > Admin Access > Enable Secure Shell
+    <system><enablesshd>enabled</enablesshd></system>
+  session_timeout_seconds: |
+    # System > Advanced > Admin Access > Session timeout (minutes)
+    <system><webgui><session_timeout>5</session_timeout></webgui></system>
+  logging_enabled: |
+    # Status > System Logs > Settings > enable remote logging
+    <syslog><remoteserver><syslog-server-ip></remoteserver></syslog>
+  snmp_default_community: |
+    # Services > SNMP > Read Community String
+    <snmpd><rocommunity><new-unique-string></rocommunity></snmpd>
+
+sonic:
+  logging_enabled: |
+    sudo config syslog add <syslog-server-ip>
+  snmp_default_community: |
+    sudo config snmp community del public
+    sudo config snmp community add ro <new-unique-string>

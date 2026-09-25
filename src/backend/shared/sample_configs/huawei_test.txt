@@ -1,0 +1,26 @@
+#
+sysname HUAWEI-DEMO
+#
+aaa
+local-user admin password irreversible-cipher %^%#abcdefghijklmnop%^%#
+local-user admin privilege level 15
+local-user admin service-type ssh terminal
+#
+stelnet server enable
+#
+snmp-agent
+snmp-agent community read cipher %^%#qrstuvwx%^%#
+snmp-agent community write public
+#
+header login information "Authorized access only."
+#
+interface GigabitEthernet0/0/1
+ description UPLINK
+ ip address 10.10.10.1 255.255.255.252
+#
+user-interface vty 0 4
+ authentication-mode aaa
+ protocol inbound ssh
+ idle-timeout 10 0
+#
+return
