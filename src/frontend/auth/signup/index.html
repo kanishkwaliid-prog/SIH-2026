@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ConfigGuard - Create organization</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+                                            "colors": {
+                    "on-tertiary-fixed-variant": "#6FCB8D",
+                    "on-error": "#0A0A0A",
+                    "tertiary-fixed-dim": "#6FCB8D",
+                    "inverse-primary": "#0A0A0A",
+                    "primary-fixed-dim": "#F3EEE3",
+                    "on-primary-fixed-variant": "#0A0A0A",
+                    "inverse-on-surface": "#0A0A0A",
+                    "error-container": "#22141B",
+                    "error": "#E8829E",
+                    "surface": "#0D0D0D",
+                    "on-secondary-fixed": "#0A0A0A",
+                    "primary-container": "#2A2822",
+                    "inverse-surface": "#F3EEE3",
+                    "surface-container-lowest": "#0A0A0A",
+                    "secondary-fixed": "#171A2C",
+                    "on-secondary-container": "#8D93E8",
+                    "outline": "#33312C",
+                    "on-secondary": "#0A0A0A",
+                    "tertiary-fixed": "#131D16",
+                    "on-tertiary-fixed": "#6FCB8D",
+                    "secondary": "#8D93E8",
+                    "on-primary-container": "#F3EEE3",
+                    "on-surface-variant": "#9C9686",
+                    "surface-container-highest": "#232323",
+                    "on-background": "#F3EEE3",
+                    "on-primary-fixed": "#0A0A0A",
+                    "secondary-fixed-dim": "#8D93E8",
+                    "surface-dim": "#0A0A0A",
+                    "on-surface": "#F3EEE3",
+                    "on-tertiary": "#0A0A0A",
+                    "on-tertiary-container": "#6FCB8D",
+                    "surface-container": "#161616",
+                    "surface-tint": "#F3EEE3",
+                    "surface-container-low": "#131313",
+                    "primary": "#F3EEE3",
+                    "tertiary-container": "#131D16",
+                    "surface-bright": "#1C1C1C",
+                    "tertiary": "#6FCB8D",
+                    "on-secondary-fixed-variant": "#8D93E8",
+                    "background": "#0A0A0A",
+                    "outline-variant": "rgba(243,238,227,0.09)",
+                    "secondary-container": "#171A2C",
+                    "on-primary": "#0A0A0A",
+                    "surface-variant": "#1A1A1A",
+                    "primary-fixed": "#F3EEE3",
+                    "on-error-container": "#E8829E",
+                    "surface-container-high": "#1C1C1C",
+                    "page": "#050505",
+                    "ink": "#F3EEE3",
+                    "on-ink": "#0A0A0A",
+                    "high": "#E89158",
+                    "high-container": "#241A10",
+                    "on-high-container": "#E89158",
+                    "medium": "#E8B84B",
+                    "medium-container": "#211A0C",
+                    "on-medium-container": "#E8B84B"
+                },
+                                            "borderRadius": {
+                    "DEFAULT": "0.75rem",
+                    "lg": "1rem",
+                    "xl": "1.5rem",
+                    "full": "9999px"
+                },
+            "spacing": {
+                    "base": "4px",
+                    "xs": "4px",
+                    "margin-desktop": "48px",
+                    "gutter": "24px",
+                    "md": "16px",
+                    "margin-mobile": "16px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "sm": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "title-md": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-page text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container p-2 md:p-6">
+<div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-grow bg-background rounded-[1.75rem] shadow-sm relative overflow-hidden">
+<div class="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-secondary/10 blur-3xl pointer-events-none"></div>
+<main class="relative z-10 w-full max-w-md mx-auto self-center px-margin-mobile md:px-0 py-xl flex flex-col gap-xl">
+<div class="flex items-center gap-sm">
+<div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" aria-hidden="true">security</span>
+</div>
+<span class="font-headline-lg-mobile font-bold text-on-surface tracking-tight">ConfigGuard</span>
+</div>
+<header class="flex flex-col gap-xs">
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Create your organization</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Each organization's scans and reports are visible only to its own members.</p>
+</header>
+<div id="notice" role="status" hidden class="rounded-xl border border-outline-variant bg-surface-container p-md font-body-sm text-body-sm text-on-surface-variant"></div>
+<div id="error" role="alert" hidden class="rounded-xl bg-error-container text-on-error-container p-md font-body-sm text-body-sm"></div>
+<form id="auth-form" class="flex flex-col gap-lg" novalidate>
+<div class="flex flex-col gap-sm">
+<label for="name" class="font-body-sm text-body-sm text-on-surface-variant">Your name</label>
+<input id="name" name="name" type="text" autocomplete="name" required maxlength="100" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+</div>
+<div class="flex flex-col gap-sm">
+<label for="org" class="font-body-sm text-body-sm text-on-surface-variant">Organization</label>
+<input id="org" name="org" type="text" autocomplete="organization" required aria-describedby="org-hint" maxlength="100" placeholder="e.g. Acme Networks" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+<p id="org-hint" class="font-body-sm text-body-sm text-on-surface-variant/80">You'll be its admin and can add teammates later.</p>
+</div>
+<div class="flex flex-col gap-sm">
+<label for="email" class="font-body-sm text-body-sm text-on-surface-variant">Work email</label>
+<input id="email" name="email" type="email" autocomplete="username" required placeholder="you@company.com" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+</div>
+<div class="flex flex-col gap-sm">
+<label for="password" class="font-body-sm text-body-sm text-on-surface-variant">Password</label>
+<input id="password" name="password" type="password" autocomplete="new-password" required aria-describedby="password-hint" minlength="10" maxlength="128" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+<p id="password-hint" class="font-body-sm text-body-sm text-on-surface-variant/80">At least 10 characters.</p>
+</div>
+<div class="flex flex-col gap-sm">
+<label for="confirm" class="font-body-sm text-body-sm text-on-surface-variant">Confirm password</label>
+<input id="confirm" name="confirm" type="password" autocomplete="new-password" required maxlength="128" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+</div>
+<button id="submit-btn" type="submit" class="w-full rounded-full bg-primary text-on-primary py-3 font-body-md text-body-md font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-60 disabled:cursor-wait transition-opacity">Create organization</button>
+</form>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Already have an account? <a href="../login/index.html" class="text-secondary hover:underline focus:outline-none focus-visible:underline">Sign in</a></p>
+</main>
+</div>
+<script src="../../shared.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const form = $("auth-form");
+const submitBtn = document.getElementById("submit-btn");
+const errorBox = document.getElementById("error");
+const submitLabel = submitBtn.textContent;
+
+function showError(message) {
+  errorBox.textContent = message;
+  errorBox.hidden = false;
+}
+
+function setBusy(busy, label) {
+  submitBtn.disabled = busy;
+  submitBtn.textContent = busy ? label : submitLabel;
+}
+
+// Already signed in? Skip this page.
+if (getToken()) window.location.replace(safeNextUrl());
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  errorBox.hidden = true;
+  const name = $("name").value.trim();
+  const orgName = $("org").value.trim();
+  const email = $("email").value.trim();
+  const password = $("password").value;
+
+  if (!name || !orgName || !email) {
+    showError("Fill in every field.");
+    return;
+  }
+  if (password.length < 10) {
+    showError("Password must be at least 10 characters.");
+    $("password").focus();
+    return;
+  }
+  if (password !== $("confirm").value) {
+    showError("The two passwords don't match.");
+    $("confirm").focus();
+    return;
+  }
+
+  setBusy(true, "Creating organization…");
+  try {
+    await signupRequest({ email, password, name, orgName });
+    await loginRequest(email, password);
+    window.location.replace(HOME_PAGE);
+  } catch (err) {
+    showError(err.message);
+    setBusy(false);
+  }
+});
+</script>
+</body></html>

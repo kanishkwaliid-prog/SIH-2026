@@ -17,6 +17,12 @@ weasyprint==62.3
 jinja2==3.1.6
 pydyf==0.10.0
 
+# Auth (Phase 0 decisions -- see docs/auth_decisions.md)
+pyjwt==2.15.0
+argon2-cffi==25.1.0
+pyotp==2.10.0
+qrcode[pil]==8.2
+
 # Environment variables
 python-dotenv==1.0.1
 

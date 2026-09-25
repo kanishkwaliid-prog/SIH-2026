@@ -469,8 +469,17 @@ New Scan
       }
     }
 
-    document.getElementById("downloadBtn").addEventListener("click", () => {
-      if (currentSessionId) window.open(reportPdfUrl(currentSessionId), "_blank");
+    document.getElementById("downloadBtn").addEventListener("click", async () => {
+      if (!currentSessionId) return;
+      const btn = document.getElementById("downloadBtn");
+      btn.disabled = true;
+      try {
+        await downloadReportPdf(currentSessionId);
+      } catch (err) {
+        alert(err.message || "Couldn't download the PDF. Check the backend is running and try again.");
+      } finally {
+        btn.disabled = false;
+      }
     });
 
     document.getElementById("applyFrameworksBtn").addEventListener("click", () => {

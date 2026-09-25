@@ -549,4 +549,19 @@
       }
     });
 </script>
+<script>
+    // Viewers can read reports but not upload. The server enforces this
+    // (403); this just stops the page from inviting an action that will fail.
+    (function guardUpload() {
+      const apply = (user) => {
+        if (!user || userCan(user, "upload")) return;
+        fileInput.disabled = true;
+        analyzeBtn.disabled = true;
+        analyzeBtn.classList.add("opacity-60", "cursor-not-allowed");
+        showError("Your role (viewer) can view reports but can't upload configurations. Ask an admin to change your role.");
+      };
+      apply(getCurrentUser());
+      refreshCurrentUser().then(apply).catch(() => {});
+    })();
+</script>
 </body></html>

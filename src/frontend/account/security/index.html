@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ConfigGuard - Security settings</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+                                            "colors": {
+                    "on-tertiary-fixed-variant": "#6FCB8D",
+                    "on-error": "#0A0A0A",
+                    "tertiary-fixed-dim": "#6FCB8D",
+                    "inverse-primary": "#0A0A0A",
+                    "primary-fixed-dim": "#F3EEE3",
+                    "on-primary-fixed-variant": "#0A0A0A",
+                    "inverse-on-surface": "#0A0A0A",
+                    "error-container": "#22141B",
+                    "error": "#E8829E",
+                    "surface": "#0D0D0D",
+                    "on-secondary-fixed": "#0A0A0A",
+                    "primary-container": "#2A2822",
+                    "inverse-surface": "#F3EEE3",
+                    "surface-container-lowest": "#0A0A0A",
+                    "secondary-fixed": "#171A2C",
+                    "on-secondary-container": "#8D93E8",
+                    "outline": "#33312C",
+                    "on-secondary": "#0A0A0A",
+                    "tertiary-fixed": "#131D16",
+                    "on-tertiary-fixed": "#6FCB8D",
+                    "secondary": "#8D93E8",
+                    "on-primary-container": "#F3EEE3",
+                    "on-surface-variant": "#9C9686",
+                    "surface-container-highest": "#232323",
+                    "on-background": "#F3EEE3",
+                    "on-primary-fixed": "#0A0A0A",
+                    "secondary-fixed-dim": "#8D93E8",
+                    "surface-dim": "#0A0A0A",
+                    "on-surface": "#F3EEE3",
+                    "on-tertiary": "#0A0A0A",
+                    "on-tertiary-container": "#6FCB8D",
+                    "surface-container": "#161616",
+                    "surface-tint": "#F3EEE3",
+                    "surface-container-low": "#131313",
+                    "primary": "#F3EEE3",
+                    "tertiary-container": "#131D16",
+                    "surface-bright": "#1C1C1C",
+                    "tertiary": "#6FCB8D",
+                    "on-secondary-fixed-variant": "#8D93E8",
+                    "background": "#0A0A0A",
+                    "outline-variant": "rgba(243,238,227,0.09)",
+                    "secondary-container": "#171A2C",
+                    "on-primary": "#0A0A0A",
+                    "surface-variant": "#1A1A1A",
+                    "primary-fixed": "#F3EEE3",
+                    "on-error-container": "#E8829E",
+                    "surface-container-high": "#1C1C1C",
+                    "page": "#050505",
+                    "ink": "#F3EEE3",
+                    "on-ink": "#0A0A0A",
+                    "high": "#E89158",
+                    "high-container": "#241A10",
+                    "on-high-container": "#E89158",
+                    "medium": "#E8B84B",
+                    "medium-container": "#211A0C",
+                    "on-medium-container": "#E8B84B"
+                },
+                                            "borderRadius": {
+                    "DEFAULT": "0.75rem",
+                    "lg": "1rem",
+                    "xl": "1.5rem",
+                    "full": "9999px"
+                },
+            "spacing": {
+                    "base": "4px",
+                    "xs": "4px",
+                    "margin-desktop": "48px",
+                    "gutter": "24px",
+                    "md": "16px",
+                    "margin-mobile": "16px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "sm": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "title-md": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-page text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container p-2 md:p-6">
+<div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
+<!-- Sidebar -->
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
+<a href="../../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
+<div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="security">security</span>
+</div>
+<span class="font-headline-lg-mobile font-bold text-on-surface tracking-tight hidden md:block">ConfigGuard</span>
+</a>
+<span class="hidden md:block font-label-caps text-label-caps text-on-surface-variant px-sm mb-sm tracking-wider relative z-10">WORKSPACE</span>
+<nav class="flex flex-row md:flex-col gap-1 relative z-10 ml-auto md:ml-0">
+<a href="../../upload_configuration/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="troubleshoot">troubleshoot</span>
+<span class="hidden md:inline">Scans</span>
+</a>
+<a href="../../rulesets/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
+<span class="hidden md:inline">Rulesets</span>
+</a>
+<a href="index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full bg-primary text-on-primary font-body-sm text-body-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="shield_lock">shield_lock</span>
+<span class="hidden md:inline">Security</span>
+</a>
+</nav>
+<div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
+<div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
+<span class="relative flex h-2 w-2 shrink-0">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+</div>
+<div class="flex items-center gap-sm px-sm">
+<a href="../../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="help">help</span>
+</a>
+<button aria-label="Notifications" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Content column -->
+<div class="flex flex-col flex-grow min-w-0">
+<main class="flex-grow w-full max-w-2xl mx-auto px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col gap-xl">
+
+<header class="flex flex-col gap-xs">
+<h1 class="font-display-lg text-display-lg text-on-surface">Security settings</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">Manage two-factor authentication for your account.</p>
+</header>
+
+<div id="page-error" role="alert" hidden class="rounded-xl bg-error-container text-on-error-container p-md font-body-sm text-body-sm"></div>
+<div id="page-loading" class="font-body-sm text-body-sm text-on-surface-variant">Loading…</div>
+
+<!-- ===== State: OFF ===== -->
+<section id="state-off" hidden class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-lg">
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-on-surface-variant text-2xl mt-1" data-icon="lock_open">lock_open</span>
+<div class="flex flex-col gap-xs">
+<h2 class="font-title-md text-title-md text-on-surface">Two-factor authentication is off</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Add a second step to sign-in with an authenticator app (Google Authenticator, Authy, or similar). Anyone with just your password won't be able to sign in.</p>
+</div>
+</div>
+<button id="start-enroll-btn" type="button" class="self-start rounded-full bg-primary text-on-primary px-lg py-2.5 font-body-sm text-body-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary transition-opacity">Turn on two-factor authentication</button>
+
+<form id="off-password-form" hidden class="flex flex-col gap-md border-t border-outline-variant pt-lg" novalidate>
+<div class="flex flex-col gap-sm">
+<label for="off-password" class="font-body-sm text-body-sm text-on-surface-variant">Confirm your password to continue</label>
+<input id="off-password" type="password" autocomplete="current-password" required class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+</div>
+<div id="off-password-error" role="alert" hidden class="font-body-sm text-body-sm text-error"></div>
+<div class="flex gap-sm">
+<button type="submit" class="rounded-full bg-primary text-on-primary px-lg py-2.5 font-body-sm text-body-sm font-medium hover:opacity-90 disabled:opacity-60 transition-opacity">Continue</button>
+<button type="button" id="off-cancel-btn" class="rounded-full border border-outline-variant px-lg py-2.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant transition-colors">Cancel</button>
+</div>
+</form>
+</section>
+
+<!-- ===== State: SCAN ===== -->
+<section id="state-scan" hidden class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-lg">
+<div class="flex flex-col gap-xs">
+<h2 class="font-title-md text-title-md text-on-surface">Scan the QR code</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Open your authenticator app and scan this code, or enter the key manually.</p>
+</div>
+<div class="flex flex-col sm:flex-row gap-lg items-start">
+<img id="qr-image" alt="Two-factor setup QR code" class="w-44 h-44 rounded-xl bg-white p-2 shrink-0"/>
+<div class="flex flex-col gap-sm min-w-0">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Can't scan? Enter this key manually:</span>
+<div class="flex items-center gap-sm flex-wrap">
+<code id="secret-text" class="font-mono text-body-sm text-on-surface bg-surface-container-low border border-outline-variant rounded-lg px-md py-2 break-all"></code>
+<button type="button" id="copy-secret-btn" class="rounded-full border border-outline-variant p-2 text-on-surface-variant hover:text-primary hover:border-primary transition-colors" aria-label="Copy key">
+<span class="material-symbols-outlined text-[18px]" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+<form id="scan-verify-form" class="flex flex-col gap-md border-t border-outline-variant pt-lg" novalidate>
+<div class="flex flex-col gap-sm max-w-xs">
+<label for="scan-code" class="font-body-sm text-body-sm text-on-surface-variant">Enter the 6-digit code from your app</label>
+<input id="scan-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required placeholder="123456" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface tracking-[0.3em] text-center placeholder:text-on-surface-variant/50 placeholder:tracking-normal focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+</div>
+<div id="scan-error" role="alert" hidden class="font-body-sm text-body-sm text-error"></div>
+<div class="flex gap-sm">
+<button type="submit" id="scan-verify-btn" class="rounded-full bg-primary text-on-primary px-lg py-2.5 font-body-sm text-body-sm font-medium hover:opacity-90 disabled:opacity-60 transition-opacity">Verify and turn on</button>
+<button type="button" id="scan-cancel-btn" class="rounded-full border border-outline-variant px-lg py-2.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant transition-colors">Cancel</button>
+</div>
+</form>
+</section>
+
+<!-- ===== State: BACKUP CODES ===== -->
+<section id="state-backup" hidden class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-lg">
+<div class="flex flex-col gap-xs">
+<h2 class="font-title-md text-title-md text-on-surface">Save your backup codes</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Each code works once, for when you don't have your phone. <b class="text-on-surface">These are shown only once</b> — store them somewhere safe.</p>
+</div>
+<div id="backup-codes-grid" class="grid grid-cols-2 gap-sm font-mono text-body-sm text-on-surface bg-surface-container-low border border-outline-variant rounded-xl p-md"></div>
+<div class="flex gap-sm flex-wrap">
+<button type="button" id="copy-all-btn" class="rounded-full border border-outline-variant px-lg py-2.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]" data-icon="content_copy">content_copy</span>Copy all
+</button>
+<button type="button" id="download-codes-btn" class="rounded-full border border-outline-variant px-lg py-2.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]" data-icon="download">download</span>Download .txt
+</button>
+</div>
+<label class="flex items-center gap-sm font-body-sm text-body-sm text-on-surface-variant border-t border-outline-variant pt-lg">
+<input id="saved-checkbox" type="checkbox" class="rounded border-outline-variant bg-surface-container-low text-primary focus:ring-secondary/30"/>
+I've saved these somewhere safe
+</label>
+<button type="button" id="backup-done-btn" disabled class="self-start rounded-full bg-primary text-on-primary px-lg py-2.5 font-body-sm text-body-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity">Done</button>
+</section>
+
+<!-- ===== State: ON ===== -->
+<section id="state-on" hidden class="bg-surface-container rounded-xl border border-white/5 p-lg flex flex-col gap-lg">
+<div class="flex items-start gap-md">
+<span class="material-symbols-outlined text-tertiary text-2xl mt-1" data-icon="verified_user">verified_user</span>
+<div class="flex flex-col gap-xs">
+<h2 class="font-title-md text-title-md text-on-surface">Two-factor authentication is on</h2>
+<p id="backup-remaining-text" class="font-body-sm text-body-sm text-on-surface-variant"></p>
+</div>
+</div>
+<div class="flex gap-sm flex-wrap border-t border-outline-variant pt-lg">
+<button id="regen-btn" type="button" class="rounded-full border border-outline-variant px-lg py-2.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant transition-colors">Generate new backup codes</button>
+<button id="turnoff-btn" type="button" class="rounded-full border border-error/40 text-error px-lg py-2.5 font-body-sm text-body-sm hover:bg-error-container transition-colors">Turn off two-factor authentication</button>
+</div>
+
+<form id="regen-form" hidden class="flex flex-col gap-md border-t border-outline-variant pt-lg" novalidate>
+<div class="flex flex-col gap-sm max-w-xs">
+<label for="regen-code" class="font-body-sm text-body-sm text-on-surface-variant">Enter your current 6-digit code</label>
+<input id="regen-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required placeholder="123456" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface tracking-[0.3em] text-center placeholder:text-on-surface-variant/50 placeholder:tracking-normal focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+</div>
+<div id="regen-error" role="alert" hidden class="font-body-sm text-body-sm text-error"></div>
+<div class="flex gap-sm">
+<button type="submit" class="rounded-full bg-primary text-on-primary px-lg py-2.5 font-body-sm text-body-sm font-medium hover:opacity-90 disabled:opacity-60 transition-opacity">Generate</button>
+<button type="button" id="regen-cancel-btn" class="rounded-full border border-outline-variant px-lg py-2.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant transition-colors">Cancel</button>
+</div>
+</form>
+
+<form id="turnoff-form" hidden class="flex flex-col gap-md border-t border-outline-variant pt-lg" novalidate>
+<div class="flex flex-col gap-sm max-w-xs">
+<label for="turnoff-password" class="font-body-sm text-body-sm text-on-surface-variant">Password</label>
+<input id="turnoff-password" type="password" autocomplete="current-password" required class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+</div>
+<div class="flex flex-col gap-sm max-w-xs">
+<label for="turnoff-code" class="font-body-sm text-body-sm text-on-surface-variant">Code (from your app, or a backup code)</label>
+<input id="turnoff-code" type="text" autocomplete="one-time-code" required placeholder="123456" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-md py-3 text-on-surface focus:border-secondary focus:ring-2 focus:ring-secondary/30 focus:outline-none transition-colors"/>
+</div>
+<div id="turnoff-error" role="alert" hidden class="font-body-sm text-body-sm text-error"></div>
+<div class="flex gap-sm">
+<button type="submit" class="rounded-full bg-error text-on-error px-lg py-2.5 font-body-sm text-body-sm font-medium hover:opacity-90 disabled:opacity-60 transition-opacity">Turn off</button>
+<button type="button" id="turnoff-cancel-btn" class="rounded-full border border-outline-variant px-lg py-2.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant transition-colors">Cancel</button>
+</div>
+</form>
+</section>
+
+</main>
+
+<footer class="w-full border-t border-outline-variant py-lg px-margin-mobile md:px-margin-desktop rounded-br-[1.75rem]">
+<div class="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-md text-on-surface-variant font-body-sm text-body-sm">
+<span>© [YEAR] ConfigGuard — SIH 2026 Prototype</span>
+<div class="flex gap-lg">
+<a class="hover:text-primary transition-colors" href="../../legal/terms/index.html">Terms</a>
+<a class="hover:text-primary transition-colors" href="../../legal/privacy/index.html">Privacy</a>
+<a class="hover:text-primary transition-colors" href="../../legal/help/index.html">Help Centre</a>
+</div>
+</div>
+</footer>
+</div>
+</div>
+<script src="../../shared.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+
+const pageError = $("page-error");
+const pageLoading = $("page-loading");
+const states = ["state-off", "state-scan", "state-backup", "state-on"];
+
+let pendingSecret = null; // set once /2fa/setup succeeds, until /2fa/verify
+
+function showPageError(message) {
+  pageError.textContent = message;
+  pageError.hidden = false;
+}
+
+function showState(id) {
+  states.forEach((s) => { $(s).hidden = s !== id; });
+}
+
+function formError(boxId, message) {
+  const box = $(boxId);
+  box.textContent = message;
+  box.hidden = false;
+}
+
+function clearFormError(boxId) {
+  $(boxId).hidden = true;
+}
+
+async function refreshStatus() {
+  pageLoading.hidden = false;
+  pageError.hidden = true;
+  try {
+    const status = await twoFactorStatus();
+    pageLoading.hidden = true;
+    if (status.enabled) {
+      renderOnState(status.backup_codes_remaining);
+    } else {
+      showState("state-off");
+    }
+  } catch (err) {
+    pageLoading.hidden = true;
+    showPageError(err.message);
+  }
+}
+
+function renderOnState(remaining) {
+  const text = $("backup-remaining-text");
+  text.textContent = remaining === 1
+    ? "You have 1 backup code remaining."
+    : `You have ${remaining} backup codes remaining.`;
+  showState("state-on");
+}
+
+// ---------- Off -> password confirm ----------
+
+$("start-enroll-btn").addEventListener("click", () => {
+  $("off-password-form").hidden = false;
+  $("start-enroll-btn").hidden = true;
+  $("off-password").focus();
+});
+
+$("off-cancel-btn").addEventListener("click", () => {
+  $("off-password-form").hidden = true;
+  $("start-enroll-btn").hidden = false;
+  $("off-password").value = "";
+  clearFormError("off-password-error");
+});
+
+$("off-password-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clearFormError("off-password-error");
+  const password = $("off-password").value;
+  const btn = e.submitter;
+  btn.disabled = true;
+  try {
+    const data = await twoFactorSetup(password);
+    pendingSecret = data.secret;
+    $("qr-image").src = data.qr_code;
+    $("secret-text").textContent = data.secret.match(/.{1,4}/g).join(" ");
+    $("off-password").value = "";
+    $("off-password-form").hidden = true;
+    $("start-enroll-btn").hidden = false;
+    $("scan-code").value = "";
+    clearFormError("scan-error");
+    showState("state-scan");
+    $("scan-code").focus();
+  } catch (err) {
+    formError("off-password-error", err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- Scan -> verify ----------
+
+$("copy-secret-btn").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(pendingSecret || "");
+  } catch (e) { /* clipboard unavailable -- silently ignore */ }
+});
+
+$("scan-cancel-btn").addEventListener("click", () => {
+  // The unconfirmed secret does no harm left on the server; calling
+  // /setup again later just replaces it.
+  pendingSecret = null;
+  showState("state-off");
+});
+
+$("scan-verify-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clearFormError("scan-error");
+  const code = $("scan-code").value.trim();
+  const btn = $("scan-verify-btn");
+  btn.disabled = true;
+  try {
+    const data = await twoFactorVerify(code);
+    renderBackupCodes(data.backup_codes);
+    showState("state-backup");
+  } catch (err) {
+    formError("scan-error", err.message);
+    $("scan-code").value = "";
+    $("scan-code").focus();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- Backup codes ----------
+
+let currentBackupCodes = [];
+
+function renderBackupCodes(codes) {
+  currentBackupCodes = codes;
+  const grid = $("backup-codes-grid");
+  grid.innerHTML = "";
+  codes.forEach((code) => {
+    const cell = document.createElement("div");
+    cell.textContent = code;
+    grid.appendChild(cell);
+  });
+  $("saved-checkbox").checked = false;
+  $("backup-done-btn").disabled = true;
+}
+
+$("copy-all-btn").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(currentBackupCodes.join("\n"));
+  } catch (e) { /* clipboard unavailable -- silently ignore */ }
+});
+
+$("download-codes-btn").addEventListener("click", () => {
+  const blob = new Blob(
+    [`ConfigGuard backup codes\n\n${currentBackupCodes.join("\n")}\n\nEach code works once.\n`],
+    { type: "text/plain" }
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "configguard-backup-codes.txt";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+});
+
+$("saved-checkbox").addEventListener("change", (e) => {
+  $("backup-done-btn").disabled = !e.target.checked;
+});
+
+$("backup-done-btn").addEventListener("click", () => {
+  refreshStatus();
+});
+
+// ---------- On: regenerate ----------
+
+$("regen-btn").addEventListener("click", () => {
+  $("regen-form").hidden = false;
+  $("regen-code").value = "";
+  clearFormError("regen-error");
+  $("regen-code").focus();
+});
+
+$("regen-cancel-btn").addEventListener("click", () => {
+  $("regen-form").hidden = true;
+});
+
+$("regen-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clearFormError("regen-error");
+  const code = $("regen-code").value.trim();
+  const btn = e.submitter;
+  btn.disabled = true;
+  try {
+    const data = await regenerateBackupCodes(code);
+    $("regen-form").hidden = true;
+    renderBackupCodes(data.backup_codes);
+    showState("state-backup");
+  } catch (err) {
+    formError("regen-error", err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- On: turn off ----------
+
+$("turnoff-btn").addEventListener("click", () => {
+  $("turnoff-form").hidden = false;
+  $("turnoff-password").value = "";
+  $("turnoff-code").value = "";
+  clearFormError("turnoff-error");
+  $("turnoff-password").focus();
+});
+
+$("turnoff-cancel-btn").addEventListener("click", () => {
+  $("turnoff-form").hidden = true;
+});
+
+$("turnoff-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clearFormError("turnoff-error");
+  const password = $("turnoff-password").value;
+  const code = $("turnoff-code").value.trim();
+  const btn = e.submitter;
+  btn.disabled = true;
+  try {
+    await twoFactorDisable(password, code);
+    $("turnoff-form").hidden = true;
+    showState("state-off");
+  } catch (err) {
+    formError("turnoff-error", err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+refreshStatus();
+</script>
+</body></html>
