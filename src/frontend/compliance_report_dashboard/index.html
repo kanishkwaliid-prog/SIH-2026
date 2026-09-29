@@ -154,18 +154,18 @@
 <span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
 <span class="hidden md:inline">Rulesets</span>
 </a>
-<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<a href="../account/security/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
 <span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
 <span class="hidden md:inline">Settings</span>
 </a>
 </nav>
 <div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
 <div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
-<span class="relative flex h-2 w-2 shrink-0">
-<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
-<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+<span class="relative flex h-2 w-2 shrink-0" data-cg-engine-dot>
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-on-surface-variant opacity-75" hidden></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-on-surface-variant"></span>
 </span>
-<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant" data-cg-engine>Engine <b class="text-on-surface font-medium" data-cg-engine-label>checking…</b></span>
 </div>
 <div class="flex items-center gap-sm px-sm">
 <a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
@@ -198,6 +198,7 @@
 <label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="STIG" class="framework-checkbox"> STIG</label>
 <label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="RBI" class="framework-checkbox"> RBI</label>
 <label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="SEBI" class="framework-checkbox"> SEBI</label>
+<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="ISO27001" class="framework-checkbox"> ISO 27001</label>
 <button id="applyFrameworksBtn" class="bg-primary text-on-primary text-xs px-3 py-1 rounded-full">Apply</button>
 </div>
 <a href="../upload_configuration/index.html" class="flex items-center gap-xs bg-ink hover:bg-ink/90 text-on-ink font-label-caps text-label-caps px-md py-sm rounded-full transition-colors">
@@ -205,8 +206,8 @@
 New Scan
 </a>
 <div class="flex items-center gap-sm bg-surface-container rounded-full p-1 border border-outline-variant">
-<button class="px-md py-sm rounded-full bg-primary text-on-primary font-label-caps text-label-caps shadow-sm transition-colors" id="viewToggleSimple" onclick="toggleView('simple')">Simple View</button>
-<button class="px-md py-sm rounded-full text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors" id="viewToggleTech" onclick="toggleView('technical')">Technical View</button>
+<button class="px-md py-sm rounded-full bg-primary text-on-primary font-label-caps text-label-caps shadow-sm transition-colors" id="viewToggleSimple" aria-pressed="true" onclick="toggleView('simple')">Simple View</button>
+<button class="px-md py-sm rounded-full text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors" id="viewToggleTech" aria-pressed="false" onclick="toggleView('technical')">Technical View</button>
 </div>
 </div>
 </div>
@@ -277,6 +278,8 @@ New Scan
 </div>
 </div>
 </div>
+<!-- Notices: evaluator warnings, upload problems, picker hints -->
+<div id="noticeArea" class="space-y-sm mb-md" aria-live="polite"></div>
 <!-- Findings List -->
 <div class="mb-xl">
 <h2 class="font-title-md text-title-md text-on-surface mb-md">Findings (Failed)</h2>
@@ -320,47 +323,48 @@ New Scan
 </div>
 </div>
 <script>
+        // Which view the person picked. Kept in a variable (not read back
+        // from the DOM) so it survives findings being re-rendered.
+        let currentView = 'simple';
+
         function toggleView(view) {
+            currentView = view === 'technical' ? 'technical' : 'simple';
             const btnSimple = document.getElementById('viewToggleSimple');
             const btnTech = document.getElementById('viewToggleTech');
             const simpleViews = document.querySelectorAll('.view-simple');
             const techViews = document.querySelectorAll('.view-technical');
-            
-            if(view === 'simple') {
-                btnSimple.className = "px-md py-sm rounded-full bg-primary text-on-primary font-label-caps text-label-caps shadow-sm transition-colors";
-                btnTech.className = "px-md py-sm rounded-full text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors";
+            const on = "px-md py-sm rounded-full bg-primary text-on-primary font-label-caps text-label-caps shadow-sm transition-colors";
+            const off = "px-md py-sm rounded-full text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors";
 
+            if (currentView === 'simple') {
+                btnSimple.className = on;
+                btnTech.className = off;
                 simpleViews.forEach(el => el.classList.remove('hidden'));
                 techViews.forEach(el => el.classList.add('hidden'));
             } else {
-                btnTech.className = "px-md py-sm rounded-full bg-primary text-on-primary font-label-caps text-label-caps shadow-sm transition-colors";
-                btnSimple.className = "px-md py-sm rounded-full text-on-surface-variant hover:bg-surface-variant font-label-caps text-label-caps transition-colors";
-                
+                btnTech.className = on;
+                btnSimple.className = off;
                 techViews.forEach(el => el.classList.remove('hidden'));
                 simpleViews.forEach(el => el.classList.add('hidden'));
             }
+            btnSimple.setAttribute('aria-pressed', String(currentView === 'simple'));
+            btnTech.setAttribute('aria-pressed', String(currentView === 'technical'));
         }
 
-        function toggleCard(headerElement) {
-            const body = headerElement.nextElementSibling;
-            const icon = headerElement.querySelector('.material-symbols-outlined:last-child');
-            if (icon.textContent === 'expand_more') {
-                icon.textContent = 'expand_less';
-                icon.classList.add('rotate-180');
-            } else {
-                icon.textContent = 'expand_more';
-                icon.classList.remove('rotate-180');
-            }
+        // Collapses/expands one finding card: hides the card body and
+        // turns the chevron (down = open, flipped = closed).
+        function toggleCard(header) {
+            const body = header.nextElementSibling;
+            if (!body) return;
+            const collapsing = !body.hidden;
+            body.hidden = collapsing;
+            header.setAttribute('aria-expanded', String(!collapsing));
+            const chevron = header.querySelector('[data-chevron]');
+            if (chevron) chevron.classList.toggle('rotate-180', collapsing);
         }
     </script>
 <script src="../shared.js"></script>
 <script>
-    const VENDOR_LABELS = {
-      cisco_ios: "Cisco IOS",
-      juniper_junos: "Juniper Junos",
-      palo_alto: "Palo Alto PAN-OS",
-    };
-
     const SEVERITY_STYLE = {
       critical: { badge: "bg-error/20 text-error border-error/30", icon: "gpp_bad", border: "border-error/30 hover:border-error/50" },
       high:     { badge: "bg-high/20 text-high border-high/30", icon: "gpp_bad", border: "border-high/30 hover:border-high/50" },
@@ -368,16 +372,111 @@ New Scan
       low:      { badge: "bg-secondary/20 text-secondary border-secondary/30", icon: "info", border: "border-secondary/30" },
     };
 
+    const DOWNLOADS = [
+      { id: "downloadBtn",     label: "PDF",      run: (sid) => downloadReportPdf(sid) },
+      { id: "downloadJsonBtn", label: "JSON",     run: (sid) => downloadReportFormat(sid, "json") },
+      { id: "downloadCsvBtn",  label: "CSV",      run: (sid) => downloadReportFormat(sid, "csv") },
+      { id: "downloadMdBtn",   label: "Markdown", run: (sid) => downloadReportFormat(sid, "md") },
+    ];
+
     let currentSessionId = null;
+    let evaluating = false;   // true while an /evaluate call is in flight
+    let reportReady = false;  // true only when the findings on screen came from a finished evaluation
+
+    const applyBtn = document.getElementById("applyFrameworksBtn");
+    const deviceSelect = document.getElementById("deviceSelect");
+
+    // ---------- notices ----------
+    // kind: "warn" | "error". messages: string | string[]; empty clears it.
+    function setNotice(key, kind, messages) {
+      const area = document.getElementById("noticeArea");
+      let el = area.querySelector(`[data-notice="${key}"]`);
+      const list = (Array.isArray(messages) ? messages : [messages]).filter(Boolean);
+      if (list.length === 0) {
+        if (el) el.remove();
+        return;
+      }
+      if (!el) {
+        el = document.createElement("div");
+        el.dataset.notice = key;
+        area.appendChild(el);
+      }
+      el.setAttribute("role", kind === "error" ? "alert" : "status");
+      el.className = "flex items-start gap-sm rounded-lg border p-md " +
+        (kind === "error"
+          ? "bg-error-container/20 border-error/30 text-error"
+          : "bg-medium-container border-medium/30 text-on-medium-container");
+      el.replaceChildren();
+      const icon = document.createElement("span");
+      icon.className = "material-symbols-outlined text-[20px] shrink-0";
+      icon.textContent = kind === "error" ? "error" : "warning";
+      const body = document.createElement("div");
+      body.className = "font-body-sm text-body-sm space-y-xs min-w-0 break-words";
+      list.forEach((m) => {
+        const line = document.createElement("p");
+        line.textContent = m;   // textContent: server text is never parsed as HTML
+        body.appendChild(line);
+      });
+      el.append(icon, body);
+    }
+
+    // ---------- controls ----------
+    function selectedFrameworks() {
+      return Array.from(document.querySelectorAll(".framework-checkbox:checked")).map((el) => el.value);
+    }
+
+    function setDownloadsEnabled(enabled) {
+      DOWNLOADS.forEach((d) => { document.getElementById(d.id).disabled = !enabled; });
+    }
+
+    // Single place that decides what is clickable, so an in-flight
+    // evaluation can't be started a second time (double-click) and
+    // exports can't be pulled while the findings are being replaced.
+    function updateControls() {
+      const none = selectedFrameworks().length === 0;
+      applyBtn.disabled = evaluating || none;
+      applyBtn.textContent = evaluating ? "Running…" : "Apply";
+      applyBtn.title = none ? "Select at least one framework" : "";
+      document.querySelectorAll(".framework-checkbox").forEach((cb) => { cb.disabled = evaluating; });
+      deviceSelect.disabled = evaluating;
+      setDownloadsEnabled(reportReady && !evaluating);
+      setNotice("frameworks", "error", none && !evaluating ? "Select at least one framework, then press Apply." : null);
+    }
 
     function populateDeviceSelect(sessions) {
-      const select = document.getElementById("deviceSelect");
       if (sessions.length <= 1) return;
-      select.classList.remove("hidden");
-      select.innerHTML = sessions
-        .map((s) => `<option value="${s.session_id}">${s.filename}</option>`)
+      deviceSelect.classList.remove("hidden");
+      deviceSelect.innerHTML = sessions
+        .map((s) => `<option value="${escapeHtml(s.session_id)}">${escapeHtml(s.filename)}</option>`)
         .join("");
-      select.addEventListener("change", () => loadReport(select.value));
+      deviceSelect.addEventListener("change", () => loadReport(deviceSelect.value));
+    }
+
+    // ---------- rendering ----------
+    function renderVendor(el, vendorId) {
+      el.textContent = vendorLabel(vendorId);
+      if (isExperimentalVendor(vendorId)) {
+        const badge = document.createElement("span");
+        badge.className = "ml-sm px-2 py-0.5 rounded-full bg-medium-container text-on-medium-container border border-medium/30 font-label-caps text-label-caps align-middle";
+        badge.textContent = "EXPERIMENTAL";
+        badge.title = "Parsed on a best-effort basis; more checks may show as Not evaluated.";
+        el.appendChild(badge);
+      }
+    }
+
+    function showListMessage(className, text) {
+      const p = document.createElement("p");
+      p.className = className;
+      p.textContent = text;
+      document.getElementById("findingsList").replaceChildren(p);
+    }
+
+    function resetSummary() {
+      ["passCount", "failCount", "notEvalCount", "scorePercent"].forEach((id) => {
+        document.getElementById(id).textContent = "—";
+      });
+      document.getElementById("scoreCoverage").textContent = "";
+      document.getElementById("scoreRing").setAttribute("stroke-dashoffset", "314.159");
     }
 
     function renderFindings(findings) {
@@ -385,41 +484,45 @@ New Scan
       const list = document.getElementById("findingsList");
 
       if (failed.length === 0) {
-        list.innerHTML = `<p class="font-body-md text-body-md text-tertiary">No failed checks — this device passed every evaluated rule.</p>`;
+        showListMessage("font-body-md text-body-md text-tertiary", "No failed checks — this device passed every evaluated rule.");
         return;
       }
 
+      // Every server-supplied value goes through escapeHtml: rule text and
+      // observed values can echo attacker-controlled lines from the config.
       list.innerHTML = failed
         .map((f) => {
-          const style = SEVERITY_STYLE[f.severity] || SEVERITY_STYLE.low;
+          const severity = String(f.severity || "low").toLowerCase();
+          const style = SEVERITY_STYLE[severity] || SEVERITY_STYLE.low;
+          const observed = f.actual === undefined ? "—" : JSON.stringify(f.actual);
           const remediation = f.remediation_cli
             ? `<div>
                 <span class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">REMEDIATION CLI</span>
-                <div class="code-block rounded-lg p-md overflow-x-auto"><pre class="font-code-md text-code-md text-secondary">${f.remediation_cli}</pre></div>
+                <div class="code-block rounded-lg p-md overflow-x-auto"><pre class="font-code-md text-code-md text-secondary">${escapeHtml(f.remediation_cli)}</pre></div>
               </div>`
             : "";
 
           return `
             <div class="bg-surface-container-low rounded-xl border ${style.border} overflow-hidden shadow-sm transition-all">
-              <div class="p-md bg-surface-container border-b border-outline-variant flex flex-wrap justify-between items-center gap-md cursor-pointer" onclick="toggleCard(this)">
+              <div data-card-header role="button" tabindex="0" aria-expanded="true" class="p-md bg-surface-container border-b border-outline-variant flex flex-wrap justify-between items-center gap-md cursor-pointer">
                 <div class="flex items-center gap-md">
                   <div class="${style.badge} px-sm py-xs rounded font-label-caps text-label-caps border flex items-center gap-xs">
                     <span class="material-symbols-outlined text-[16px]" data-weight="fill">${style.icon}</span>
-                    ${f.severity.toUpperCase()}
+                    ${escapeHtml(severity.toUpperCase())}
                   </div>
-                  <span class="font-code-md text-code-md text-on-surface bg-surface-variant px-sm py-xs rounded border border-outline-variant">${f.rule_id}</span>
-                  <span class="font-title-md text-title-md text-on-surface">${f.field_checked}</span>
+                  <span class="font-code-md text-code-md text-on-surface bg-surface-variant px-sm py-xs rounded border border-outline-variant">${escapeHtml(f.rule_id)}</span>
+                  <span class="font-title-md text-title-md text-on-surface">${escapeHtml(f.field_checked)}</span>
                 </div>
-                <span class="material-symbols-outlined text-on-surface-variant transition-transform transform">expand_more</span>
+                <span data-chevron aria-hidden="true" class="material-symbols-outlined text-on-surface-variant transition-transform transform">expand_more</span>
               </div>
               <div class="p-md space-y-md">
                 <div class="view-simple">
-                  <p class="font-body-md text-body-md text-on-surface-variant">${f.explanation}</p>
+                  <p class="font-body-md text-body-md text-on-surface-variant">${escapeHtml(f.explanation)}</p>
                 </div>
                 <div class="view-technical hidden space-y-md">
                   <div class="bg-surface-container-highest rounded border border-outline-variant p-sm">
                     <span class="block font-label-caps text-label-caps text-error mb-xs">OBSERVED VALUE</span>
-                    <pre class="font-code-md text-code-md text-on-surface overflow-x-auto text-error">${JSON.stringify(f.actual)}</pre>
+                    <pre class="font-code-md text-code-md text-on-surface overflow-x-auto text-error">${escapeHtml(observed)}</pre>
                   </div>
                   ${remediation}
                 </div>
@@ -429,29 +532,38 @@ New Scan
         .join("");
     }
 
+    // ---------- evaluation ----------
     async function loadReport(sessionId) {
-      currentSessionId = sessionId;
+      if (evaluating) return;                       // one evaluation at a time
       const session = getSessionById(sessionId);
-      if (!session) return;
+      if (!session || !session.device) return;
+
+      const frameworks = selectedFrameworks();
+      if (frameworks.length === 0) {                // never silently fall back to CIS
+        updateControls();
+        return;
+      }
+
+      currentSessionId = sessionId;
+      evaluating = true;
+      reportReady = false;
+      updateControls();
 
       document.getElementById("assetFilename").textContent = session.filename || "—";
-      document.getElementById("assetVendor").textContent = VENDOR_LABELS[session.device.vendor] || session.device.vendor || "Unknown";
+      renderVendor(document.getElementById("assetVendor"), session.device.vendor);
       document.getElementById("scanMeta").textContent = `Scan of ${session.filename}`;
-      document.getElementById("downloadBtn").disabled = true;
-      document.getElementById("findingsList").innerHTML = `<p class="font-body-sm text-body-sm text-on-surface-variant" id="loadingText">Running compliance evaluation…</p>`;
-
-      const selectedFrameworks = Array.from(document.querySelectorAll(".framework-checkbox:checked")).map((el) => el.value);
-      const frameworksToUse = selectedFrameworks.length ? selectedFrameworks : ["CIS"];
-      document.getElementById("assetFramework").textContent = frameworksToUse.join(", ");
+      document.getElementById("assetFramework").textContent = frameworks.join(", ");
+      setNotice("download", "error", null);
+      setNotice("warning", "warn", null);
+      showListMessage("font-body-sm text-body-sm text-on-surface-variant", "Running compliance evaluation…");
 
       try {
-        // Note: this always re-runs the evaluation against the currently
-        // selected frameworks -- a cached result would ignore a new
-        // framework selection, which defeats the point of the picker.
-        let evalResult = await evaluateSession(sessionId, frameworksToUse);
-        updateSession(sessionId, { findings: evalResult.findings, warning: evalResult.warning });
+        // Always re-runs against the currently ticked frameworks -- a
+        // cached result would ignore a new selection.
+        const evalResult = await evaluateSession(sessionId, frameworks);
+        const findings = evalResult.findings || [];
+        updateSession(sessionId, { findings: findings, warning: evalResult.warning });
 
-        const findings = evalResult.findings;
         const passCount = findings.filter((f) => f.status === "PASS").length;
         const failCount = findings.filter((f) => f.status === "FAIL").length;
         const notEvalCount = findings.filter((f) => f.status === "NOT_EVALUATED").length;
@@ -464,89 +576,73 @@ New Scan
         document.getElementById("scorePercent").textContent = `${score}%`;
 
         const totalRules = findings.length;
-        const coverageEl = document.getElementById("scoreCoverage");
-        coverageEl.textContent = notEvalCount > 0
+        document.getElementById("scoreCoverage").textContent = notEvalCount > 0
           ? `of ${scored} evaluated checks (${notEvalCount} of ${totalRules} not evaluated)`
           : `all ${totalRules} checks evaluated`;
 
         const circumference = 314.159;
-        document.getElementById("scoreRing").setAttribute(
-          "stroke-dashoffset",
-          String(circumference * (1 - score / 100))
-        );
+        document.getElementById("scoreRing").setAttribute("stroke-dashoffset", String(circumference * (1 - score / 100)));
 
         renderFindings(findings);
-        document.getElementById("downloadBtn").disabled = false;
-                document.getElementById("downloadJsonBtn").disabled = false;
-        document.getElementById("downloadCsvBtn").disabled = false;
-        document.getElementById("downloadMdBtn").disabled = false;
+        toggleView(currentView);                    // keep Simple/Technical exactly as the person left it
+        setNotice("warning", "warn", evalResult.warning ? String(evalResult.warning) : null);
+        reportReady = true;
       } catch (err) {
-        document.getElementById("findingsList").innerHTML =
-          `<p class="font-body-sm text-body-sm text-error">Couldn't run compliance evaluation. Make sure the backend is running and try again.</p>`;
+        resetSummary();
+        showListMessage("font-body-sm text-body-sm text-error", describeError(err, "Couldn't run the compliance evaluation."));
+      } finally {
+        evaluating = false;
+        updateControls();
       }
     }
 
-    document.getElementById("downloadBtn").addEventListener("click", async () => {
-      if (!currentSessionId) return;
-      const btn = document.getElementById("downloadBtn");
-      btn.disabled = true;
-      try {
-        await downloadReportPdf(currentSessionId);
-      } catch (err) {
-        alert(err.message || "Couldn't download the PDF. Check the backend is running and try again.");
-      } finally {
-        btn.disabled = false;
-      }
-    });
-    
-    document.getElementById("downloadJsonBtn").addEventListener("click", async () => {
-      if (!currentSessionId) return;
-      const btn = document.getElementById("downloadJsonBtn");
-      btn.disabled = true;
-      try {
-        await downloadReportFormat(currentSessionId, "json");
-      } catch (err) {
-        alert(err.message || "Couldn't download the JSON. Check the backend is running and try again.");
-      } finally {
-        btn.disabled = false;
-      }
+    // ---------- wiring ----------
+    DOWNLOADS.forEach((d) => {
+      const btn = document.getElementById(d.id);
+      btn.addEventListener("click", async () => {
+        if (!currentSessionId || !reportReady || evaluating) return;
+        btn.disabled = true;
+        setNotice("download", "error", null);
+        try {
+          await d.run(currentSessionId);
+        } catch (err) {
+          setNotice("download", "error", describeError(err, `Couldn't download the ${d.label} report.`));
+        } finally {
+          btn.disabled = !(reportReady && !evaluating);
+        }
+      });
     });
 
-    document.getElementById("downloadCsvBtn").addEventListener("click", async () => {
-      if (!currentSessionId) return;
-      const btn = document.getElementById("downloadCsvBtn");
-      btn.disabled = true;
-      try {
-        await downloadReportFormat(currentSessionId, "csv");
-      } catch (err) {
-        alert(err.message || "Couldn't download the CSV. Check the backend is running and try again.");
-      } finally {
-        btn.disabled = false;
-      }
-    });
-
-    document.getElementById("downloadMdBtn").addEventListener("click", async () => {
-      if (!currentSessionId) return;
-      const btn = document.getElementById("downloadMdBtn");
-      btn.disabled = true;
-      try {
-        await downloadReportFormat(currentSessionId, "md");
-      } catch (err) {
-        alert(err.message || "Couldn't download the Markdown. Check the backend is running and try again.");
-      } finally {
-        btn.disabled = false;
-      }
-    });
-
-    document.getElementById("applyFrameworksBtn").addEventListener("click", () => {
+    applyBtn.addEventListener("click", () => {
       if (currentSessionId) loadReport(currentSessionId);
     });
+    document.querySelectorAll(".framework-checkbox").forEach((cb) => cb.addEventListener("change", updateControls));
 
-    const sessions = getSessions();
+    // Finding-card collapse (delegated: cards are re-rendered on every Apply).
+    const findingsListEl = document.getElementById("findingsList");
+    findingsListEl.addEventListener("click", (e) => {
+      const header = e.target.closest("[data-card-header]");
+      if (header) toggleCard(header);
+    });
+    findingsListEl.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const header = e.target.closest("[data-card-header]");
+      if (!header) return;
+      e.preventDefault();
+      toggleCard(header);
+    });
+
+    const sessions = getSessions().filter((s) => s && s.session_id && s.device);
     if (sessions.length === 0) {
       window.location.href = "../upload_configuration/index.html";
     } else {
+      const uploadErrors = getUploadErrors();
+      if (uploadErrors.length) {
+        setNotice("uploadErrors", "warn",
+          ["These files weren't analysed:"].concat(uploadErrors.map((e) => `${e.filename}: ${e.error}`)));
+      }
       populateDeviceSelect(sessions);
+      updateControls();
       loadReport(sessions[0].session_id);
     }
 </script>
