@@ -42,4 +42,4 @@ dist/
 build/
 *.log
 Thumbs.db
-node_modules/
+node_modules/src/backend/block2b/llm_cache.json
