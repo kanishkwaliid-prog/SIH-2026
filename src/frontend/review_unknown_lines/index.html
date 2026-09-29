@@ -200,18 +200,18 @@
 <span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
 <span class="hidden md:inline">Rulesets</span>
 </a>
-<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<a href="../account/security/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
 <span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
 <span class="hidden md:inline">Settings</span>
 </a>
 </nav>
 <div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
 <div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
-<span class="relative flex h-2 w-2 shrink-0">
-<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
-<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+<span class="relative flex h-2 w-2 shrink-0" data-cg-engine-dot>
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-on-surface-variant opacity-75" hidden></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-on-surface-variant"></span>
 </span>
-<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant" data-cg-engine>Engine <b class="text-on-surface font-medium" data-cg-engine-label>checking…</b></span>
 </div>
 <div class="flex items-center gap-sm px-sm">
 <a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
@@ -256,6 +256,7 @@
                     Confirm All &amp; Continue
                 </button>
 </div>
+<p id="confirmError" role="alert" class="hidden px-lg py-md font-body-sm text-body-sm text-error bg-error-container/20 border-t border-error/30 break-words"></p>
 </div>
 
 <script src="../shared.js"></script>
@@ -282,7 +283,7 @@ if (!session) {
 }
 
 // Real data from this session's /upload response, not placeholders.
-let pendingConfirmations = session ? session.pending_confirmations.slice() : [];
+let pendingConfirmations = session && session.pending_confirmations ? session.pending_confirmations.slice() : [];
 
 function confidenceStyle(confidence) {
   // Real percentage, color-coded so a shaky guess LOOKS different from a
@@ -299,12 +300,12 @@ function renderPendingConfirmations() {
   pendingConfirmations.forEach((item, index) => {
     const pct = Math.round(item.confidence * 100);
     const optionsHtml = FIELD_OPTIONS.map(opt =>
-      `<option value="${opt.value}" ${opt.value === item.suggested_field ? "selected" : ""}>${opt.label}</option>`
+      `<option value="${escapeHtml(opt.value)}" ${opt.value === item.suggested_field ? "selected" : ""}>${escapeHtml(opt.label)}</option>`
     ).join("");
 
     const needsValue = item.suggested_field !== "unclear";
     const valueInput = needsValue
-      ? `<input type="text" data-value-index="${index}" value="${item.suggested_value ?? ""}" placeholder="value" class="mt-xs bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg block w-full p-2 font-code-md" />`
+      ? `<input type="text" data-value-index="${index}" value="${escapeHtml(item.suggested_value ?? "")}" placeholder="value" class="mt-xs bg-surface-container-lowest border border-outline-variant text-on-surface text-sm rounded-lg block w-full p-2 font-code-md" />`
       : "";
 
     const row = document.createElement("tr");
@@ -313,7 +314,7 @@ function renderPendingConfirmations() {
     row.innerHTML = `
       <td class="py-md px-lg">
         <div class="bg-surface-container-lowest p-sm rounded border border-outline-variant inline-block">
-          <code class="font-code-md text-code-md text-tertiary">${item.raw_line}</code>
+          <code class="font-code-md text-code-md text-tertiary whitespace-pre-wrap break-all">${escapeHtml(item.raw_line)}</code>
         </div>
       </td>
       <td class="py-md px-lg">
@@ -323,7 +324,7 @@ function renderPendingConfirmations() {
         ${valueInput}
       </td>
       <td class="py-md px-lg">
-        <span title="${item.reasoning || ''}" class="${confidenceStyle(item.confidence)} font-label-caps text-label-caps px-2 py-1 rounded-full border">${pct}% confident</span>
+        <span title="${escapeHtml(item.reasoning || '')}" class="${confidenceStyle(item.confidence)} font-label-caps text-label-caps px-2 py-1 rounded-full border">${pct}% confident</span>
       </td>
       <td class="py-md px-lg text-right">
         <span class="text-tertiary text-[13px]">Ready</span>
@@ -355,6 +356,8 @@ renderPendingConfirmations();
 
 document.getElementById("confirmAllBtn").addEventListener("click", async () => {
   const btn = document.getElementById("confirmAllBtn");
+  const errorEl = document.getElementById("confirmError");
+  errorEl.classList.add("hidden");
   btn.disabled = true;
   btn.textContent = "Saving...";
 
@@ -381,7 +384,9 @@ document.getElementById("confirmAllBtn").addEventListener("click", async () => {
   } catch (err) {
     btn.disabled = false;
     btn.textContent = "Confirm All & Continue";
-    alert("Couldn't save confirmations. Check the backend is running and try again.");
+    // Show the server's own reason (e.g. a 403 role error), not a generic guess.
+    errorEl.textContent = describeError(err, "Couldn't save the confirmations.");
+    errorEl.classList.remove("hidden");
   }
 });
 </script>

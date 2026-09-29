@@ -164,18 +164,18 @@
 <span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
 <span class="hidden md:inline">Rulesets</span>
 </a>
-<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<a href="../account/security/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
 <span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
 <span class="hidden md:inline">Settings</span>
 </a>
 </nav>
 <div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
 <div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
-<span class="relative flex h-2 w-2 shrink-0">
-<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
-<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+<span class="relative flex h-2 w-2 shrink-0" data-cg-engine-dot>
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-on-surface-variant opacity-75" hidden></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-on-surface-variant"></span>
 </span>
-<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant" data-cg-engine>Engine <b class="text-on-surface font-medium" data-cg-engine-label>checking…</b></span>
 </div>
 <div class="flex items-center gap-sm px-sm">
 <a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
@@ -247,7 +247,7 @@
 </div>
 </div>
 <div id="errorBox" class="hidden w-full mt-lg bg-error-container/20 border border-error/30 rounded-lg p-md text-center">
-<p class="font-body-sm text-body-sm text-error mb-sm" id="errorText"></p>
+<p class="font-body-sm text-body-sm text-error mb-sm whitespace-pre-line break-words" id="errorText"></p>
 <a href="../upload_configuration/index.html" class="font-body-sm text-body-sm text-primary hover:underline">← Back to upload</a>
 </div>
 </div>
@@ -295,6 +295,7 @@
       }
 
       const { files, vendorHint } = JSON.parse(raw);
+      setUploadErrors([]);
 
       try {
         markStepActive("step1Dot");
@@ -303,15 +304,25 @@
         // the user switches vendors and we need to re-run /upload with a
         // corrected hint (order is preserved by the API, matching by index).
         results.forEach((r, i) => {
-          if (files[i]) r.raw_text = files[i].text;
+          if (r && files[i]) r.raw_text = files[i].text;
         });
+
+        // Files the server refused come back as { filename, error }. Keep
+        // them out of the sessions (nothing downstream can use them) and
+        // tell the person why, per file.
+        const { ok, failed } = splitUploadResults(results);
+        if (ok.length === 0) {
+          showFatalError(failed.map((f) => `${f.filename}: ${f.error}`).join("\n"));
+          return;
+        }
+        setUploadErrors(failed);
         markStepDone("step1Dot");
 
         // Block 2b's LLM fallback already ran as part of the same
         // /upload call (see api.py) -- this step is shown briefly for
         // clarity even though it already happened synchronously above.
         markStepActive("step2Dot");
-        setSessions(results);
+        setSessions(ok);
         sessionStorage.removeItem("pendingUpload");
         markStepDone("step2Dot");
 
@@ -320,9 +331,9 @@
         // to the router now rather than waiting here.
         routeToNextStep();
       } catch (err) {
-        showFatalError(
-          "Couldn't reach the analysis server. Make sure the backend is running (uvicorn api:app --port 8000) and try again."
-        );
+        // The real reason (413 too many files, 403 role, 500 ...) -- only a
+        // genuine network failure gets the "can't reach the server" text.
+        showFatalError(describeError(err, "The upload failed for an unknown reason."));
       }
     }
 
