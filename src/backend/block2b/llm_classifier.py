@@ -7,7 +7,7 @@ from groq import Groq
 
 from .memory import check_memory, save_confirmed, init_db
 from .prefilter import classify_locally
-from .redaction import redact_sensitive 
+from .redaction import redact_sensitive, residual_risk 
 
 load_dotenv()
 
@@ -183,6 +183,10 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
 
 def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict:
     redacted_line = redact_sensitive(raw_line)
+    risk = residual_risk(redacted_line)
+    if risk:
+        # safety gate: do NOT send; the line goes to human review instead
+        raise LLMUnavailable("Blocked by safety gate (" + ", ".join(risk) + ") - sent to human review")
     user_msg = f"Config line: {redacted_line}"
     if vendor_hint:
         user_msg += f"\nVendor hint: {vendor_hint}"
@@ -245,6 +249,10 @@ def confirm_classification(raw_line: str, field: str, value, vendor_hint: str = 
 def _guess_vendor_inner(config_text: str) -> dict:
     snippet = "\n".join(config_text.splitlines()[:40])
     snippet = redact_sensitive(snippet)
+    # safety gate: drop any line that still looks risky instead of sending it
+    snippet = "\n".join(l for l in snippet.splitlines() if not residual_risk(l))
+    if not snippet.strip():
+        raise LLMUnavailable("Nothing safe to send for vendor guess - choose the vendor manually")
 
     response = get_client().chat.completions.create(
         model=MODEL,
