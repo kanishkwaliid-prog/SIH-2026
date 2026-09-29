@@ -15,6 +15,51 @@ const FRONTEND_ROOT = new URL(".", document.currentScript.src).href;
   document.head.appendChild(style);
 })();
 
+// ---------- Escaping ----------
+// Everything that came from the server or from an uploaded file (filenames,
+// config lines, finding text, ...) must go through this before it is put
+// into an innerHTML template -- in text position AND inside attribute
+// values, hence both quote characters are escaped too.
+function escapeHtml(value) {
+  return String(value === null || value === undefined ? "" : value).replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
+// ---------- Vendors ----------
+// One table for every page. `support: "full"` = parser verified against
+// real exports (Cisco, Juniper, Palo Alto -- see README); everything else
+// is parsed on a best-effort basis and marked experimental in the UI.
+const VENDORS = [
+  { id: "cisco_ios",         label: "Cisco IOS / NX-OS",  support: "full" },
+  { id: "juniper_junos",     label: "Juniper Junos",      support: "full" },
+  { id: "palo_alto",         label: "Palo Alto PAN-OS",   support: "full" },
+  { id: "fortinet_fortios",  label: "Fortinet FortiOS",   support: "experimental" },
+  { id: "arista_eos",        label: "Arista EOS",         support: "experimental" },
+  { id: "huawei_vrp",        label: "Huawei VRP",         support: "experimental" },
+  { id: "mikrotik_routeros", label: "MikroTik RouterOS",  support: "experimental" },
+  { id: "checkpoint_gaia",   label: "Check Point Gaia",   support: "experimental" },
+  { id: "netgate_pfsense",   label: "Netgate pfSense",    support: "experimental" },
+  { id: "sonic",             label: "SONiC",              support: "experimental" },
+];
+
+function vendorInfo(id) {
+  return VENDORS.find((v) => v.id === id) || null;
+}
+
+// Readable name for a backend vendor id; falls back to the raw id (or
+// "Unknown") for a vendor this table doesn't know yet.
+function vendorLabel(id) {
+  const v = vendorInfo(id);
+  return v ? v.label : id || "Unknown";
+}
+
+function isExperimentalVendor(id) {
+  const v = vendorInfo(id);
+  return !!v && v.support !== "full";
+}
+
 // ---------- Auth: token storage ----------
 // Phase 0 decision 8: token in localStorage under "cg_token". The user
 // object is cached next to it so the sidebar can render without waiting
@@ -65,6 +110,8 @@ function saveAuth(token, user) {
   // (Phase 2), and they shouldn't show up in the new user's screens.
   if (sessionStorage.getItem("sessions_owner") !== user.user_id) {
     sessionStorage.removeItem("sessions");
+    sessionStorage.removeItem("uploadErrors");
+    sessionStorage.removeItem(READ_KEY);
     sessionStorage.setItem("sessions_owner", user.user_id);
   }
 }
@@ -79,6 +126,10 @@ function isPublicPage() {
   return here.startsWith(FRONTEND_ROOT + "auth/") || here.startsWith(FRONTEND_ROOT + "legal/");
 }
 
+function isLegalPage() {
+  return window.location.href.startsWith(FRONTEND_ROOT + "legal/");
+}
+
 // Sends the user to the login page, remembering where they were so they
 // land back there afterwards. reason: "expired" shows a notice.
 function redirectToLogin(reason) {
@@ -91,6 +142,8 @@ function redirectToLogin(reason) {
 function logout() {
   clearAuth();
   sessionStorage.removeItem("sessions");
+  sessionStorage.removeItem("uploadErrors");
+  sessionStorage.removeItem(READ_KEY);
   window.location.replace(LOGIN_PAGE);
 }
 
@@ -124,6 +177,25 @@ async function readError(response, fallback) {
     /* not JSON */
   }
   return fallback;
+}
+
+// Fallback text for a failed response whose body had no usable `detail`
+// (proxies and crashed servers often answer with plain text or HTML).
+function statusFallback(what, status) {
+  if (status === 413) return "That upload is too large for the server to accept.";
+  if (status === 403) return "You don't have permission to do that.";
+  if (status >= 500) return `${what}: the server hit an internal error (HTTP ${status}). Try again, and check the backend logs if it keeps happening.`;
+  return `${what} (HTTP ${status}).`;
+}
+
+// Turns anything a page's catch block receives into a sentence for the
+// user. fetch() rejects with a TypeError only when the server can't be
+// reached at all; every other error already carries the server's message.
+function describeError(err, fallback) {
+  if (err instanceof TypeError) {
+    return "Couldn't reach the analysis server. Make sure the backend is running (uvicorn api:app --port 8000) and try again.";
+  }
+  return (err && err.message) || fallback || "Something went wrong.";
 }
 
 // Every call to a protected endpoint goes through here.
@@ -326,12 +398,48 @@ async function refreshCurrentUser() {
 //   .findings, .warning (added after /evaluate)
 
 function getSessions() {
-  const raw = sessionStorage.getItem("sessions");
-  return raw ? JSON.parse(raw) : [];
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem("sessions"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 function setSessions(sessions) {
   sessionStorage.setItem("sessions", JSON.stringify(sessions));
+  refreshNotifications();
+}
+
+// /upload answers with one entry per file. A file the server refused
+// (too large, not UTF-8) comes back as { filename, error } with no
+// session_id/device, so it must never be stored as a session -- every page
+// after the upload assumes sessions have a device.
+function splitUploadResults(results) {
+  const ok = [];
+  const failed = [];
+  (results || []).forEach((r) => {
+    if (r && r.session_id && r.device && !r.error) ok.push(r);
+    else failed.push({
+      filename: (r && r.filename) || "Unnamed file",
+      error: (r && r.error) || "The server couldn't process this file.",
+    });
+  });
+  return { ok, failed };
+}
+
+function getUploadErrors() {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem("uploadErrors"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function setUploadErrors(list) {
+  sessionStorage.setItem("uploadErrors", JSON.stringify(list || []));
+  refreshNotifications();
 }
 
 function getSessionById(sessionId) {
@@ -369,7 +477,7 @@ async function uploadConfigs(fileTextEntries, vendorHint) {
     body: formData,
   });
   if (!response.ok) {
-    throw new Error(`Upload failed: ${response.status}`);
+    throw new Error(await readError(response, statusFallback("Upload failed", response.status)));
   }
   const data = await response.json();
   return data.results;
@@ -387,7 +495,7 @@ async function confirmLines(sessionId, confirmations) {
     }),
   });
   if (!response.ok) {
-    throw new Error(`Confirm failed: ${response.status}`);
+    throw new Error(await readError(response, statusFallback("Couldn't save the confirmations", response.status)));
   }
   return response.json();
 }
@@ -398,7 +506,7 @@ async function evaluateSession(sessionId, frameworks) {
   if (list) url.searchParams.set("frameworks", list);
   const response = await authFetch(url, { method: "POST" });
   if (!response.ok) {
-    throw new Error(`Evaluate failed: ${response.status}`);
+    throw new Error(await readError(response, statusFallback("Evaluation failed", response.status)));
   }
   return response.json();
 }
@@ -576,7 +684,7 @@ function renderUserChip(user) {
     slot.id = "cg-user-chip";
   }
 
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const esc = escapeHtml;
   slot.innerHTML = `
     <button type="button" id="cg-user-btn" aria-haspopup="true" aria-expanded="false"
       aria-label="Account: ${esc(user.name)}"
@@ -622,7 +730,9 @@ function renderAdminNav(user) {
   if (!userCan(user, "manage_users")) return;
   const nav = document.querySelector("aside nav");
   if (!nav || nav.querySelector("[data-cg-admin-link]")) return;
-  const active = window.location.href.startsWith(FRONTEND_ROOT + "admin/");
+  // Only the Team page itself: /admin/activity/ is also under /admin/ and
+  // used to light up both entries.
+  const active = window.location.href.startsWith(FRONTEND_ROOT + "admin/users/");
   const link = document.createElement("a");
   link.setAttribute("data-cg-admin-link", "");
   link.href = FRONTEND_ROOT + "admin/users/index.html";
@@ -649,6 +759,241 @@ function renderAuditNav(user) {
     (active ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-variant hover:text-on-surface");
   link.innerHTML = '<span class="material-symbols-outlined text-[18px]">history</span><span class="hidden md:inline">Activity log</span>';
   nav.appendChild(link);
+}
+
+// ---------- Engine status ----------
+// The sidebar badge used to say "online" unconditionally. It now reflects
+// GET /health: checked on load, every 30 s, and when the tab regains focus.
+
+let engineState = "checking"; // "checking" | "online" | "offline"
+
+function setEngineState(state) {
+  engineState = state;
+  const color = state === "online" ? "bg-tertiary" : state === "offline" ? "bg-error" : "bg-on-surface-variant";
+  document.querySelectorAll("[data-cg-engine-dot]").forEach((dot) => {
+    const ping = dot.children[0];
+    const core = dot.children[1];
+    [ping, core].forEach((el) => {
+      if (!el) return;
+      el.classList.remove("bg-tertiary", "bg-error", "bg-on-surface-variant");
+      el.classList.add(color);
+    });
+    if (ping) ping.hidden = state !== "online"; // pulse only while healthy
+  });
+  document.querySelectorAll("[data-cg-engine-label]").forEach((el) => {
+    el.textContent = state === "online" ? "online" : state === "offline" ? "offline" : "checking…";
+    el.classList.toggle("text-error", state === "offline");
+    el.classList.toggle("text-on-surface", state !== "offline");
+  });
+  refreshNotifications();
+}
+
+async function checkEngine() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    const response = await fetch(`${API_BASE}/health`, { signal: controller.signal, cache: "no-store" });
+    const data = response.ok ? await response.json().catch(() => null) : null;
+    setEngineState(data && data.status === "ok" ? "online" : "offline");
+  } catch (e) {
+    setEngineState("offline");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function initEngineStatus() {
+  setEngineState("checking");
+  checkEngine();
+  setInterval(checkEngine, 30000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) checkEngine();
+  });
+}
+
+// ---------- Notifications bell ----------
+// Collects what the app already knows and used to drop on the floor:
+// engine offline, files the server rejected at upload, and the warnings the
+// evaluator attached to a scan.
+
+const READ_KEY = "cg_notifications_read";
+
+function readNotificationIds() {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(READ_KEY)) || []);
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function collectNotifications() {
+  const items = [];
+  if (engineState === "offline") {
+    items.push({
+      id: "engine-offline", kind: "error", persistent: true,
+      title: "Analysis engine unreachable",
+      body: `Couldn't reach ${API_BASE}. Start the backend (uvicorn api:app --port 8000).`,
+    });
+  }
+  getUploadErrors().forEach((e) => {
+    items.push({
+      id: `upload:${e.filename}:${e.error}`, kind: "error",
+      title: `Not analysed: ${e.filename}`, body: e.error,
+    });
+  });
+  getSessions().forEach((s) => {
+    if (s && s.warning) {
+      items.push({
+        id: `warning:${s.session_id}:${s.warning}`, kind: "warning",
+        title: `Warning for ${s.filename || "a scan"}`, body: String(s.warning),
+      });
+    }
+  });
+  return items;
+}
+
+function unreadNotifications() {
+  const read = readNotificationIds();
+  return collectNotifications().filter((n) => n.persistent || !read.has(n.id));
+}
+
+function refreshNotifications() {
+  const bell = document.querySelector("[data-cg-bell]");
+  if (!bell) return;
+  const unread = unreadNotifications().length;
+  let dot = bell.querySelector("[data-cg-bell-dot]");
+  if (unread > 0 && !dot) {
+    dot = document.createElement("span");
+    dot.setAttribute("data-cg-bell-dot", "");
+    dot.className = "absolute -top-0.5 -right-0.5 w-2 h-2 bg-error rounded-full border border-surface";
+    bell.appendChild(dot);
+  } else if (unread === 0 && dot) {
+    dot.remove();
+  }
+  bell.title = unread ? `${unread} unread notification${unread > 1 ? "s" : ""}` : "Notifications";
+  const panel = document.getElementById("cg-notif-panel");
+  if (panel && !panel.hidden) renderNotificationPanel(panel);
+}
+
+function renderNotificationPanel(panel) {
+  const items = collectNotifications();
+  const read = readNotificationIds();
+  const icons = { error: "error", warning: "warning" };
+  const colors = { error: "text-error", warning: "text-medium" };
+  const list = items.length
+    ? items.map((n) => {
+        const isRead = !n.persistent && read.has(n.id);
+        return `<li class="flex gap-sm py-sm ${isRead ? "opacity-60" : ""}">
+          <span class="material-symbols-outlined text-[18px] mt-0.5 ${colors[n.kind] || "text-on-surface-variant"}">${icons[n.kind] || "info"}</span>
+          <div class="min-w-0">
+            <p class="font-body-sm text-body-sm text-on-surface font-medium break-words">${escapeHtml(n.title)}</p>
+            <p class="font-body-sm text-body-sm text-on-surface-variant break-words">${escapeHtml(n.body)}</p>
+          </div>
+        </li>`;
+      }).join("")
+    : `<li class="py-md font-body-sm text-body-sm text-on-surface-variant">You're all caught up. Warnings and upload problems will show up here.</li>`;
+  const canMark = items.some((n) => !n.persistent && !read.has(n.id));
+  panel.innerHTML = `
+    <div class="flex items-center justify-between mb-xs">
+      <h2 class="font-label-caps text-label-caps text-on-surface-variant">NOTIFICATIONS</h2>
+      ${canMark ? '<button type="button" data-cg-mark-read class="font-body-sm text-body-sm text-primary hover:underline">Mark all as read</button>' : ""}
+    </div>
+    <ul class="divide-y divide-outline-variant">${list}</ul>`;
+  const markBtn = panel.querySelector("[data-cg-mark-read]");
+  if (markBtn) {
+    markBtn.addEventListener("click", () => {
+      const ids = new Set(readNotificationIds());
+      collectNotifications().forEach((n) => { if (!n.persistent) ids.add(n.id); });
+      sessionStorage.setItem(READ_KEY, JSON.stringify([...ids]));
+      refreshNotifications();
+    });
+  }
+}
+
+function initNotifications() {
+  const bell = document.querySelector('button[aria-label="Notifications"]');
+  if (!bell || bell.hasAttribute("data-cg-bell")) return;
+  bell.setAttribute("data-cg-bell", "");
+  bell.classList.add("relative");
+  bell.setAttribute("aria-haspopup", "dialog");
+  bell.setAttribute("aria-expanded", "false");
+  // Older markup had a permanent decorative red dot; the real one is
+  // added by refreshNotifications() only when there is something unread.
+  bell.querySelectorAll("span.bg-error").forEach((s) => s.remove());
+
+  // Fixed-position and attached to <body>: the sidebar clips overflow.
+  const panel = document.createElement("div");
+  panel.id = "cg-notif-panel";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-label", "Notifications");
+  panel.hidden = true;
+  panel.className = "fixed z-50 max-h-96 overflow-y-auto bg-surface-container-high border border-outline-variant rounded-xl p-md shadow-lg";
+  document.body.appendChild(panel);
+
+  const setOpen = (open) => {
+    if (open) {
+      renderNotificationPanel(panel);
+      const r = bell.getBoundingClientRect();
+      const width = Math.min(320, window.innerWidth - 16);
+      panel.style.width = width + "px";
+      panel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) + "px";
+      panel.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + "px";
+    }
+    panel.hidden = !open;
+    bell.setAttribute("aria-expanded", String(open));
+  };
+  bell.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(panel.hidden);
+  });
+  document.addEventListener("click", (e) => {
+    if (!panel.hidden && !panel.contains(e.target) && !bell.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !panel.hidden) { setOpen(false); bell.focus(); }
+  });
+  window.addEventListener("resize", () => setOpen(false));
+  refreshNotifications();
+}
+
+// ---------- Legal pages for signed-out visitors ----------
+// Privacy / Terms / Help are public, but their markup carries the full app
+// sidebar (Scans, Rulesets, ...), which is pointless -- and misleading --
+// without a session. Swap it for a legal-only menu plus a Sign in link.
+
+function applySignedOutLegalChrome() {
+  const aside = document.querySelector("aside");
+  if (!aside) return;
+  const here = window.location.href;
+  const item = (href, icon, label) => {
+    const active = here.startsWith(href.replace(/index\.html$/, ""));
+    return `<a href="${href}" class="flex items-center gap-3 px-3 py-2.5 rounded-full font-body-sm text-body-sm font-medium transition-colors ${
+      active ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-variant hover:text-on-surface"
+    }"><span class="material-symbols-outlined text-[18px]">${icon}</span><span class="hidden md:inline">${label}</span></a>`;
+  };
+  const nav = aside.querySelector("nav");
+  if (nav) {
+    nav.innerHTML =
+      item(FRONTEND_ROOT + "legal/privacy/index.html", "policy", "Privacy Policy") +
+      item(FRONTEND_ROOT + "legal/terms/index.html", "gavel", "Terms of Service") +
+      item(FRONTEND_ROOT + "legal/help/index.html", "help", "Help Center") +
+      item(LOGIN_PAGE, "login", "Sign in");
+  }
+  const label = aside.querySelector("span.font-label-caps");
+  if (label) label.textContent = "LEGAL";
+  const footerBlock = aside.querySelector(".mt-auto");
+  if (footerBlock) footerBlock.remove();
+  const brand = aside.querySelector("a[href]");
+  if (brand) brand.setAttribute("href", LOGIN_PAGE);
+}
+
+function initChrome() {
+  if (isPublicPage()) {
+    if (isLegalPage() && !getToken()) applySignedOutLegalChrome();
+    return;
+  }
+  initEngineStatus();
+  initNotifications();
 }
 
 // ---------- Page guard ----------
@@ -681,7 +1026,9 @@ function initAuth() {
 if (initAuth()) {
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initPageTransitions);
+    document.addEventListener("DOMContentLoaded", initChrome);
   } else {
     initPageTransitions();
+    initChrome();
   }
 }

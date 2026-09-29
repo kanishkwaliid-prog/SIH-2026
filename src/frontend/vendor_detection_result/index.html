@@ -139,18 +139,18 @@
 <span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
 <span class="hidden md:inline">Rulesets</span>
 </a>
-<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<a href="../account/security/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
 <span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
 <span class="hidden md:inline">Settings</span>
 </a>
 </nav>
 <div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
 <div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
-<span class="relative flex h-2 w-2 shrink-0">
-<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
-<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+<span class="relative flex h-2 w-2 shrink-0" data-cg-engine-dot>
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-on-surface-variant opacity-75" hidden></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-on-surface-variant"></span>
 </span>
-<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant" data-cg-engine>Engine <b class="text-on-surface font-medium" data-cg-engine-label>checking…</b></span>
 </div>
 <div class="flex items-center gap-sm px-sm">
 <a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
@@ -213,16 +213,20 @@
                     Proceed anyway
                 </button>
 <select id="switchVendorSelect" class="w-full sm:w-auto bg-surface-container-highest border border-outline-variant rounded-full py-3 px-md font-body-sm text-body-sm text-on-surface">
+<optgroup label="Fully supported">
 <option value="cisco_ios">Cisco IOS / NX-OS</option>
 <option value="juniper_junos">Juniper Junos</option>
 <option value="palo_alto">Palo Alto PAN-OS</option>
-<option value="fortinet_fortios">Fortinet FortiOS</option>
-<option value="arista_eos">Arista EOS</option>
-<option value="huawei_vrp">Huawei VRP</option>
-<option value="mikrotik_routeros">MikroTik RouterOS</option>
-<option value="checkpoint_gaia">Check Point Gaia</option>
-<option value="netgate_pfsense">Netgate pfSense</option>
-<option value="sonic">SONiC</option>
+</optgroup>
+<optgroup label="Experimental (best-effort parsing)">
+<option value="fortinet_fortios">Fortinet FortiOS (experimental)</option>
+<option value="arista_eos">Arista EOS (experimental)</option>
+<option value="huawei_vrp">Huawei VRP (experimental)</option>
+<option value="mikrotik_routeros">MikroTik RouterOS (experimental)</option>
+<option value="checkpoint_gaia">Check Point Gaia (experimental)</option>
+<option value="netgate_pfsense">Netgate pfSense (experimental)</option>
+<option value="sonic">SONiC (experimental)</option>
+</optgroup>
 </select>
 <button id="switchBtn" class="w-full sm:w-auto bg-primary text-on-primary hover:bg-primary-fixed-dim transition-colors font-label-caps text-label-caps px-lg py-3 rounded-full shadow-sm flex items-center justify-center gap-2">
                     Switch vendor
@@ -254,21 +258,9 @@
       window.location.href = "../upload_configuration/index.html";
     }
 
-    const VENDOR_LABELS = {
-      cisco_ios: "Cisco IOS",
-      juniper_junos: "Juniper Junos",
-      palo_alto: "Palo Alto PAN-OS",
-      fortinet_fortios: "Fortinet FortiOS",
-      arista_eos: "Arista EOS",
-      huawei_vrp: "Huawei VRP",
-      mikrotik_routeros: "MikroTik RouterOS",
-      checkpoint_gaia: "Check Point Gaia",
-      netgate_pfsense: "Netgate pfSense",
-      sonic: "SONiC",
-    };
-
+    // Labels and support tiers live in shared.js (VENDORS).
     function renderVendorLabel(vendor) {
-      return VENDOR_LABELS[vendor] || vendor || "Unknown";
+      return vendorLabel(vendor) + (isExperimentalVendor(vendor) ? " (experimental)" : "");
     }
 
     function renderConfidence(confidence) {
@@ -329,7 +321,9 @@
           [{ filename: session.filename, text: session.raw_text }],
           newVendor
         );
-        const newSession = results[0];
+        const { ok, failed } = splitUploadResults(results);
+        if (ok.length === 0) throw new Error(failed[0].filename + ": " + failed[0].error);
+        const newSession = ok[0];
         newSession.raw_text = session.raw_text;
 
         // Replace the old session with the freshly re-analyzed one.
@@ -339,7 +333,7 @@
 
         routeToNextStep();
       } catch (err) {
-        errorEl.textContent = "Couldn't reach the analysis server. Please try again.";
+        errorEl.textContent = describeError(err, "Couldn't re-analyze this file.");
         errorEl.classList.remove("hidden");
         switchBtn.disabled = false;
         switchBtn.innerHTML = 'Switch vendor <span class="material-symbols-outlined text-sm">arrow_forward</span>';

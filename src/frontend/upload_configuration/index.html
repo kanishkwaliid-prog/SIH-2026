@@ -145,18 +145,18 @@
 <span class="material-symbols-outlined text-[18px]" data-icon="rule">rule</span>
 <span class="hidden md:inline">Rulesets</span>
 </a>
-<a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+<a href="../account/security/index.html" class="flex items-center gap-3 px-3 py-2.5 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
 <span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
 <span class="hidden md:inline">Settings</span>
 </a>
 </nav>
 <div class="hidden md:flex mt-auto relative z-10 flex-col gap-md">
 <div class="flex items-center gap-sm p-sm rounded-2xl bg-surface-variant/60 border border-outline-variant">
-<span class="relative flex h-2 w-2 shrink-0">
-<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
-<span class="relative inline-flex rounded-full h-2 w-2 bg-tertiary"></span>
+<span class="relative flex h-2 w-2 shrink-0" data-cg-engine-dot>
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-on-surface-variant opacity-75" hidden></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-on-surface-variant"></span>
 </span>
-<span class="font-body-sm text-body-sm text-on-surface-variant">Engine <b class="text-on-surface font-medium">online</b></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant" data-cg-engine>Engine <b class="text-on-surface font-medium" data-cg-engine-label>checking…</b></span>
 </div>
 <div class="flex items-center gap-sm px-sm">
 <a href="../legal/help/index.html" aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors">
@@ -218,22 +218,30 @@
 <div class="relative group">
 <select class="w-full appearance-none bg-surface-container-highest border border-outline-variant rounded-full py-sm px-md pr-xl font-body-md text-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors cursor-pointer" id="vendor-select">
 <option value="auto">Auto-detect</option>
+<optgroup label="Fully supported">
 <option value="cisco">Cisco IOS / NX-OS</option>
 <option value="juniper">Juniper Junos</option>
 <option value="palo-alto">Palo Alto PAN-OS</option>
-<option value="fortinet">Fortinet FortiOS</option>
-<option value="arista">Arista EOS</option>
-<option value="huawei">Huawei VRP</option>
-<option value="mikrotik">MikroTik RouterOS</option>
-<option value="checkpoint">Check Point Gaia</option>
-<option value="netgate">Netgate pfSense</option>
-<option value="sonic">SONiC</option>
+</optgroup>
+<optgroup label="Experimental (best-effort parsing)">
+<option value="fortinet">Fortinet FortiOS (experimental)</option>
+<option value="arista">Arista EOS (experimental)</option>
+<option value="huawei">Huawei VRP (experimental)</option>
+<option value="mikrotik">MikroTik RouterOS (experimental)</option>
+<option value="checkpoint">Check Point Gaia (experimental)</option>
+<option value="netgate">Netgate pfSense (experimental)</option>
+<option value="sonic">SONiC (experimental)</option>
+</optgroup>
 </select>
 <span class="material-symbols-outlined absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none group-focus-within:text-primary transition-colors" data-icon="expand_more">expand_more</span>
 </div>
 <p class="font-body-sm text-body-sm text-outline flex items-center gap-xs mt-1">
 <span class="material-symbols-outlined text-[16px]" data-icon="info">info</span>
                             Not sure? Leave blank — we'll detect it automatically.
+                        </p>
+<p id="vendorSupportNote" class="hidden font-body-sm text-body-sm text-medium flex items-start gap-xs mt-1">
+<span class="material-symbols-outlined text-[16px]" data-icon="science">science</span>
+                            Experimental vendor: parsed on a best-effort basis, so more checks may show as “Not evaluated”.
                         </p>
 </div>
 <!-- CTA Button -->
@@ -423,8 +431,9 @@
 <script>
     // Maps the friendly dropdown values to the exact vendor names Block 2a
     // knows about (see converter/parsers/__init__.py's dispatch table).
-    // "auto" and "fortinet" both send no hint -- fortinet has no parser
-    // yet, so sending it as a hint would just cause a guaranteed mismatch.
+    // "auto" sends no hint; every other entry maps to a parser in the
+    // backend's PARSER_DISPATCH. Cisco, Juniper and Palo Alto are fully
+    // supported; the rest are experimental (see VENDORS in shared.js).
     const VENDOR_MAP = {
       auto: null,
       cisco: "cisco_ios",
@@ -444,6 +453,10 @@
     const analyzeBtn = document.getElementById("analyzeBtn");
     const errorMsg = document.getElementById("errorMsg");
     const vendorSelect = document.getElementById("vendor-select");
+    vendorSelect.addEventListener("change", () => {
+      const hint = VENDOR_MAP[vendorSelect.value];
+      document.getElementById("vendorSupportNote").classList.toggle("hidden", !hint || !isExperimentalVendor(hint));
+    });
 
     let selectedFiles = [];
 
