@@ -211,3 +211,93 @@ def redact_sensitive(text: str) -> str:
     t = _FQDN.sub('<DOMAIN>', t)
 
     return t
+
+
+# ===========================================================================
+# ---- extra rules (fix4): more secrets, names, key blocks + safety gate ----
+# ===========================================================================
+_redact_base = redact_sensitive
+
+_PEM = re.compile(r'-----BEGIN [A-Z0-9 ]+-----.*?-----END [A-Z0-9 ]+-----', _S)
+_PEM_OPEN = re.compile(r'-----BEGIN [A-Z0-9 ]+-----(?!<KEY_BLOCK_REDACTED>).*\Z', _S)
+_HEX_BLOB = re.compile(r'^[ \t]*(?:[0-9a-fA-F]{8}[ \t]*){3,}$', _M)
+
+_X_SECRETS = [
+    # OSPF / RIP / HSRP style keys: "message-digest-key 1 md5 <secret>"
+    re.compile(r'(\bmessage-digest-key\s+\d+\s+(?:md5|sha\w*)\s+(?:[0-9]\s+)?)(?!<)(?![0-9]\s+<[A-Z_]+>)(\S+)', _I),
+    re.compile(r'(\bwpa-psk\s+(?:ascii|hex)\s+(?:[0-9]\s+)?)(?!<)(?![0-9]\s+<[A-Z_]+>)(\S+)', _I),
+    re.compile(r'(\bwpa-passphrase\s+(?:[0-9]\s+)?)(?!<)(?![0-9]\s+<[A-Z_]+>)(\S+)', _I),
+    re.compile(r'((?<![\w-])psk\s+(?:(?:ascii|hex)\s+)?(?:[0-9]\s+)?)(?!<)(?![0-9]\s+<[A-Z_]+>)(?!(?:ascii|hex)\b)(\S+)', _I),
+    # license / API tokens
+    re.compile(r'(?<![\w-])((?:api[-\s])?token\s+)(?!<)(?!(?:bucket|ring)\b)(\S+)', _I),
+    # SNMP v1 / plain community on "snmp-server host": host [traps|informs] [version x] <community>
+    re.compile(r'(\bsnmp-server\s+host\s+\S+\s+(?:(?:traps|informs)\s+)?'
+               r'(?:version\s+(?:1|2c|3\s+(?:auth|noauth|priv))\s+|v1\s+|v2c\s+)?)'
+               r'(?!<)(?!(?:version|traps|informs|vrf|udp-port|v1|v2c|v3)\b)(\S+)', _I),
+]
+
+_X_NAMES = [
+    (re.compile(r'(\bvrf\s+(?:definition\s+|forwarding\s+|context\s+)?)(?!<)'
+                r'(?!(?:definition|forwarding|context|upstream)\b)(\S+)', _I), '<VRF_NAME>'),
+    (re.compile(r'(\broute-map\s+)(?!<)(\S+)', _I), '<NAME>'),
+    (re.compile(r'(\bsnmp-server\s+view\s+)(?!<)(\S+)', _I), '<NAME>'),
+    (re.compile(r'(\btrustpoint\s+)(?!<)(\S+)', _I), '<NAME>'),
+    (re.compile(r'(\bneighbor\s+)(?!<)(?!(?:discovery|detection|advertisement)\b)(\S+)', _I), '<NEIGHBOR>'),
+    (re.compile(r'(\bip\s+host\s+)(?!<)(\S+)', _I), '<HOSTNAME>'),
+    (re.compile(r'(\bgroup\s+server\s+(?:radius|tacacs\+?|ldap)\s+)(?!<)(\S+)', _I), '<NAME>'),
+    (re.compile(r'(\b(?:tacacs|radius)\s+server\s+)(?!<)(\S+)', _I), '<NAME>'),
+]
+# "name <text>" at the start of a line (VLAN / interface / object names): whole line
+_X_NAME_LINE = re.compile(r'^([ \t]*(?:set[ \t]+)?name[ \t]+)(?!<)(.+)$', _I | _M)
+# "... name <token>" mid-line (e.g. wtp-profile name X)
+_X_NAME_INLINE = re.compile(r'(?<![\w-])(name\s+)(?!<)(\S+)', _I)
+
+_X_FQDN = re.compile(r'\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b', _I)
+_FILE_EXT = {'cfg', 'txt', 'conf', 'bin', 'pkg', 'tar', 'log', 'json', 'xml', 'csv', 'img',
+             'lic', 'dat', 'db', 'py', 'sh', 'yaml', 'yml', 'gz', 'zip', 'pdf', 'tcl', 'cer', 'crt', 'pem'}
+
+
+def _fqdn_cb(m):
+    tail = m.group(0).rsplit('.', 1)[-1].lower()
+    return m.group(0) if tail in _FILE_EXT else '<DOMAIN>'
+
+
+def redact_sensitive(text: str) -> str:
+    """Base redaction + extra rules. Idempotent."""
+    if not text:
+        return text
+    t = _PEM.sub('<KEY_BLOCK_REDACTED>', text)
+    t = _PEM_OPEN.sub('<KEY_BLOCK_REDACTED>', t)
+    t = _HEX_BLOB.sub('<CERT_DATA_REDACTED>', t)
+    t = _redact_base(t)
+    for rx in _X_SECRETS:
+        t = rx.sub(lambda m: f"{m.group(1)}<REDACTED>", t)
+    for rx, ph in _X_NAMES:
+        t = rx.sub(lambda m, ph=ph: f"{m.group(1)}{ph}", t)
+    t = _X_NAME_LINE.sub(lambda m: f"{m.group(1)}<TEXT_REDACTED>", t)
+    t = _X_NAME_INLINE.sub(lambda m: f"{m.group(1)}<NAME>", t)
+    t = _X_FQDN.sub(_fqdn_cb, t)
+    return t
+
+
+# ---- safety gate: last check on text that is ABOUT to be sent ----
+_RISK_PATTERNS = [
+    ('key/cert block', re.compile(r'BEGIN [A-Z0-9 ]*(?:KEY|CERTIFICATE)', _I)),
+    ('long hex string', re.compile(r'\b[0-9a-fA-F]{32,}\b')),
+    ('long token', re.compile(r'[A-Za-z0-9+/=_-]{40,}')),
+    ('IPv4 address', _IPV4),
+    ('MAC address', _MAC_COLON),
+    ('MAC address', _MAC_DOTTED),
+    ('e-mail', _EMAIL),
+    ('URL', _URL),
+    ('secret-like value', re.compile(
+        r'(?<![\w-])(?:password|secret|passwd|passphrase|psk|token|community|key-string|key)\s+'
+        r'(?:[0-9]\s+)*(?!<)(?=\S*\d)(?=\S*[A-Za-z])\S{6,}', _I)),
+]
+
+
+def residual_risk(text: str) -> list:
+    """Reasons this (already redacted) text still looks unsafe to send. Empty = ok."""
+    if not text:
+        return []
+    return sorted({name for name, rx in _RISK_PATTERNS if rx.search(text)})
