@@ -136,7 +136,7 @@
 <body class="bg-page text-on-surface font-body-md antialiased min-h-screen flex flex-col p-2 md:p-6">
 <div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
 <!-- Sidebar -->
-<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row flex-wrap md:flex-nowrap md:flex-col items-center md:items-stretch gap-x-md gap-y-sm md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
 <div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
 <a href="../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
 <div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
@@ -190,16 +190,16 @@
 <h1 class="font-headline-lg text-headline-lg md:text-display-lg md:font-display-lg text-on-surface mb-sm">Compliance Report</h1>
 <p class="font-body-md text-body-md text-on-surface-variant" id="scanMeta">Loading…</p>
 </div>
-<div class="flex items-center gap-md">
+<div class="flex flex-wrap items-center gap-md">
 <select id="deviceSelect" class="hidden bg-surface-container border border-outline-variant rounded-full py-sm px-md font-body-sm text-body-sm text-on-surface"></select>
-<div id="frameworkPicker" class="flex items-center gap-sm bg-surface-container rounded-full pl-md pr-2 py-1.5 border border-outline-variant">
-<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="CIS" checked class="framework-checkbox"> CIS</label>
-<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="NIST" class="framework-checkbox"> NIST</label>
-<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="STIG" class="framework-checkbox"> STIG</label>
-<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="RBI" class="framework-checkbox"> RBI</label>
-<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="SEBI" class="framework-checkbox"> SEBI</label>
-<label class="flex items-center gap-1 text-xs text-on-surface-variant"><input type="checkbox" value="ISO27001" class="framework-checkbox"> ISO 27001</label>
-<button id="applyFrameworksBtn" class="bg-primary text-on-primary text-xs px-3 py-1 rounded-full">Apply</button>
+<div id="frameworkPicker" class="flex flex-wrap items-center gap-x-md gap-y-xs bg-surface-container rounded-2xl md:rounded-full pl-md pr-2 py-1.5 border border-outline-variant">
+<label class="flex items-center gap-1.5 text-sm text-on-surface-variant py-1 cursor-pointer"><input type="checkbox" value="CIS" checked class="framework-checkbox w-4 h-4"> CIS</label>
+<label class="flex items-center gap-1.5 text-sm text-on-surface-variant py-1 cursor-pointer"><input type="checkbox" value="NIST" class="framework-checkbox w-4 h-4"> NIST</label>
+<label class="flex items-center gap-1.5 text-sm text-on-surface-variant py-1 cursor-pointer"><input type="checkbox" value="STIG" class="framework-checkbox w-4 h-4"> STIG</label>
+<label class="flex items-center gap-1.5 text-sm text-on-surface-variant py-1 cursor-pointer"><input type="checkbox" value="RBI" class="framework-checkbox w-4 h-4"> RBI</label>
+<label class="flex items-center gap-1.5 text-sm text-on-surface-variant py-1 cursor-pointer"><input type="checkbox" value="SEBI" class="framework-checkbox w-4 h-4"> SEBI</label>
+<label class="flex items-center gap-1.5 text-sm text-on-surface-variant py-1 cursor-pointer"><input type="checkbox" value="ISO27001" class="framework-checkbox w-4 h-4"> ISO 27001</label>
+<button id="applyFrameworksBtn" class="bg-primary text-on-primary text-sm font-medium min-w-[88px] min-h-[36px] px-4 py-1.5 rounded-full disabled:opacity-40 disabled:cursor-not-allowed">Apply</button>
 </div>
 <a href="../upload_configuration/index.html" class="flex items-center gap-xs bg-ink hover:bg-ink/90 text-on-ink font-label-caps text-label-caps px-md py-sm rounded-full transition-colors">
 <span class="material-symbols-outlined text-[18px]">add</span>
