@@ -1,14 +1,22 @@
 """
 Block 2a - Netgate pfSense parser.
 
-pfSense exports config as XML, not lines. Field mapping is still to be
-filled in from a real config.xml.
+pfSense exports its full configuration as ONE xml file (config.xml), not
+line-based commands, so this parser works completely differently from the
+others: it walks an XML tree instead of matching text patterns.
 """
 
 import xml.etree.ElementTree as ET
 
 
-def parse_pfsense(config_text: str) -> tuple[dict, list[str]]:
+def _find_text(root, path: str) -> str | None:
+    el = root.find(path)
+    if el is not None and el.text:
+        return el.text.strip()
+    return None
+
+
+def parse_netgate_pfsense(config_text: str) -> tuple[dict, list[str]]:
     """Returns (fields, unrecognized_lines)."""
     fields = {
         "ssh_enabled": None,
@@ -19,31 +27,59 @@ def parse_pfsense(config_text: str) -> tuple[dict, list[str]]:
         "banner_configured": None,
         "snmp_default_community": None,
     }
+    unrecognized_lines: list[str] = []
 
-    # Sanity check that the XML is well formed. No field mapping yet.
-    root = ET.fromstring(config_text)
-    system = root.find("system")
-    if system is not None:
-        # Presence of <enablesshd> means SSH is on. Newer versions may use
-        # <ssh><enable>, so check both. Absence is left as None, not False,
-        # because we haven't confirmed that absence means disabled.
-        if system.find("enablesshd") is not None or system.findtext("ssh/enable"):
-            fields["ssh_enabled"] = True
-                # pfSense stores the GUI session timeout in minutes at
-        # system/webgui/session_timeout. Convert to seconds.
-        # Absence is left as None: the GUI default (240 min) applies,
-        # but we haven't confirmed that, so we don't assume it.
-        timeout_text = system.findtext("webgui/session_timeout")
-        if timeout_text and timeout_text.strip().isdigit():
-            fields["session_timeout_seconds"] = int(timeout_text.strip()) * 60
-        # <snmpd> is a top-level section. The <rocommunity> child tag is
-    # unverified against a real pfSense export, so recheck it later.
-    # True means the community is a well-known default. Absence stays None.
-    snmpd = root.find("snmpd")
-    if snmpd is not None:
-        community = (snmpd.findtext("rocommunity") or "").strip().lower()
-        if community:
-            fields["snmp_default_community"] = community in ("public", "private")
+    try:
+        root = ET.fromstring(config_text)
+    except ET.ParseError as e:
+        # Malformed XML -- hand the whole thing to Block 2b rather than guess.
+        return fields, [f"Could not parse XML: {e}"]
 
-    return fields, []
-    
+    # pfSense has no telnet management daemon at all -- this is a fact
+    # about the product, not a guess about this specific file's content.
+    fields["telnet_enabled"] = False
+
+    ssh_enabled = _find_text(root, "./system/enablesshd")
+    if ssh_enabled is not None:
+        fields["ssh_enabled"] = True
+    elif root.find("./system") is not None:
+        fields["ssh_enabled"] = False
+
+    timeout_text = _find_text(root, "./system/webgui/session_timeout")
+    if timeout_text and timeout_text.isdigit():
+        fields["session_timeout_seconds"] = int(timeout_text) * 60
+
+    remote_server = _find_text(root, "./syslog/remoteserver")
+    if remote_server:
+        fields["logging_enabled"] = True
+    elif root.find("./syslog") is not None:
+        fields["logging_enabled"] = False
+
+    # pfSense stores the admin password as a bcrypt hash ("$2b$..."), a
+    # strong, modern algorithm.
+    password_hash = _find_text(root, "./system/user/password")
+    if password_hash and password_hash.startswith("$2"):
+        fields["password_encryption"] = "bcrypt"
+
+    KNOWN_WEAK_COMMUNITIES = {"public", "private", "cisco", "community"}
+    ro_community = _find_text(root, "./snmpd/rocommunity")
+    if ro_community:
+        fields["snmp_default_community"] = (
+            [ro_community] if ro_community.lower() in KNOWN_WEAK_COMMUNITIES else []
+        )
+
+    # banner_configured has no clean pfSense equivalent (no CLI login
+    # banner concept) -- left as None (Not Evaluated) rather than guessed.
+
+    # Anything under top-level sections we don't specifically handle gets
+    # flagged for the AI review step, one entry per unrecognised top-level
+    # section, rather than every single leaf tag.
+    KNOWN_TOP_SECTIONS = {
+        "system", "syslog", "snmpd", "interfaces", "filter", "nat",
+        "dhcpd", "shaper", "ca", "cert", "revision", "gateways",
+    }
+    for child in root:
+        if child.tag not in KNOWN_TOP_SECTIONS:
+            unrecognized_lines.append(f"<{child.tag}> section")
+
+    return fields, unrecognized_lines

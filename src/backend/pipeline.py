@@ -21,9 +21,12 @@ from block2b.llm_classifier import classify_unknown_line, guess_vendor
 from block2b import review_system
 
 
-def process_config(config_text: str, user_declared_vendor: str = None) -> dict:
+def process_config(config_text: str, user_declared_vendor: str = None, org_id: str = None) -> dict:
     """
     Runs the full Block 2 pipeline on a raw config file.
+
+    org_id: whose learned-line memory to apply (api.py passes the signed-in
+    user's org). None skips memory, for standalone runs of this file.
 
     Returns:
     {
@@ -71,7 +74,7 @@ def process_config(config_text: str, user_declared_vendor: str = None) -> dict:
     pending_confirmations = []
     config = dict(result["config"])
     for raw_line in result["unrecognized_lines"]:
-        classification = classify_unknown_line(raw_line, vendor_hint=device_info.get("vendor"))
+        classification = classify_unknown_line(raw_line, vendor_hint=device_info.get("vendor"), org_id=org_id)
         field = classification.get("field", "unclear")
 
         if classification.get("source") == "memory" and field != "unclear":
@@ -100,6 +103,8 @@ def apply_confirmation(
     value,
     vendor_hint: str = None,
     confirmed_by: str = None,
+    *,
+    org_id: str,
 ) -> tuple[dict, dict]:
     """
     Call this once a reviewer votes on one pending confirmation from the
@@ -108,9 +113,10 @@ def apply_confirmation(
     once enough independent reviewers agree does the line get promoted
     into memory.py's cache and merged into config.
 
-    confirmed_by must be a known reviewer id (seeded via
-    review_system.seed_user() -- see api.py startup) so their role can be
-    looked up server-side. Raises ValueError if confirmed_by is unknown.
+    confirmed_by must be the signed-in user's id, taken from their access
+    token by api.py -- never from the request body -- so their role is
+    looked up server-side. Raises ValueError if confirmed_by is unknown and
+    PermissionError if their role can't vote (viewer).
 
     Returns (config, result) where result is:
       {"status": "rejected", "reason": "duplicate_vote"}      -- this reviewer already voted on this line
@@ -125,7 +131,7 @@ def apply_confirmation(
         raise ValueError("confirmed_by is required -- every vote must be attributed to a known reviewer")
 
     result = review_system.submit_review(
-        raw_line, field, value, submitted_by=confirmed_by, vendor_hint=vendor_hint
+        raw_line, field, value, submitted_by=confirmed_by, vendor_hint=vendor_hint, org_id=org_id
     )
 
     if result["status"] == "promoted" and result["field"] != "unclear":

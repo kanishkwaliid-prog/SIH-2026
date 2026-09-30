@@ -53,7 +53,7 @@ def _value_matches(actual, expected):
 
 correct = 0
 for line, expected_field, expected_value in test_cases:
-    result = classify_unknown_line(line)
+    result = classify_unknown_line(line, org_id="test-org")
     field_match = result.get("field") == expected_field
     value_match = _value_matches(result.get("value"), expected_value)
     match = field_match and value_match
@@ -85,7 +85,7 @@ def test_retry_on_failure():
 
     # classify_unknown_line already wraps call_with_retry internally now,
     # so we call it directly -- wrapping it again here would retry-on-retries.
-    result = llm_classifier.classify_unknown_line("exec-timeout 7 3")
+    result = llm_classifier.classify_unknown_line("exec-timeout 7 3", org_id="test-org")
     print("Result with broken key:", result)
 
     assert result.get("field") == "unclear", "Should fail gracefully, not crash"
@@ -133,7 +133,7 @@ def test_edge_cases():
     ]
 
     for line in edge_cases:
-        result = classify_unknown_line(line)
+        result = classify_unknown_line(line, org_id="test-org")
         print(f"Input: {line[:30]!r:35} → {result.get('field')}={result.get('value')} (conf: {result.get('confidence')})")
 
 
