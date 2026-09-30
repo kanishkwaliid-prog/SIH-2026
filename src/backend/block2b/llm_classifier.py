@@ -133,7 +133,7 @@ Line: "transport input ssh telnet" -> {"field": "telnet_enabled", "value": true,
 Line: "ssh server v2" -> {"field": "unclear", "value": null, "confidence": 0.85, "reasoning": "SSH version parameter, not an enable/disable"}
 Line: "exec-timeout 10 0" -> {"field": "session_timeout_seconds", "value": 600, "confidence": 0.95, "reasoning": "10 minutes = 600 seconds"}
 Line: "logging host 198.51.100.200" -> {"field": "logging_enabled", "value": true, "confidence": 0.9, "reasoning": "Configures a syslog destination"}
-Line: "logging level bgp 4" -> {"field": "unclear", "value": null, "confidence": 0.85, "reasoning": "Per-facility severity tuning, not on/off"}
+Line: "logging level bgp 4" -> {"field": "logging_enabled", "value": true, "confidence": 0.85, "reasoning": "Per-facility severity tuning, not on/off"}
 Line: "no logging on" -> {"field": "logging_enabled", "value": false, "confidence": 0.95, "reasoning": "Disables all logging"}
 Line: "username admin privilege 15 secret 5 $1$abc$xyz" -> {"field": "password_encryption", "value": "type5", "confidence": 0.95, "reasoning": "Type 5 (MD5) hash"}
 Line: "neighbor X password 7 XOF6i6" -> {"field": "password_encryption", "value": "type7", "confidence": 0.9, "reasoning": "Type 7 reversible encryption"}
