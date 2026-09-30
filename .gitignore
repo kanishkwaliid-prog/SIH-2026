@@ -31,3 +31,5 @@ memory.db
 !submission/*.pdf
 
 Scratch-configs/
+
+*.bak
