@@ -16,6 +16,8 @@ from typing import Any
 
 import yaml
 
+from .audit_log import log_scan_event
+
 RULES_DIR = Path(__file__).resolve().parent / "rules"
 RULE_PACK_PATH = RULES_DIR / "cis_rules.yaml"
 RULE_PACK_FILES = (
@@ -24,6 +26,7 @@ RULE_PACK_FILES = (
     "stig_rules.yaml",
     "rbi_rules.yaml",
     "sebi_rules.yaml",
+    "iso27001_rules.yaml",
 )
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
@@ -38,7 +41,7 @@ JSON_FINDING_KEYS = (
 
 
 def load_rule_pack(path: Path | str | None = None) -> tuple[list[dict[str, Any]], str]:
-    """Load one YAML rule pack by path (CIS, NIST, STIG, RBI, or SEBI).
+    """Load one YAML rule pack by path (CIS, NIST, STIG, RBI, SEBI, or ISO27001).
 
     Each returned rule dict is tagged with a ``framework`` key from the file.
     """
@@ -55,7 +58,7 @@ def load_rule_pack(path: Path | str | None = None) -> tuple[list[dict[str, Any]]
 
 
 def load_all_rule_packs(rules_dir: Path | str | None = None) -> list[dict[str, Any]]:
-    """Load CIS, NIST, STIG, RBI, and SEBI packs into one list; each rule is tagged with framework."""
+    """Load CIS, NIST, STIG, RBI, SEBI, and ISO27001 packs into one list; each rule is tagged with framework."""
     base = Path(rules_dir) if rules_dir else RULES_DIR
     combined: list[dict[str, Any]] = []
     for filename in RULE_PACK_FILES:
@@ -70,6 +73,7 @@ FRAMEWORK_FILE_MAP = {
     "STIG": "stig_rules.yaml",
     "RBI": "rbi_rules.yaml",
     "SEBI": "sebi_rules.yaml",
+    "ISO27001": "iso27001_rules.yaml",
 }
 
 
@@ -168,9 +172,47 @@ def _remediation_cli(rule: dict[str, Any], vendor: str | None, failed: bool) -> 
     return None
 
 
+def _frameworks_from_rules(rules: list[dict[str, Any]]) -> list[str]:
+    seen: list[str] = []
+    for rule in rules:
+        framework = rule.get("framework")
+        if framework and framework not in seen:
+            seen.append(str(framework))
+    return seen
+
+
+def _audit_parser_warnings(
+    converter_output_json: dict[str, Any],
+    engine_warning: str | None,
+    parser_warnings: Any,
+) -> list[str] | None:
+    """Warnings from our detector/evaluator only — never from a config-claimed field."""
+    collected: list[str] = []
+    if isinstance(parser_warnings, str) and parser_warnings.strip():
+        collected.append(parser_warnings.strip())
+    elif isinstance(parser_warnings, (list, tuple)):
+        collected.extend(str(item).strip() for item in parser_warnings if str(item).strip())
+
+    device = converter_output_json.get("device") if isinstance(converter_output_json, dict) else None
+    if isinstance(device, dict):
+        confidence = device.get("detection_confidence")
+        if confidence == "low":
+            collected.append("vendor detection low confidence")
+
+    if engine_warning:
+        collected.append(engine_warning)
+    return collected or None
+
+
 def evaluate_report(
     converter_output_json: dict[str, Any],
     rules: list[dict[str, Any]],
+    *,
+    raw_file_bytes: bytes | None = None,
+    frameworks_used: list[str] | str | None = None,
+    session_id: str | None = None,
+    parser_warnings: Any = None,
+    db_path: str | Path = "audit_log.db",
 ) -> dict[str, Any]:
     """Evaluate one converter document.
 
@@ -183,6 +225,7 @@ def evaluate_report(
     device = converter_output_json.get("device") or {}
     if not isinstance(device, dict):
         device = {}
+    # Detector output only — never converter_output_json["config"]["vendor"].
     vendor = device.get("vendor")
 
     config = converter_output_json.get("config")
@@ -222,7 +265,27 @@ def evaluate_report(
             }
         )
 
-    return {"device": device, "findings": findings, "warning": warning}
+    result = {"device": device, "findings": findings, "warning": warning}
+
+    if raw_file_bytes is None:
+        print("WARNING: audit log skipped: raw_file_bytes not provided", file=sys.stderr)
+        return result
+
+    used = frameworks_used if frameworks_used is not None else _frameworks_from_rules(rules)
+    try:
+        log_scan_event(
+            raw_file_bytes=raw_file_bytes,
+            converter_output_json=converter_output_json,
+            result=result,
+            frameworks_used=used,
+            session_id=session_id,
+            parser_warnings=_audit_parser_warnings(converter_output_json, warning, parser_warnings),
+            db_path=db_path,
+        )
+    except Exception as exc:
+        print(f"WARNING: audit log failed: {exc}", file=sys.stderr)
+
+    return result
 
 
 def json_report(result: dict[str, Any]) -> dict[str, Any]:
@@ -314,8 +377,16 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         results = []
         for path in paths:
-            doc = _load_json(path)
-            result = evaluate_report(doc, rules)
+            raw_file_bytes = path.read_bytes()
+            doc = json.loads(raw_file_bytes.decode("utf-8"))
+            if not isinstance(doc, dict):
+                raise ValueError(f"{path} must contain a JSON object")
+            result = evaluate_report(
+                doc,
+                rules,
+                raw_file_bytes=raw_file_bytes,
+                frameworks_used=_frameworks_from_rules(rules),
+            )
             result["_fixture"] = str(path.name)
             results.append(result)
         if args.as_json:
@@ -338,7 +409,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     path = Path(args.config_file)
-    result = evaluate_report(_load_json(path), rules)
+    raw_file_bytes = path.read_bytes()
+    doc = json.loads(raw_file_bytes.decode("utf-8"))
+    if not isinstance(doc, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    result = evaluate_report(
+        doc,
+        rules,
+        raw_file_bytes=raw_file_bytes,
+        frameworks_used=_frameworks_from_rules(rules),
+    )
     if args.as_json:
         print(json.dumps(json_report(result), indent=2))
     else:

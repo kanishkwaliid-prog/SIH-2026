@@ -5,8 +5,14 @@ Stores human-confirmed line -> field/value mappings in SQLite so the
 same config line (seen again on this device or another) doesn't need
 another LLM call. Two entry points matter to the rest of the app:
 
-    check_memory(raw_line)          -> dict result or None
-    save_confirmed(raw_line, ...)   -> writes a confirmed mapping
+    check_memory(raw_line, org_id)          -> dict result or None
+    save_confirmed(raw_line, ..., org_id)   -> writes a confirmed mapping
+
+Every mapping belongs to one organisation (Phase 2, tenant isolation).
+The lines are real config text -- addresses, hostnames, sometimes
+community strings -- so one org's learned lines are never visible to, or
+used for, another org. org_id is a required argument everywhere here so
+a forgotten org can't silently fall back to a global lookup.
 
 Everything else in this file is implementation detail.
 """
@@ -15,6 +21,8 @@ import sqlite3
 import re
 from contextlib import contextmanager
 from typing import Optional
+
+from auth.config import LEGACY_DATA_ORG
 
 DB_PATH = "memory.db"
 
@@ -40,21 +48,45 @@ def _get_conn():
         conn.close()
 
 
-def init_db():
-    """Call once at app startup. Safe to call repeatedly (CREATE IF NOT EXISTS)."""
-    with _get_conn() as conn:
-        conn.execute("""
+_CONFIRMED_LINES_SCHEMA = """
             CREATE TABLE IF NOT EXISTS confirmed_lines (
-                normalized_line TEXT PRIMARY KEY,
+                org_id TEXT NOT NULL,
+                normalized_line TEXT NOT NULL,
                 raw_line TEXT NOT NULL,
                 field TEXT NOT NULL,
                 value TEXT,             -- stored as JSON-ish text, see _encode/_decode below
                 value_type TEXT NOT NULL, -- "bool" | "int" | "str" | "none"
                 vendor_hint TEXT,
                 confirmed_by TEXT,       -- optional: who confirmed it, if you track users
-                source TEXT DEFAULT 'human_confirmed'  -- 'human_confirmed' | 'llm_high_confidence'
+                source TEXT DEFAULT 'human_confirmed',  -- 'human_confirmed' | 'llm_high_confidence'
+                PRIMARY KEY (org_id, normalized_line)
             )
-        """)
+"""
+
+
+def init_db():
+    """Call once at app startup. Safe to call repeatedly (CREATE IF NOT EXISTS).
+
+    Also migrates a pre-Phase-2 confirmed_lines table (no org_id): its rows
+    were learned before organisations existed, so they're kept and assigned
+    to LEGACY_DATA_ORG (the alpha demo org) rather than thrown away."""
+    with _get_conn() as conn:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(confirmed_lines)")}
+        if cols and "org_id" not in cols:
+            conn.execute("ALTER TABLE confirmed_lines RENAME TO confirmed_lines_pre_org")
+            conn.execute(_CONFIRMED_LINES_SCHEMA)
+            conn.execute(
+                """INSERT INTO confirmed_lines
+                   (org_id, normalized_line, raw_line, field, value, value_type,
+                    vendor_hint, confirmed_by, source)
+                   SELECT ?, normalized_line, raw_line, field, value, value_type,
+                          vendor_hint, confirmed_by, source
+                   FROM confirmed_lines_pre_org""",
+                (LEGACY_DATA_ORG,),
+            )
+            conn.execute("DROP TABLE confirmed_lines_pre_org")
+        else:
+            conn.execute(_CONFIRMED_LINES_SCHEMA)
 
 
 def _encode_value(value) -> tuple[Optional[str], str]:
@@ -77,9 +109,10 @@ def _decode_value(value_str: Optional[str], value_type: str):
     return value_str
 
 
-def check_memory(raw_line: str, vendor_hint: str = None) -> Optional[dict]:
+def check_memory(raw_line: str, vendor_hint: str = None, *, org_id: str) -> Optional[dict]:
     """
-    Look up a previously confirmed classification for this exact line.
+    Look up a previously confirmed classification for this exact line,
+    within one organisation's memory only.
     Returns a dict shaped like classify_unknown_line()'s normal return
     value (field/value/confidence/reasoning), or None if not found.
 
@@ -92,7 +125,8 @@ def check_memory(raw_line: str, vendor_hint: str = None) -> Optional[dict]:
     key = _normalize_line(raw_line)
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM confirmed_lines WHERE normalized_line = ?", (key,)
+            "SELECT * FROM confirmed_lines WHERE org_id = ? AND normalized_line = ?",
+            (org_id, key),
         ).fetchone()
 
     if row is None:
@@ -108,7 +142,7 @@ def check_memory(raw_line: str, vendor_hint: str = None) -> Optional[dict]:
 
 
 def save_confirmed(raw_line: str, field: str, value, vendor_hint: str = None,
-                    confirmed_by: str = None, source: str = "human_confirmed"):
+                    confirmed_by: str = None, source: str = "human_confirmed", *, org_id: str):
     """
     Save a confirmed field/value mapping for this line so future runs
     skip the LLM call. Call this after a human confirms a result on the
@@ -122,9 +156,9 @@ def save_confirmed(raw_line: str, field: str, value, vendor_hint: str = None,
     with _get_conn() as conn:
         conn.execute("""
             INSERT INTO confirmed_lines
-                (normalized_line, raw_line, field, value, value_type, vendor_hint, confirmed_by, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(normalized_line) DO UPDATE SET
+                (org_id, normalized_line, raw_line, field, value, value_type, vendor_hint, confirmed_by, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(org_id, normalized_line) DO UPDATE SET
                 raw_line=excluded.raw_line,
                 field=excluded.field,
                 value=excluded.value,
@@ -132,11 +166,11 @@ def save_confirmed(raw_line: str, field: str, value, vendor_hint: str = None,
                 vendor_hint=excluded.vendor_hint,
                 confirmed_by=excluded.confirmed_by,
                 source=excluded.source
-        """, (key, raw_line, field, value_str, value_type, vendor_hint, confirmed_by, source))
+        """, (org_id, key, raw_line, field, value_str, value_type, vendor_hint, confirmed_by, source))
 
 
-def forget(raw_line: str):
+def forget(raw_line: str, *, org_id: str):
     """Remove a cached entry -- useful if a confirmation turns out to be wrong."""
     key = _normalize_line(raw_line)
     with _get_conn() as conn:
-        conn.execute("DELETE FROM confirmed_lines WHERE normalized_line = ?", (key,))
+        conn.execute("DELETE FROM confirmed_lines WHERE org_id = ? AND normalized_line = ?", (org_id, key))
