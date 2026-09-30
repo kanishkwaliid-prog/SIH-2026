@@ -1,0 +1,13 @@
+set hostname CP-GW-01
+set ntp server primary 10.0.0.1 version 3
+set ntp active on
+set interface eth0 state on
+set interface eth0 ipv4-address 10.1.1.2 mask-length 24
+set static-route default nexthop gateway address 10.1.1.254 on
+set net-access telnet on
+set web ssl-port 443
+add syslog log-remote-address 10.1.1.1 level all
+set message banner on
+set message banner on line msgvalue "Authorized only"
+set user admin password-hash $1$abc$xyz
+set inactivity-timeout 10

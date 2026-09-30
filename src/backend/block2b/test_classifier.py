@@ -13,8 +13,23 @@ test_cases = [
     ("access-list 101 permit tcp any any eq 22", "unclear", None),
     ("line vty 0 4", "unclear", None),
     ("exec-timeout 10 0", "session_timeout_seconds", 600),
+    ("set inactivity-timeout 10", "session_timeout_seconds", 600),
     ("ntp server 10.0.0.1", "unclear", None),
     ("username admin secret 5 $1$abcd", "password_encryption", "type5"),  # "secret 5" = MD5 (type 5) hash
+
+    ("local-user admin password cipher Huawei@123", "password_encryption", "type7"),
+    ("local-user admin password irreversible-cipher $1a$abc$", "password_encryption", "type5"),
+    ("local-user admin password simple test123", "password_encryption", "none"),
+    ("telnet server port 1025", "unclear", None),
+    ("ssh user client001 service-type stelnet", "unclear", None),
+    ("protocol inbound all", "telnet_enabled", True),
+
+    ("set net-access telnet on", "telnet_enabled", True),
+    ("set net-access telnet off", "telnet_enabled", False),
+    ("add syslog log-remote-address 10.1.1.1 level all", "logging_enabled", True),
+    ("set message banner on line msgvalue \"Authorized only\"", "banner_configured", True),
+    ("set user admin password-hash $1$abc$xyz", "password_encryption", "type5"),
+    ("set hostname CP-GW-01", "unclear", None),
 ]
 test_cases += [
     ("set system login user admin class super-user", "unclear", None),   # Juniper
@@ -38,7 +53,7 @@ def _value_matches(actual, expected):
 
 correct = 0
 for line, expected_field, expected_value in test_cases:
-    result = classify_unknown_line(line)
+    result = classify_unknown_line(line, org_id="test-org")
     field_match = result.get("field") == expected_field
     value_match = _value_matches(result.get("value"), expected_value)
     match = field_match and value_match
@@ -54,7 +69,9 @@ sample_config = """
 set deviceconfig system hostname fw01
 set network interface ethernet1/1 layer3 ip 10.0.0.1/24
 """
-print("\nVendor guess:", guess_vendor(sample_config))
+vendor_result = guess_vendor(sample_config)
+print("\nVendor guess:", vendor_result)
+assert vendor_result["vendor"] == "Palo Alto PAN-OS", f"Wrong vendor: {vendor_result['vendor']}"
 
 
 def test_retry_on_failure():
@@ -68,7 +85,7 @@ def test_retry_on_failure():
 
     # classify_unknown_line already wraps call_with_retry internally now,
     # so we call it directly -- wrapping it again here would retry-on-retries.
-    result = llm_classifier.classify_unknown_line("aaa new-model")
+    result = llm_classifier.classify_unknown_line("exec-timeout 7 3", org_id="test-org")
     print("Result with broken key:", result)
 
     assert result.get("field") == "unclear", "Should fail gracefully, not crash"
@@ -116,7 +133,7 @@ def test_edge_cases():
     ]
 
     for line in edge_cases:
-        result = classify_unknown_line(line)
+        result = classify_unknown_line(line, org_id="test-org")
         print(f"Input: {line[:30]!r:35} → {result.get('field')}={result.get('value')} (conf: {result.get('confidence')})")
 
 

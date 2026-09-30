@@ -31,6 +31,12 @@ memory.db
 
 Scratch-configs/
 
+*.bak
+
+compare_results.csv
+memory.db
+.env
+*.bak
 # LLM response cache (auto-generated at runtime)
 src/backend/block2b/llm_cache.json
 

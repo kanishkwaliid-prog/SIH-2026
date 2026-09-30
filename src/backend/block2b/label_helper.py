@@ -28,7 +28,7 @@ EVAL = os.path.join(BASE, "real_eval.csv")
 
 # Timeout lines are always deferred to Groq (needs arithmetic), so they are
 # not labeled here at all. Same idea as _TIMEOUT_PATTERN in prefilter.py.
-TIMEOUT = re.compile(r"exec-timeout|session[-_ ]?timeout|idle-timeout|idle-limit|time-out", re.I)
+TIMEOUT = re.compile(r"exec-timeout|session[-_ ]?timeout|idle-timeout|inactivity-timeout|idle-limit|time-out", re.I)
 
 # Lines that mention something we care about but no rule below settled them.
 KEYWORDS = re.compile(r"ssh|telnet|logging|syslog|banner|password|secret|encrypt|hash|snmp|http", re.I)
