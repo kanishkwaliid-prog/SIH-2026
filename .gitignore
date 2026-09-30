@@ -33,3 +33,8 @@ memory.db
 Scratch-configs/
 
 *.bak
+
+compare_results.csv
+memory.db
+.env
+*.bak
