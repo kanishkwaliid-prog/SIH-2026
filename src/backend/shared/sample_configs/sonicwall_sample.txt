@@ -1,6 +1,0 @@
-# SYNTHETIC sample built from the SonicOS X CLI reference, not a real export
-configure
-cli idle-timeout default 5
-cli banner
-no cli pager default
-show current-config
