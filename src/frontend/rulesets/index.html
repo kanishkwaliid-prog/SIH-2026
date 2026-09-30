@@ -127,7 +127,7 @@
 <body class="bg-page text-on-surface min-h-screen flex flex-col font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container p-2 md:p-6">
 <div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
 <!-- Sidebar -->
-<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row flex-wrap md:flex-nowrap md:flex-col items-center md:items-stretch gap-x-md gap-y-sm md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
 <div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
 <a href="../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
 <div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
@@ -180,11 +180,11 @@
 <!-- Summary stats -->
 <div class="grid grid-cols-2 md:grid-cols-5 gap-gutter">
 <div class="bg-surface-container rounded-xl border border-white/5 p-md flex flex-col gap-1">
-<span class="font-display-sm text-display-sm text-primary">5</span>
+<span class="font-display-sm text-display-sm text-primary">6</span>
 <span class="font-body-sm text-body-sm text-on-surface-variant">Frameworks</span>
 </div>
 <div class="bg-surface-container rounded-xl border border-white/5 p-md flex flex-col gap-1">
-<span class="font-display-sm text-display-sm text-primary">47</span>
+<span class="font-display-sm text-display-sm text-primary">54</span>
 <span class="font-body-sm text-body-sm text-on-surface-variant">Total Rules</span>
 </div>
 <div class="bg-surface-container rounded-xl border border-white/5 p-md flex flex-col gap-1">
@@ -203,7 +203,7 @@
 
 <div class="bg-surface-container-high border border-white/5 rounded-xl p-lg flex items-start gap-md">
 <span class="material-symbols-outlined text-tertiary mt-1" data-icon="info">info</span>
-<p class="font-body-sm text-body-sm text-on-surface-variant">RBI and SEBI rules below are ConfigGuard's own technical interpretation of those frameworks' general principles, mapped onto device configuration checks — not an official or certified regulatory mapping. See our <a class="text-primary hover:underline" href="../legal/terms/index.html">Terms</a> for details.</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">RBI, SEBI and ISO 27001 rules below are ConfigGuard's own technical interpretation of those frameworks' general principles, mapped onto device configuration checks — not an official or certified regulatory or compliance mapping. See our <a class="text-primary hover:underline" href="../legal/terms/index.html">Terms</a> for details.</p>
 </div>
 
 <!-- Framework sections -->
@@ -533,6 +533,60 @@
 </div>
 <div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
 <span class="font-mono text-body-sm text-on-surface-variant">SEBI-CSCRF-7</span>
+<span class="text-body-sm text-on-surface">SNMP Community String</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+</div>
+</details>
+
+<details class="bg-surface-container rounded-xl border border-white/5 overflow-hidden group" >
+<summary class="cursor-pointer list-none p-lg flex items-center justify-between hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-primary text-2xl" data-icon="verified_user">verified_user</span>
+<div class="flex flex-col">
+<h3 class="font-title-md text-title-md text-on-surface">ISO/IEC 27001:2022</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">International information security management standard (Annex A controls). Our own technical interpretation of control intent — not an official or certified mapping.</p>
+</div>
+</div>
+<div class="flex items-center gap-md shrink-0">
+<span class="font-body-sm text-body-sm text-on-surface-variant hidden md:block">7 rules</span>
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+</div>
+</summary>
+<div class="border-t border-outline-variant flex flex-col">
+
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">ISO27001-1</span>
+<span class="text-body-sm text-on-surface">SSH Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-high/20 text-high border-high/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">ISO27001-2</span>
+<span class="text-body-sm text-on-surface">Telnet Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">ISO27001-3</span>
+<span class="text-body-sm text-on-surface">Session Timeout</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-high/20 text-high border-high/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">ISO27001-4</span>
+<span class="text-body-sm text-on-surface">Logging Enabled</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-high/20 text-high border-high/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">ISO27001-5</span>
+<span class="text-body-sm text-on-surface">Password Encryption</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-high/20 text-high border-high/30">HIGH</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">ISO27001-6</span>
+<span class="text-body-sm text-on-surface">Login Banner</span>
+<span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-medium/20 text-medium border-medium/30">MEDIUM</span>
+</div>
+<div class="grid grid-cols-[auto_1fr_auto] md:grid-cols-[120px_1fr_140px] items-center gap-md py-sm px-md border-b border-outline-variant/50 last:border-b-0">
+<span class="font-mono text-body-sm text-on-surface-variant">ISO27001-7</span>
 <span class="text-body-sm text-on-surface">SNMP Community String</span>
 <span class="justify-self-end px-sm py-1 rounded-full border text-label-caps font-label-caps text-center bg-error/20 text-error border-error/30">CRITICAL</span>
 </div>

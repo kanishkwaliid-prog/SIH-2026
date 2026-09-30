@@ -182,7 +182,7 @@
 <body class="bg-page text-on-surface min-h-screen flex flex-col font-body-md p-2 md:p-6">
 <div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
 <!-- Sidebar -->
-<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row flex-wrap md:flex-nowrap md:flex-col items-center md:items-stretch gap-x-md gap-y-sm md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
 <div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
 <a href="../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
 <div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
@@ -282,6 +282,20 @@ if (!session) {
   window.location.href = "../upload_configuration/index.html";
 }
 
+// A session with no pending lines has nothing to review: they were already
+// confirmed (Back button, bookmarked link, a second tab). Skip ahead to
+// whatever is next instead of showing an empty table and a dead button.
+const nothingToReview = !!session && (!session.pending_confirmations || session.pending_confirmations.length === 0);
+if (nothingToReview) {
+  routeToNextStep();
+}
+
+// Coming back via Back/Forward can restore this page from the browser's
+// cache with stale rows; re-run the checks against current storage.
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted) window.location.reload();
+});
+
 // Real data from this session's /upload response, not placeholders.
 let pendingConfirmations = session && session.pending_confirmations ? session.pending_confirmations.slice() : [];
 
@@ -296,6 +310,19 @@ function confidenceStyle(confidence) {
 function renderPendingConfirmations() {
   const tbody = document.getElementById("pendingConfirmationsBody");
   tbody.innerHTML = "";
+
+  if (nothingToReview) {
+    const row = document.createElement("tr");
+    row.innerHTML = `<td colspan="4" class="py-xl px-lg text-center">
+      <p class="font-body-md text-body-md text-on-surface">Nothing left to review here.</p>
+      <p class="font-body-sm text-body-sm text-on-surface-variant mt-xs">Taking you to the next step…</p>
+      <button type="button" id="continueBtn" class="mt-md bg-primary text-on-primary font-label-caps text-label-caps px-lg py-2 rounded-full">Continue</button>
+    </td>`;
+    tbody.appendChild(row);
+    document.getElementById("continueBtn").addEventListener("click", routeToNextStep);
+    document.getElementById("confirmAllBtn").disabled = true;
+    return;
+  }
 
   pendingConfirmations.forEach((item, index) => {
     const pct = Math.round(item.confidence * 100);

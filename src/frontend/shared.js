@@ -50,9 +50,21 @@ function vendorInfo(id) {
 
 // Readable name for a backend vendor id; falls back to the raw id (or
 // "Unknown") for a vendor this table doesn't know yet.
+function isUnknownVendor(id) {
+  return !id || String(id).toLowerCase() === "unknown";
+}
+
+// "cisco_ios" -> "Cisco Ios": a readable fallback for an id we have no
+// label for, so a raw snake_case id is never shown to the user.
+function prettifyVendorId(id) {
+  return String(id).replace(/[_-]+/g, " ").trim().replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
 function vendorLabel(id) {
   const v = vendorInfo(id);
-  return v ? v.label : id || "Unknown";
+  if (v) return v.label;
+  if (isUnknownVendor(id)) return "Unrecognised vendor";
+  return prettifyVendorId(id);
 }
 
 function isExperimentalVendor(id) {
@@ -665,6 +677,78 @@ const ROLE_LABELS = {
   viewer: "Viewer",
 };
 
+// Places a body-level floating panel next to its trigger. The sidebar is a
+// left column on desktop (panel opens upward) but a top bar on phones
+// (panel must open downward or it lands off-screen), so it decides per
+// call. Panels live on <body>: the sidebar clips overflow, and the page
+// shell's transform would otherwise trap position:fixed children.
+function placeFloating(el, anchor, width, align) {
+  const r = anchor.getBoundingClientRect();
+  const w = Math.min(width, window.innerWidth - 16);
+  const left = align === "end" ? r.right - w : r.left;
+  const below = r.top < window.innerHeight / 2;
+  el.style.width = w + "px";
+  el.style.left = Math.max(8, Math.min(left, window.innerWidth - w - 8)) + "px";
+  if (below) {
+    el.style.top = r.bottom + 8 + "px";
+    el.style.bottom = "auto";
+    el.style.maxHeight = Math.max(160, window.innerHeight - r.bottom - 16) + "px";
+  } else {
+    el.style.top = "auto";
+    el.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + "px";
+    el.style.maxHeight = Math.max(160, r.top - 16) + "px";
+  }
+}
+
+// One canonical bottom-of-sidebar block (engine status, help, bell, account
+// chip) for every signed-in page. Owned here rather than copied into a dozen
+// HTML files so it can't drift. On phones the sidebar is a top bar, and the
+// old block was `hidden md:flex` -- which took the bell, engine status and
+// the only Sign-out button away from mobile users.
+function ensureSidebarFooter() {
+  const aside = document.querySelector("aside");
+  if (!aside || aside.querySelector("[data-cg-footer]")) return;
+  const iconBtn = "w-9 h-9 md:w-auto md:h-auto flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary rounded-full";
+  const footer = document.createElement("div");
+  footer.setAttribute("data-cg-footer", "");
+  footer.className = "flex flex-row md:flex-col items-center md:items-stretch gap-sm md:gap-md md:mt-auto relative z-10";
+  footer.innerHTML = `
+    <div data-cg-engine-box role="status" aria-label="Engine status: checking" title="Engine checking…"
+      class="flex items-center justify-center gap-sm w-9 h-9 md:w-auto md:h-auto md:p-sm rounded-full md:rounded-2xl md:bg-surface-variant/60 md:border md:border-outline-variant">
+      <span class="relative flex h-2 w-2 shrink-0" data-cg-engine-dot>
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-on-surface-variant opacity-75" hidden></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-on-surface-variant"></span>
+      </span>
+      <span class="hidden md:inline font-body-sm text-body-sm text-on-surface-variant" data-cg-engine>Engine <b class="text-on-surface font-medium" data-cg-engine-label>checking…</b></span>
+    </div>
+    <div class="flex items-center gap-1 md:gap-sm md:px-sm">
+      <a href="${FRONTEND_ROOT}legal/help/index.html" aria-label="Help" class="${iconBtn}">
+        <span class="material-symbols-outlined text-[20px]">help</span>
+      </a>
+      <button type="button" aria-label="Notifications" class="${iconBtn}">
+        <span class="material-symbols-outlined text-[20px]">notifications</span>
+      </button>
+      <div id="cg-user-chip" class="relative ml-1 md:ml-auto"></div>
+    </div>`;
+  const old = aside.querySelector(".mt-auto");
+  if (old) old.replaceWith(footer);
+  else aside.appendChild(footer);
+}
+
+let userMenuWired = false;
+
+function setUserMenuOpen(open) {
+  const btn = document.getElementById("cg-user-btn");
+  const menu = document.getElementById("cg-user-menu");
+  if (!btn || !menu) return;
+  if (open) {
+    closeNotificationPanel();
+    placeFloating(menu, btn, 208, "end");
+  }
+  menu.hidden = !open;
+  btn.setAttribute("aria-expanded", String(open));
+}
+
 function renderUserChip(user) {
   if (!user) return;
   let slot = document.getElementById("cg-user-chip");
@@ -688,41 +772,53 @@ function renderUserChip(user) {
   slot.innerHTML = `
     <button type="button" id="cg-user-btn" aria-haspopup="true" aria-expanded="false"
       aria-label="Account: ${esc(user.name)}"
-      class="w-8 h-8 rounded-full bg-secondary-container text-secondary border border-outline-variant flex items-center justify-center text-[12px] font-semibold hover:border-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary transition-colors">
+      class="w-9 h-9 md:w-8 md:h-8 rounded-full bg-secondary-container text-secondary border border-outline-variant flex items-center justify-center text-[12px] font-semibold hover:border-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary transition-colors">
       ${esc(initials(user.name))}
-    </button>
-    <div id="cg-user-menu" role="menu" hidden
-      class="absolute bottom-full right-0 mb-2 w-52 bg-surface-container-high border border-outline-variant rounded-xl p-md shadow-lg z-50">
-      <p class="font-body-sm text-body-sm text-on-surface font-medium truncate">${esc(user.name)}</p>
-      <p class="font-body-sm text-body-sm text-on-surface-variant truncate">${esc(user.email)}</p>
-      <p class="mt-sm inline-flex px-2 py-0.5 rounded-full bg-surface-variant text-on-surface-variant text-[12px]">${esc(ROLE_LABELS[user.role] || user.role)}</p>
-      <a href="${FRONTEND_ROOT}account/security/index.html" role="menuitem"
-        class="mt-md w-full flex items-center justify-center gap-2 rounded-full border border-outline-variant py-2 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary transition-colors">
-        <span class="material-symbols-outlined text-[18px]">shield_lock</span>Security settings
-      </a>
-      <button type="button" id="cg-logout" role="menuitem"
-        class="mt-sm w-full flex items-center justify-center gap-2 rounded-full border border-outline-variant py-2 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary transition-colors">
-        <span class="material-symbols-outlined text-[18px]">logout</span>Sign out
-      </button>
-    </div>`;
+    </button>`;
 
-  const btn = document.getElementById("cg-user-btn");
-  const menu = document.getElementById("cg-user-menu");
-  const setOpen = (open) => {
-    menu.hidden = !open;
-    btn.setAttribute("aria-expanded", String(open));
-  };
-  btn.addEventListener("click", (e) => {
+  // The menu is a body-level panel (see placeFloating). Rebuilt on every
+  // render because the cached user is replaced by the fresh /auth/me one.
+  const stale = document.getElementById("cg-user-menu");
+  if (stale) stale.remove();
+  const menu = document.createElement("div");
+  menu.id = "cg-user-menu";
+  menu.setAttribute("role", "menu");
+  menu.hidden = true;
+  menu.className = "fixed z-50 overflow-y-auto bg-surface-container-high border border-outline-variant rounded-xl p-md shadow-lg";
+  menu.innerHTML = `
+    <p class="font-body-sm text-body-sm text-on-surface font-medium truncate">${esc(user.name)}</p>
+    <p class="font-body-sm text-body-sm text-on-surface-variant truncate">${esc(user.email)}</p>
+    <p class="mt-sm inline-flex px-2 py-0.5 rounded-full bg-surface-variant text-on-surface-variant text-[12px]">${esc(ROLE_LABELS[user.role] || user.role)}</p>
+    <a href="${FRONTEND_ROOT}account/security/index.html" role="menuitem"
+      class="mt-md w-full flex items-center justify-center gap-2 rounded-full border border-outline-variant py-2 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary transition-colors">
+      <span class="material-symbols-outlined text-[18px]">shield_lock</span>Security settings
+    </a>
+    <button type="button" id="cg-logout" role="menuitem"
+      class="mt-sm w-full flex items-center justify-center gap-2 rounded-full border border-outline-variant py-2 font-body-sm text-body-sm text-on-surface hover:bg-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary transition-colors">
+      <span class="material-symbols-outlined text-[18px]">logout</span>Sign out
+    </button>`;
+  document.body.appendChild(menu);
+
+  document.getElementById("cg-user-btn").addEventListener("click", (e) => {
     e.stopPropagation();
-    setOpen(menu.hidden);
-  });
-  document.addEventListener("click", (e) => {
-    if (!slot.contains(e.target)) setOpen(false);
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") setOpen(false);
+    const m = document.getElementById("cg-user-menu");
+    setUserMenuOpen(m.hidden);
   });
   document.getElementById("cg-logout").addEventListener("click", logout);
+
+  // Page-level listeners are registered once, however often the chip is re-rendered.
+  if (!userMenuWired) {
+    userMenuWired = true;
+    document.addEventListener("click", (e) => {
+      const m = document.getElementById("cg-user-menu");
+      const s = document.getElementById("cg-user-chip");
+      if (m && !m.hidden && !m.contains(e.target) && !(s && s.contains(e.target))) setUserMenuOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    });
+    window.addEventListener("resize", () => setUserMenuOpen(false));
+  }
 }
 
 // Adds a "Team" link to the sidebar for users allowed to manage members.
@@ -780,8 +876,14 @@ function setEngineState(state) {
     });
     if (ping) ping.hidden = state !== "online"; // pulse only while healthy
   });
+  const stateText = state === "online" ? "online" : state === "offline" ? "offline" : "checking…";
+  // On phones only the dot is visible, so the text lives in title/aria-label.
+  document.querySelectorAll("[data-cg-engine-box]").forEach((box) => {
+    box.title = "Engine " + stateText;
+    box.setAttribute("aria-label", "Engine status: " + stateText);
+  });
   document.querySelectorAll("[data-cg-engine-label]").forEach((el) => {
-    el.textContent = state === "online" ? "online" : state === "offline" ? "offline" : "checking…";
+    el.textContent = stateText;
     el.classList.toggle("text-error", state === "offline");
     el.classList.toggle("text-on-surface", state !== "offline");
   });
@@ -910,6 +1012,15 @@ function renderNotificationPanel(panel) {
   }
 }
 
+// Closes the bell panel from outside initNotifications (used when another
+// floating panel opens, so the two are never open together).
+function closeNotificationPanel() {
+  const panel = document.getElementById("cg-notif-panel");
+  const bell = document.querySelector("[data-cg-bell]");
+  if (panel) panel.hidden = true;
+  if (bell) bell.setAttribute("aria-expanded", "false");
+}
+
 function initNotifications() {
   const bell = document.querySelector('button[aria-label="Notifications"]');
   if (!bell || bell.hasAttribute("data-cg-bell")) return;
@@ -927,17 +1038,14 @@ function initNotifications() {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", "Notifications");
   panel.hidden = true;
-  panel.className = "fixed z-50 max-h-96 overflow-y-auto bg-surface-container-high border border-outline-variant rounded-xl p-md shadow-lg";
+  panel.className = "fixed z-50 overflow-y-auto bg-surface-container-high border border-outline-variant rounded-xl p-md shadow-lg";
   document.body.appendChild(panel);
 
   const setOpen = (open) => {
     if (open) {
+      setUserMenuOpen(false);
       renderNotificationPanel(panel);
-      const r = bell.getBoundingClientRect();
-      const width = Math.min(320, window.innerWidth - 16);
-      panel.style.width = width + "px";
-      panel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) + "px";
-      panel.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + "px";
+      placeFloating(panel, bell, 320, "start");
     }
     panel.hidden = !open;
     bell.setAttribute("aria-expanded", String(open));
@@ -989,9 +1097,18 @@ function applySignedOutLegalChrome() {
 
 function initChrome() {
   if (isPublicPage()) {
-    if (isLegalPage() && !getToken()) applySignedOutLegalChrome();
+    if (isLegalPage()) {
+      if (getToken()) {
+        ensureSidebarFooter();
+        initEngineStatus();
+        initNotifications();
+      } else {
+        applySignedOutLegalChrome();
+      }
+    }
     return;
   }
+  ensureSidebarFooter();
   initEngineStatus();
   initNotifications();
 }
@@ -1002,13 +1119,31 @@ function initChrome() {
 // never fade in.
 
 function initAuth() {
-  if (isPublicPage()) return true;
+  if (isPublicPage()) {
+    // Privacy / Terms / Help are public, but a signed-in reader should still
+    // have the account chip, bell, engine status and the Team / Activity
+    // links. The cached user is enough here: this page must never bounce a
+    // reader to the login screen, which a refresh through authFetch could.
+    if (isLegalPage() && getToken()) {
+      const renderLegal = () => {
+        const user = getCurrentUser();
+        ensureSidebarFooter();
+        renderUserChip(user);
+        renderAdminNav(user);
+        renderAuditNav(user);
+      };
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", renderLegal);
+      else renderLegal();
+    }
+    return true;
+  }
   const hadToken = !!localStorage.getItem(TOKEN_KEY);
   if (!getToken()) {
     redirectToLogin(hadToken ? "expired" : null);
     return false;
   }
   const render = (user) => {
+    ensureSidebarFooter();
     renderUserChip(user);
     renderAdminNav(user);
     renderAuditNav(user);
