@@ -67,7 +67,7 @@ TOTP (`pyotp`), issuer name `ConfigGuard`, accepting one 30-second step of clock
 
 **Known gap: secret storage.** `totp_secret` is stored in plaintext in SQLite (`users.totp_secret`) because the server has to read it back to check codes. A real product would encrypt it at rest with a separate key (e.g. Fernet). Not done for the hackathon.
 
-Frontend for all of this is built: the login page's second step (`src/frontend/auth/login/index.html`) and the Security settings page (`src/frontend/account/security/index.html`), reachable from the user-chip menu in `shared.js`. See PROGRESS.md at the project root for what's still unverified (the test suite has not been run in this build environment) and what Phase 4 onward still needs.
+Frontend for all of this is built: the login page's second step (`src/frontend/auth/login/index.html`) and the Security settings page (`src/frontend/account/security/index.html`), reachable from the user-chip menu in `shared.js`. See dev-notes/PROGRESS.md for what's still unverified (the test suite has not been run in this build environment) and what Phase 4 onward still needs.
 
 ## 7. Demo data
 
