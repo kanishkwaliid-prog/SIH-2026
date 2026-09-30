@@ -146,7 +146,7 @@
 <body class="bg-page text-on-background min-h-screen flex flex-col font-body-md text-body-md antialiased p-2 md:p-6">
 <div id="app-shell" style="opacity:0" class="w-full max-w-[1600px] mx-auto flex flex-col md:flex-row flex-grow bg-background rounded-[1.75rem] shadow-sm">
 <!-- Sidebar -->
-<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row md:flex-col items-center md:items-stretch gap-md md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
+<aside class="w-full md:w-64 md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-outline-variant flex flex-row flex-wrap md:flex-nowrap md:flex-col items-center md:items-stretch gap-x-md gap-y-sm md:gap-0 p-md md:p-lg rounded-t-[1.75rem] md:rounded-t-none md:rounded-l-[1.75rem] relative overflow-hidden">
 <div class="hidden md:block absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-secondary/10 blur-2xl pointer-events-none"></div>
 <a href="../upload_configuration/index.html" class="flex items-center gap-sm md:mb-xl relative z-10">
 <div class="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center shrink-0">
@@ -300,6 +300,10 @@
       try {
         markStepActive("step1Dot");
         const results = await uploadConfigs(files, vendorHint);
+        // The server has answered, so this upload is finished -- accepted or
+        // rejected. Drop it now, otherwise refreshing this page would send
+        // the same files again (e.g. all-rejected uploads used to loop).
+        sessionStorage.removeItem("pendingUpload");
         // Attach each file's raw text to its session -- needed later if
         // the user switches vendors and we need to re-run /upload with a
         // corrected hint (order is preserved by the API, matching by index).
@@ -333,6 +337,9 @@
       } catch (err) {
         // The real reason (413 too many files, 403 role, 500 ...) -- only a
         // genuine network failure gets the "can't reach the server" text.
+        // A network failure keeps the pending upload so a refresh can retry
+        // it. Any answer from the server (413, 403, 500 ...) ends the attempt.
+        if (!(err instanceof TypeError)) sessionStorage.removeItem("pendingUpload");
         showFatalError(describeError(err, "The upload failed for an unknown reason."));
       }
     }
