@@ -85,7 +85,7 @@ def test_retry_on_failure():
 
     # classify_unknown_line already wraps call_with_retry internally now,
     # so we call it directly -- wrapping it again here would retry-on-retries.
-    result = llm_classifier.classify_unknown_line("aaa new-model")
+    result = llm_classifier.classify_unknown_line("exec-timeout 7 3")
     print("Result with broken key:", result)
 
     assert result.get("field") == "unclear", "Should fail gracefully, not crash"

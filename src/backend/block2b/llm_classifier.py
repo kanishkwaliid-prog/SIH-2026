@@ -53,41 +53,94 @@ MODEL = "openai/gpt-oss-20b"  # good default Groq model, fast + capable
 # Fields must match shared/schema.py NormalizedConfig exactly.
 # If you need a new field, message the team first -- this is a shared contract.
 LINE_CLASSIFY_SYSTEM_PROMPT = """You are a network device configuration classifier.
-You will be given a single raw configuration line from a network device (router, switch, or firewall).
-Decide which single NormalizedConfig field (if any) this line sets, and extract its value.
-Respond with ONLY valid JSON, no markdown, no extra text.
+You will be given ONE raw configuration line from a router, switch or firewall.
+Decide which single NormalizedConfig field (if any) this line SETS, and give its value.
+Respond with ONLY valid JSON: no markdown, no extra text.
 
-Valid fields and their value types:
-- ssh_enabled (bool): line enables/disables SSH access (e.g. "ip ssh version 2", "transport input ssh")
-- telnet_enabled (bool): line enables/disables Telnet access (e.g. "transport input telnet")
-- session_timeout_seconds (int): line sets a session/exec timeout, converted to total seconds
-  
-  (e.g. "exec-timeout 10 0" means 10 minutes 0 seconds -> 600; "ip ssh time-out 60" -> 60;
-  "set inactivity-timeout 10" is Check Point, value in minutes -> 600;
-  "cli idle-timeout default 5" is SonicWall, value in minutes -> 300)
-- logging_enabled (bool): line turns logging/syslog on or off (e.g. "logging trap informational" -> true,
-  "no logging on" -> false)
-- password_encryption (str): line sets a password encryption/hashing scheme -- use the short form
-  the device uses, e.g. "type7", "md5", "none", "type5"
-- banner_configured (bool): line sets a login/MOTD banner (e.g. "banner motd ^...")
-- unclear: the line is real config but doesn't clearly set any of the fields above
-  (e.g. routing, ACLs, interfaces, hostname, SNMP, NTP, comments)
+GENERAL RULES
+- A line only counts if it TURNS a feature on/off or SETS the field itself.
+  Lines that merely tune, filter, name, show, clear or reference a feature are "unclear".
+- Never invent values. If unsure, answer "unclear" with low confidence.
+- Ignore placeholder/redacted tokens such as <REDACTED> and <IP_ADDR>.
 
-Output format (JSON only):
-{"field": "<one of: ssh_enabled|telnet_enabled|session_timeout_seconds|logging_enabled|password_encryption|banner_configured|unclear>",
- "value": <bool, int, string, or null if field is "unclear">,
- "confidence": <float 0.0-1.0>,
+FIELDS AND ALLOWED VALUES (use exactly these)
+
+ssh_enabled (bool)
+  true : line enables SSH (e.g. "ip ssh version 2", "transport input ssh",
+         "stelnet server enable", "set system services ssh").
+  false: line disables SSH (e.g. "no ip ssh", "undo stelnet server enable",
+         "delete system services ssh").
+  unclear: SSH parameter/reference lines that do not toggle it, e.g. "ssh server v2",
+         "ssh server netconf vrf def", "set admin-ssh-port 22", "/ip ssh",
+         "ssh user X service-type stelnet", "ip ssh time-out 60", "crypto key generate rsa".
+
+telnet_enabled (bool)
+  true : line enables Telnet (e.g. "transport input telnet", "set net-access telnet on",
+         "telnet server enable"). If a line enables BOTH ssh and telnet
+         (e.g. "transport input ssh telnet", "protocol inbound all"), answer telnet_enabled true
+         (report the riskier setting).
+  false: line disables Telnet (e.g. "no telnet-server", "set net-access telnet off").
+  unclear: "telnet server port 1025" and other parameter lines.
+
+session_timeout_seconds (int)
+  Line sets an idle/exec/session timeout; convert to TOTAL SECONDS.
+  "exec-timeout 10 0" -> 600; "ip ssh time-out 60" -> 60;
+  Check Point "set inactivity-timeout 10" (minutes) -> 600;
+  SonicWall "cli idle-timeout default 5" (minutes) -> 300.
+
+logging_enabled (bool)   [NARROW definition]
+  true : line turns logging on OR configures a log destination/forwarding:
+         "logging on", "logging trap informational", "logging buffered 8192",
+         "logging host 10.1.1.1", "logging server 10.1.1.1", "logging 1.2.3.4",
+         "set system syslog host ... any notice", "add syslog log-remote-address ...",
+         "info-center enable", "info-center loghost ...",
+         PAN-OS "set shared log-settings ... send-syslog ...".
+  false: line turns logging off: "no logging on", "no logging trap",
+         "delete system syslog", "undo info-center enable".
+  unclear: logging TUNING or reference lines that do not turn it on/off or set a destination:
+         "logging level bgp 4", "logging rate-limit 100", "logging device-id hostname",
+         "logging source-interface X", "logging facility local0", "logging suppress rule X",
+         "no logging console", "no logging event ...", "show logging", "clear logging ...",
+         "config log syslogd2 setting", "/system logging".
+
+password_encryption (str) - ONLY these four values:
+  "type7"  : reversible/weak: "service password-encryption", "password 7 X", "secret 7 X",
+             Huawei "password cipher X".
+  "type5"  : one-way MD5/crypt hash: "secret 5 $1$...", "password 5 X", Check Point
+             "password-hash $1$...", Huawei "password irreversible-cipher X".
+  "sha512" : "secret sha512 $6$...".
+  "none"   : plaintext or no encryption: "password 0 X", "secret 0 X", "enable password X",
+             "no service password-encryption", Huawei "password simple X".
+  Any other scheme (secret 8, 9 or 10, sha1, scrypt, etc.) -> answer "unclear", NOT a new value.
+
+banner_configured (bool)
+  true : line sets a login/MOTD banner ("banner motd ^...^", "banner login", "set message banner on ...",
+         "header login information ...").
+  false: line explicitly disables/removes a banner ("set pre-login-banner disable", "no banner motd").
+
+unclear : real config that sets none of the fields above (routing, ACLs, interfaces, hostname, SNMP,
+          NTP, AAA, users, timezone, comments, empty text).
+
+OUTPUT FORMAT (JSON only):
+{"field": "<ssh_enabled|telnet_enabled|session_timeout_seconds|logging_enabled|password_encryption|banner_configured|unclear>",
+ "value": <true|false|integer|"type7"|"type5"|"sha512"|"none"|null>,
+ "confidence": <0.0-1.0>,
  "reasoning": "<one short sentence>"}
 
-Examples:
-Line: "transport input ssh" -> {"field": "ssh_enabled", "value": true, "confidence": 0.95, "reasoning": "Restricts VTY transport to SSH only"}
-Line: "transport input telnet ssh" -> {"field": "telnet_enabled", "value": true, "confidence": 0.9, "reasoning": "Telnet is allowed alongside SSH"}
-Line: "exec-timeout 10 0" -> {"field": "session_timeout_seconds", "value": 600, "confidence": 0.95, "reasoning": "10 minutes converted to seconds"}
-Line: "logging trap informational" -> {"field": "logging_enabled", "value": true, "confidence": 0.9, "reasoning": "Enables syslog trap output"}
-Line: "service password-encryption" -> {"field": "password_encryption", "value": "type7", "confidence": 0.9, "reasoning": "Enables Cisco type7 weak encryption"}
-Line: "banner motd ^Authorized access only^" -> {"field": "banner_configured", "value": true, "confidence": 0.95, "reasoning": "Sets a login banner"}
-Line: "transport input ssh telnet" -> {"field": "telnet_enabled", "value": true, "confidence": 0.9, "reasoning": "Telnet is allowed alongside SSH"}
-Line: "router ospf 1" -> {"field": "unclear", "value": null, "confidence": 0.9, "reasoning": "Routing config, not in NormalizedConfig"}
+EXAMPLES
+Line: "transport input ssh" -> {"field": "ssh_enabled", "value": true, "confidence": 0.95, "reasoning": "VTY restricted to SSH"}
+Line: "transport input ssh telnet" -> {"field": "telnet_enabled", "value": true, "confidence": 0.9, "reasoning": "Telnet allowed alongside SSH (riskier)"}
+Line: "ssh server v2" -> {"field": "unclear", "value": null, "confidence": 0.85, "reasoning": "SSH version parameter, not an enable/disable"}
+Line: "exec-timeout 10 0" -> {"field": "session_timeout_seconds", "value": 600, "confidence": 0.95, "reasoning": "10 minutes = 600 seconds"}
+Line: "logging host 198.51.100.200" -> {"field": "logging_enabled", "value": true, "confidence": 0.9, "reasoning": "Configures a syslog destination"}
+Line: "logging level bgp 4" -> {"field": "unclear", "value": null, "confidence": 0.85, "reasoning": "Per-facility severity tuning, not on/off"}
+Line: "no logging on" -> {"field": "logging_enabled", "value": false, "confidence": 0.95, "reasoning": "Disables all logging"}
+Line: "username admin privilege 15 secret 5 $1$abc$xyz" -> {"field": "password_encryption", "value": "type5", "confidence": 0.95, "reasoning": "Type 5 (MD5) hash"}
+Line: "neighbor X password 7 XOF6i6" -> {"field": "password_encryption", "value": "type7", "confidence": 0.9, "reasoning": "Type 7 reversible encryption"}
+Line: "username cisco privilege 15 password 0 cisco" -> {"field": "password_encryption", "value": "none", "confidence": 0.95, "reasoning": "Plaintext password"}
+Line: "username netadmin secret 9 $9$abc" -> {"field": "unclear", "value": null, "confidence": 0.8, "reasoning": "Type 9 hash is not one of the allowed schemes"}
+Line: "set pre-login-banner disable" -> {"field": "banner_configured", "value": false, "confidence": 0.85, "reasoning": "Banner explicitly disabled"}
+Line: "router ospf 1" -> {"field": "unclear", "value": null, "confidence": 0.9, "reasoning": "Routing, not a tracked field"}
 """
 
 VENDOR_GUESS_SYSTEM_PROMPT = """You are a network configuration vendor identifier.
@@ -154,6 +207,35 @@ def _safe_parse_json(raw_text: str, fallback: dict) -> dict:
 def needs_human_review(result: dict, threshold: float = 0.6) -> bool:
     return result.get("confidence", 0.0) < threshold
 
+ALLOWED = {
+    "ssh_enabled": bool,
+    "telnet_enabled": bool,
+    "logging_enabled": bool,
+    "banner_configured": bool,
+    "session_timeout_seconds": int,
+    "password_encryption": str,
+}
+ALLOWED_PASSWORD = {"type7", "type5", "sha512", "none"}
+
+
+def validate_result(result: dict) -> dict:
+    """Raise ValueError (which call_with_retry retries) on an invalid field/value.
+    Anything outside the vocabulary is downgraded to 'unclear' instead of trusted."""
+    field = result.get("field")
+    if field == "unclear":
+        result["value"] = None
+        return result
+    t = ALLOWED.get(field)
+    v = result.get("value")
+    if t is None:
+        raise ValueError(f"LLM returned unknown field {field!r}")
+    if not isinstance(v, t) or (t is int and isinstance(v, bool)):
+        raise ValueError(f"LLM returned wrong value type for {field}: {v!r}")
+    if field == "password_encryption" and v not in ALLOWED_PASSWORD:
+        return {**result, "field": "unclear", "value": None,
+                "reasoning": f"Out-of-vocabulary password scheme {v!r}"}
+    return result
+
 def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **kwargs):
     """
     Calls func(*args, **kwargs), retrying on exception.
@@ -213,6 +295,7 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
     if result.get("reasoning") == "Failed to parse LLM response":
         raise ValueError("LLM returned malformed JSON")
     
+    result = validate_result(result)
     result["source"] = "llm"
     result["confidence"] = min(result.get("confidence", 0.0), 0.99)
     return result
@@ -222,6 +305,9 @@ _cache = json.load(open(CACHE_FILE)) if os.path.exists(CACHE_FILE) else {}
 _quota_exhausted = False
 
 def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
+    if not raw_line or not raw_line.strip():
+        return {"field": "unclear", "value": None, "confidence": 1.0,
+                "reasoning": "Empty line", "source": "local_rules"}
     cached = check_memory(raw_line, vendor_hint)
     if cached is not None:
         return cached
