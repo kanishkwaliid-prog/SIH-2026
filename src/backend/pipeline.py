@@ -20,6 +20,40 @@ from converter.block2a_main import run_block2a
 from block2b.llm_classifier import classify_unknown_line, guess_vendor
 from block2b import review_system
 
+def _coerce_field_value(field: str, value):
+    """
+    Reviewer/LLM-confirmed values can arrive as strings even when the
+    schema expects a bool, int, or list (e.g. "False", "True",
+    "public,private"). Coerce to the type shared/schema.py expects
+    before it ever reaches the evaluator, so a stray string can't flip
+    a verdict (a truthy "False" string, or a comma-string that never
+    matches a list membership check).
+    """
+    BOOL_FIELDS = {"ssh_enabled", "telnet_enabled", "logging_enabled", "banner_configured"}
+    LIST_FIELDS = {"snmp_default_community"}
+
+    if field in BOOL_FIELDS:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "yes", "on")
+        return bool(value)
+
+    if field == "session_timeout_seconds":
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+            return int(value.strip())
+        return value  # leave as-is; evaluator should treat non-numeric as unevaluable
+
+    if field in LIST_FIELDS:
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            return [v.strip() for v in value.split(",") if v.strip()]
+        return [value] if value else []
+
+    return value  # password_encryption and anything else: leave as-is (string)
 
 def process_config(config_text: str, user_declared_vendor: str = None, org_id: str = None) -> dict:
     """
@@ -136,7 +170,7 @@ def apply_confirmation(
 
     if result["status"] == "promoted" and result["field"] != "unclear":
         config = dict(config)
-        config[result["field"]] = result["value"]
+        config[result["field"]] = _coerce_field_value(result["field"], result["value"])
 
     return config, result
 
