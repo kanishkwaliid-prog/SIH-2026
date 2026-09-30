@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 from groq import Groq
 
 from .memory import check_memory, save_confirmed, init_db
-from .prefilter import classify_locally 
+from .prefilter import classify_locally
+from .redaction import redact_sensitive, residual_risk 
 
 load_dotenv()
 
@@ -277,6 +278,10 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
 
 def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict:
     redacted_line = redact_sensitive(raw_line)
+    risk = residual_risk(redacted_line)
+    if risk:
+        # safety gate: do NOT send; the line goes to human review instead
+        raise LLMUnavailable("Blocked by safety gate (" + ", ".join(risk) + ") - sent to human review")
     user_msg = f"Config line: {redacted_line}"
     if vendor_hint:
         user_msg += f"\nVendor hint: {vendor_hint}"
@@ -304,18 +309,18 @@ CACHE_FILE = "block2b/llm_cache.json"
 _cache = json.load(open(CACHE_FILE)) if os.path.exists(CACHE_FILE) else {}
 _quota_exhausted = False
 
-def classify_unknown_line(raw_line: str, vendor_hint: str = None) -> dict:
+def classify_unknown_line(raw_line: str, vendor_hint: str = None, *, org_id: str) -> dict:
     if not raw_line or not raw_line.strip():
         return {"field": "unclear", "value": None, "confidence": 1.0,
                 "reasoning": "Empty line", "source": "local_rules"}
-    cached = check_memory(raw_line, vendor_hint)
+    cached = check_memory(raw_line, vendor_hint, org_id=org_id)
     if cached is not None:
         return cached
     local_result = classify_locally(raw_line)    
     if local_result is not None:
         return local_result
 
-    key = f"{vendor_hint}|{raw_line}"
+    key = f"{vendor_hint}|{redact_sensitive(raw_line)}"
     if key in _cache:
         return _cache[key]
 
@@ -343,6 +348,10 @@ def confirm_classification(raw_line: str, field: str, value, vendor_hint: str = 
 def _guess_vendor_inner(config_text: str) -> dict:
     snippet = "\n".join(config_text.splitlines()[:40])
     snippet = redact_sensitive(snippet)
+    # safety gate: drop any line that still looks risky instead of sending it
+    snippet = "\n".join(l for l in snippet.splitlines() if not residual_risk(l))
+    if not snippet.strip():
+        raise LLMUnavailable("Nothing safe to send for vendor guess - choose the vendor manually")
 
     response = get_client().chat.completions.create(
         model=MODEL,
@@ -366,42 +375,3 @@ def guess_vendor(config_text: str) -> dict:
         _guess_vendor_inner, config_text,
         fallback=VENDOR_FALLBACK
     )
-
-def redact_sensitive(text: str) -> str:
-    """
-    Strips values that reveal real network topology or credentials before
-    this text is sent to the cloud LLM. The classifier only needs to
-    recognize COMMAND STRUCTURE (is this SSH-related? what encryption
-    scheme?) -- it never needs to see the actual IP, password, or
-    community string. Check LINE_CLASSIFY_SYSTEM_PROMPT above: the
-    "value" the model returns is always a bool/int/scheme-name
-    (true, 600, "type7"), never a raw secret -- so redacting the secret
-    itself costs no classification accuracy.
-
-    This is a heuristic covering the common cases, not an exhaustive
-    DLP filter -- flag any pattern that slips through so it can be added.
-    """
-    redacted = text
-
-    # IPv4 addresses (also catches subnet masks -- harmless to redact those too)
-    redacted = re.sub(r'\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b', '<IP_ADDR>', redacted)
-
-    # Cisco-style secrets: "password X", "secret X", "enable secret 5 X",
-    # "username admin secret 5 X" -- keep the keyword + type-number prefix
-    # (needed to tell type5 vs type7 apart), redact only the actual value.
-    # Also keep scheme words (Huawei "irreversible-cipher"/"cipher", Arista
-    # "sha512") so the hash that FOLLOWS them is redacted, not the scheme word.
-    redacted = re.sub(
-        r'\b((?:enable\s+)?(?:secret|password))\s+'
-        r'((?:\d+|cipher|irreversible-cipher|simple|sha512|sha256|scrypt|md5)\s+)?(\S+)',
-        lambda m: f"{m.group(1)} {m.group(2) or ''}<REDACTED>",
-        redacted, flags=re.IGNORECASE
-    )
-
-    # SNMP community strings, both common forms:
-    #   snmp-server community <string> RO
-    #   snmp-server host <ip> version 2c <string>
-    redacted = re.sub(r'(snmp-server community\s+)(\S+)', r'\1<REDACTED>', redacted, flags=re.IGNORECASE)
-    redacted = re.sub(r'(version\s+\d+c\s+)(\S+)', r'\1<REDACTED>', redacted, flags=re.IGNORECASE)
-
-    return redacted

@@ -11,7 +11,6 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
-src/backend/simulate_reviewers.py
 
 # Database
 *.db
@@ -38,3 +37,15 @@ compare_results.csv
 memory.db
 .env
 *.bak
+# LLM response cache (auto-generated at runtime)
+src/backend/block2b/llm_cache.json
+
+# Extra safety
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+*.log
+Thumbs.db
+node_modules/src/backend/block2b/llm_cache.json

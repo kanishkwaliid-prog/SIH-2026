@@ -1,0 +1,125 @@
+framework: ISO27001
+version: "1.0"
+# INTERPRETIVE MAPPING — NOT AN OFFICIAL OR CERTIFIED COMPLIANCE MAPPING.
+# These rules are this project's own technical interpretation of named
+# ISO/IEC 27001:2022 Annex A control *intent* applied to device-level
+# config fields. Annex A is a reference set of controls selected via the
+# organization's risk assessment and Statement of Applicability; it is not
+# a numbered device-hardening checklist. Rule IDs (ISO27001-*) are ours,
+# not ISO's or a certification body's. A real ISO 27001 audit also requires
+# ISMS scope, risk treatment, policies, and operational evidence this tool
+# cannot check.
+
+rules:
+  - id: ISO27001-1
+    field: ssh_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "ISO/IEC 27001:2022 Annex A A.8.20 (Networks security) requires networks and network devices to be secured, managed and controlled — mapped here to requiring SSH for remote administration of the device."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+      juniper_junos: |
+        set system services ssh
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+        set deviceconfig system service disable-http yes
+
+  - id: ISO27001-2
+    field: telnet_enabled
+    condition:
+      equals: false
+    severity: critical
+    explanation: "ISO/IEC 27001:2022 Annex A A.8.9 (Configuration management) requires security configurations of hardware, software, services and networks to be established and implemented — mapped here to disabling Telnet as an insecure management service."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         transport input ssh
+         no transport input telnet
+      juniper_junos: |
+        delete system services telnet
+      palo_alto: |
+        set deviceconfig system service disable-telnet yes
+
+  - id: ISO27001-3
+    field: session_timeout_seconds
+    condition:
+      gt: 0
+      lte: 600
+    severity: high
+    explanation: "ISO/IEC 27001:2022 Annex A A.5.15 (Access control) requires access to information and information processing facilities to be limited — mapped here to terminating idle management sessions within 10 minutes (600 seconds). A value of 0 (never expire) fails."
+    remediation:
+      cisco_ios: |
+        line vty 0 4
+         exec-timeout 10 0
+        line con 0
+         exec-timeout 10 0
+      juniper_junos: |
+        set system login idle-timeout 10
+      palo_alto: |
+        set deviceconfig setting management idle-timeout 10
+
+  - id: ISO27001-4
+    field: logging_enabled
+    condition:
+      equals: true
+    severity: high
+    explanation: "ISO/IEC 27001:2022 Annex A A.8.15 (Logging) requires logs that record activities, exceptions, faults and other relevant events to be produced, stored, protected and analysed — mapped here to enabling device logging."
+    remediation:
+      cisco_ios: |
+        logging buffered 16384
+        logging trap informational
+      juniper_junos: |
+        set system syslog file messages any any
+      palo_alto: |
+        set deviceconfig system syslog setting
+
+  - id: ISO27001-5
+    field: password_encryption
+    condition:
+      not_in: [none, type7]
+    severity: high
+    explanation: "ISO/IEC 27001:2022 Annex A A.8.5 (Secure authentication) requires secure authentication for access to systems — mapped here to rejecting cleartext (none) and reversible type-7 stored passwords in the device config."
+    remediation:
+      cisco_ios: |
+        service password-encryption
+        enable secret
+      juniper_junos: |
+        set system login password format sha512
+      palo_alto: |
+        set mgt-config password-complexity enabled yes
+
+  - id: ISO27001-6
+    field: banner_configured
+    condition:
+      equals: true
+    severity: medium
+    explanation: "ISO/IEC 27001:2022 Annex A A.5.15 (Access control) is interpreted here as requiring a visible access warning on interactive logon — mapped to requiring a login/MOTD banner. Annex A has no dedicated 'banner' control."
+    remediation:
+      cisco_ios: |
+        banner login ^
+        Authorized access only.
+        ^
+      juniper_junos: |
+        set system login message "Authorized access only."
+      palo_alto: |
+        set deviceconfig system login-banner "Authorized access only."
+
+  - id: ISO27001-7
+    field: snmp_default_community
+    condition:
+      excludes: [public, private]
+    severity: critical
+    explanation: "ISO/IEC 27001:2022 Annex A A.8.9 (Configuration management) requires secure configurations to be implemented — mapped here to excluding factory-default SNMP communities public and private."
+    remediation:
+      cisco_ios: |
+        no snmp-server community public
+        no snmp-server community private
+        snmp-server community <unique-string> ro
+      juniper_junos: |
+        delete snmp community public
+        delete snmp community private
+      palo_alto: |
+        delete snmp-setting access-setting version v2c
