@@ -23,6 +23,10 @@ def detect_vendor(config_text: str) -> tuple[str, str, str]:
     confirmation screen so the user understands *why* this was guessed.
     """
     stripped = config_text.strip()
+    # pfSense: XML export with a <pfsense> root. Must be checked BEFORE
+    # Palo Alto, whose check treats any "<?xml" file as PAN-OS.
+    if re.search(r"<pfsense>", stripped[:2000]):
+        return "pfsense", "high", "Detected pfSense XML config (<pfsense> root)"
 
     # Palo Alto: either raw XML config export, or 'set deviceconfig' CLI style
     if stripped.startswith("<?xml") or "<entry name=" in stripped:

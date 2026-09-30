@@ -31,7 +31,7 @@ CONFIDENCE_THRESHOLD = 0.70  # tune with tune_prefilter_threshold.py
 
 # Lines matching this are ALWAYS sent to Groq, never guessed locally --
 # session_timeout_seconds needs real arithmetic, which this model doesn't do.
-_TIMEOUT_PATTERN = re.compile(r"\b(exec-timeout|session[-_ ]?timeout|idle-timeout)\b", re.IGNORECASE)
+_TIMEOUT_PATTERN = re.compile(r"\b(exec-timeout|session[-_ ]?timeout|idle-timeout|inactivity-timeout)\b", re.IGNORECASE)
 
 _model = None
 
@@ -97,6 +97,21 @@ def classify_locally(raw_line: str, threshold: float = CONFIDENCE_THRESHOLD):
             "source": "local_rules",
         }
 
+    if len(rule_hits) > 1:
+        # Multi-field line (e.g. "protocol inbound all" sets SSH and Telnet).
+        # The single field/value return shape can't carry both, so report the
+        # riskier one: an audit must never miss that Telnet is open.
+        if "telnet_enabled:true" in rule_hits:
+            return {
+                "field": "telnet_enabled",
+                "value": True,
+                "confidence": 1.0,
+                "reasoning": "Multi-field line; reporting Telnet enabled (riskier setting)",
+                "source": "local_rules",
+            }
+        # Any other combination: defer to the LLM. Never fall through to the
+        # TF-IDF model, which would answer "unclear" for these lines.
+        return None
     if not is_model_available():
         return None
 
