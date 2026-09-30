@@ -92,14 +92,14 @@ session_timeout_seconds (int)
 logging_enabled (bool)   [NARROW definition]
   true : line turns logging on OR configures a log destination/forwarding:
          "logging on", "logging trap informational", "logging buffered 8192",
-         "logging host 10.1.1.1", "logging server 10.1.1.1", "logging 1.2.3.4",
+         "logging host 10.1.1.1", "logging server 10.1.1.1", "logging 1.2.3.4", "logging level bgp 4",
          "set system syslog host ... any notice", "add syslog log-remote-address ...",
          "info-center enable", "info-center loghost ...",
          PAN-OS "set shared log-settings ... send-syslog ...".
   false: line turns logging off: "no logging on", "no logging trap",
          "delete system syslog", "undo info-center enable".
   unclear: logging TUNING or reference lines that do not turn it on/off or set a destination:
-         "logging level bgp 4", "logging rate-limit 100", "logging device-id hostname",
+         "logging rate-limit 100", "logging device-id hostname",
          "logging source-interface X", "logging facility local0", "logging suppress rule X",
          "no logging console", "no logging event ...", "show logging", "clear logging ...",
          "config log syslogd2 setting", "/system logging".
@@ -134,7 +134,7 @@ Line: "transport input ssh telnet" -> {"field": "telnet_enabled", "value": true,
 Line: "ssh server v2" -> {"field": "unclear", "value": null, "confidence": 0.85, "reasoning": "SSH version parameter, not an enable/disable"}
 Line: "exec-timeout 10 0" -> {"field": "session_timeout_seconds", "value": 600, "confidence": 0.95, "reasoning": "10 minutes = 600 seconds"}
 Line: "logging host 198.51.100.200" -> {"field": "logging_enabled", "value": true, "confidence": 0.9, "reasoning": "Configures a syslog destination"}
-Line: "logging level bgp 4" -> {"field": "logging_enabled", "value": true, "confidence": 0.85, "reasoning": "Per-facility severity tuning, not on/off"}
+Line: "logging level bgp 4" -> {"field": "logging_enabled", "value": true, "confidence": 0.85, "reasoning": "Sets a logging severity level, so logging is enabled"}
 Line: "no logging on" -> {"field": "logging_enabled", "value": false, "confidence": 0.95, "reasoning": "Disables all logging"}
 Line: "username admin privilege 15 secret 5 $1$abc$xyz" -> {"field": "password_encryption", "value": "type5", "confidence": 0.95, "reasoning": "Type 5 (MD5) hash"}
 Line: "neighbor X password 7 XOF6i6" -> {"field": "password_encryption", "value": "type7", "confidence": 0.9, "reasoning": "Type 7 reversible encryption"}
