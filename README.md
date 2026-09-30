@@ -260,8 +260,6 @@ Auth design and API shapes: `docs/auth_decisions.md`.
 
 ## 13. Future Scope
 
-## 13. Future Scope
-
 - **Live device polling** — pulling configs directly from devices via
   SSH (Netmiko/NAPALM) rather than trusting an uploaded file, closing
   the file-authenticity gap that no upload-based tool can fully solve

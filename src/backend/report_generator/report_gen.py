@@ -2,7 +2,7 @@ import os
 import sys
 import platform
 from datetime import datetime, timezone
-from jinja2 import Template
+from jinja2 import Environment
 import json
 import io
 import csv
@@ -244,7 +244,7 @@ def prepare_payload(raw_eval_result: dict, framework: str = "CIS Baseline") -> d
     total_checks = len(findings_raw)
     
     evaluated_total = passed_count + failed_count
-    score = round((passed_count / evaluated_total) * 100, 1) if evaluated_total > 0 else 100.0
+    score = round((passed_count / evaluated_total) * 100, 1) if evaluated_total > 0 else 0.0
     
     critical_count = sum(1 for f in findings_raw if f.get("status") == "FAIL" and str(f.get("severity")).upper() == "CRITICAL")
     high_count = sum(1 for f in findings_raw if f.get("status") == "FAIL" and str(f.get("severity")).upper() == "HIGH")
@@ -300,9 +300,13 @@ def generate_pdf_bytes(raw_eval_result: dict, framework: str = "CIS Baseline") -
         ) from exc
 
     payload = prepare_payload(raw_eval_result, framework)
-    template = Template(REPORT_TEMPLATE)
+    env = Environment(autoescape=True)
+    template = env.from_string(REPORT_TEMPLATE)
     rendered_html = template.render(**payload)
-    return HTML(string=rendered_html).write_pdf()
+    def _blocked_url_fetcher(url):
+        raise ValueError(f"External resource fetching disabled: {url}")
+
+    return HTML(string=rendered_html, url_fetcher=_blocked_url_fetcher).write_pdf()
 
 def generate_pdf_file(raw_eval_result: dict, output_filename: str = "compliance_report.pdf", framework: str = "CIS Baseline"):
     pdf_bytes = generate_pdf_bytes(raw_eval_result, framework)
@@ -314,6 +318,9 @@ def generate_json_bytes(raw_eval_result: dict, framework: str = "CIS Baseline") 
     payload = prepare_payload(raw_eval_result, framework)
     return json.dumps(payload, indent=2, default=str).encode("utf-8")
 
+def _csv_safe(v):
+    s = str(v) if v is not None else ""
+    return "'" + s if s and s[0] in ("=", "+", "-", "@") else s
 
 def generate_csv_bytes(raw_eval_result: dict, framework: str = "CIS Baseline") -> bytes:
     payload = prepare_payload(raw_eval_result, framework)
@@ -330,18 +337,18 @@ def generate_csv_bytes(raw_eval_result: dict, framework: str = "CIS Baseline") -
     ])
     for f in payload["findings"]:
         writer.writerow([
-            device.get("hostname", "N/A"),
-            device.get("vendor", "N/A"),
-            device.get("os_version", "N/A"),
+            _csv_safe(device.get("hostname", "N/A")),
+            _csv_safe(device.get("vendor", "N/A")),
+            _csv_safe(device.get("os_version", "N/A")),
             payload["summary"]["score"],
-            f.get("rule_id"),
-            f.get("framework"),
-            f.get("status"),
-            f.get("severity"),
-            f.get("field_checked"),
-            f.get("observed_value"),
-            f.get("explanation"),
-            f.get("remediation_cli"),
+            _csv_safe(f.get("rule_id")),
+            _csv_safe(f.get("framework")),
+            _csv_safe(f.get("status")),
+            _csv_safe(f.get("severity")),
+            _csv_safe(f.get("field_checked")),
+            _csv_safe(f.get("observed_value")),
+            _csv_safe(f.get("explanation")),
+            _csv_safe(f.get("remediation_cli")),
         ])
     return output.getvalue().encode("utf-8")
 
