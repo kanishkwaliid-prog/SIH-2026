@@ -1,0 +1,19 @@
+sysname HW-Core-01
+#
+info-center enable
+info-center loghost 10.1.1.1
+#
+stelnet server enable
+telnet server enable
+#
+aaa
+ local-user admin password irreversible-cipher $1a$abc$
+ local-user admin service-type ssh
+#
+user-interface vty 0 4
+ authentication-mode aaa
+ protocol inbound all
+ idle-timeout 10 0
+#
+header login information "Authorized only"
+return

@@ -3163,7 +3163,7 @@ set internet-service-id 1900553,unclear
 9C415178 311A9E2A FE92EA02 12AE72FC 88D85654 9274B0C6 16A5454E 7DC4F251,unclear
 logging level spanning-tree 4,logging_enabled:true
 set internet-service-id 17695068,unclear
-username admin role network-admin secret sha512 $6$fWzDTNTpVx3TJ6HQ$33r4F7c1zX4bCBDqphtNXc4sxCuRvrVOmbwJt.Hfehd4mZyYET1qsSHSpdv5X4FLBG.Gsdt2MlIa8Rd4p1IEu1,unclear
+username admin role network-admin secret sha512 $6$fWzDTNTpVx3TJ6HQ$33r4F7c1zX4bCBDqphtNXc4sxCuRvrVOmbwJt.Hfehd4mZyYET1qsSHSpdv5X4FLBG.Gsdt2MlIa8Rd4p1IEu1,password_encryption:sha512
 set internet-service-id 4063239,unclear
 set internet-service-id 3145920,unclear
 set internet-service-id 1900726,unclear
@@ -3240,7 +3240,7 @@ set internet-service-id 524292,unclear
 set internet-service-id 8650754,unclear
 set internet-service-id 3473424,unclear
 "edit ""ISLOnline-SSH""",unclear
-username operator privilege 15 role network-admin secret sha512 $6$fakeSalt$fakeHashSha512AbcDefGhiJklMnoPqrStuVwxYz0123456789AbcDefGhiJklMnoPqrStuVwxYz01234,unclear
+username operator privilege 15 role network-admin secret sha512 $6$fakeSalt$fakeHashSha512AbcDefGhiJklMnoPqrStuVwxYz0123456789AbcDefGhiJklMnoPqrStuVwxYz01234,password_encryption:sha512
 set internet-service-id 458756,unclear
 set internet-service-id 11796481,unclear
 set internet-service-id 4128769,unclear
@@ -4388,7 +4388,7 @@ set aging-time 300,unclear
 disabled=no l2mtu=1592 loop-protect=default loop-protect-disable-time=5m \,unclear
 description x spine02,unclear
 YMcvvtqQH5cXECM1M+Jv9Sy70OZtFbxkr9FsKgFRjHXKB8+2e2TH4G+6ZMWUuYjD,unclear
-username admin role network-admin secret sha512 $6$E6BvvRqMzRBBMQ2T$dZxlhTTkJdV6qW70W.CNEhF4zF6GzJfAbKulJ.tmP7tQ.Z2SkI.gmVbjOarUdsDn4EszUrgUo.K1/dlZuofOe.,unclear
+username admin role network-admin secret sha512 $6$E6BvvRqMzRBBMQ2T$dZxlhTTkJdV6qW70W.CNEhF4zF6GzJfAbKulJ.tmP7tQ.Z2SkI.gmVbjOarUdsDn4EszUrgUo.K1/dlZuofOe.,password_encryption:sha512
 "edit ""Cisco-Webex""",unclear
 set uuid fe1fa9b4-2c5f-51f1-5dd6-41c6209aa098,unclear
 unset bword-table,unclear
@@ -5210,7 +5210,7 @@ set system syslog file messages authorization none,logging_enabled:true
 "edit ""ISLOnline-LDAP""",unclear
 "default-lifetime ""300""",unclear
 G15MjO8n3s2uIJmERHpUg50hgwLHFvBrF8xPNkj/3fz0Xr1qNjPAHQXz5gkGrHg0,unclear
-username admin privilege 15 role network-admin secret sha512 $6$MFlXkMnX0HvcL4ud$rLVaIBK38AJF.mowTzZ38vD/o0pGAzkRluMt4QmctLuSMHjwnti99Z4cwohb4yYGjL5W6o42aSM7S27gVpTW90,unclear
+username admin privilege 15 role network-admin secret sha512 $6$MFlXkMnX0HvcL4ud$rLVaIBK38AJF.mowTzZ38vD/o0pGAzkRluMt4QmctLuSMHjwnti99Z4cwohb4yYGjL5W6o42aSM7S27gVpTW90,password_encryption:sha512
 set admintimeout 10,unclear
 set uuid 4ddfa40e-5ce5-51f0-9702-94257be0ed13,unclear
 timers delegation-timeout 10,unclear
@@ -7570,7 +7570,7 @@ set session-pickup-connectionless enable,unclear
 "edit ""Box-ICMP""",unclear
 set fast-policy-match enable,unclear
 <radius_auth_port>11812</radius_auth_port>,unclear
-username arista privilege 15 secret sha512 $6$ZEiPXaEMcm5rjw7p$DB7pgkMJdZUGUlCzh7QlrNyWrwkE2iFSosNl5JUc4PfYp69vdYsaKgyzuYwpJ1NuePXby46LLGs7pruDbUGyM.,unclear
+username arista privilege 15 secret sha512 $6$ZEiPXaEMcm5rjw7p$DB7pgkMJdZUGUlCzh7QlrNyWrwkE2iFSosNl5JUc4PfYp69vdYsaKgyzuYwpJ1NuePXby46LLGs7pruDbUGyM.,password_encryption:sha512
 set rogue-scan-mac-adjacency 7,unclear
 "edit ""TeamViewer-ICMP""",unclear
 ! Source: https://github.com/aruba/aoscx-ansible-dcn-workflows,unclear
@@ -8415,7 +8415,7 @@ set captive-portal-port 7830,unclear
 set color 13,unclear
 set secondary 96.45.46.46,unclear
 vni 10000600 l2,unclear
-username cvp-infra privilege 15 secret sha512 $6$.I7/ZR/zlLIUv8fr$vR/JvLTbq5amMt6Y1SE4CKlPDv/AzJYlFYHkUZ17BDovm0Oi4aLdBULe1EmZ0Y9xKjVLMKpxCSKmlrAioDxbQ0,unclear
+username cvp-infra privilege 15 secret sha512 $6$.I7/ZR/zlLIUv8fr$vR/JvLTbq5amMt6Y1SE4CKlPDv/AzJYlFYHkUZ17BDovm0Oi4aLdBULe1EmZ0Y9xKjVLMKpxCSKmlrAioDxbQ0,password_encryption:sha512
 "edit ""Microsoft-Azure.AD""",unclear
 class-map match-any system-cpp-police-system-critical,unclear
 <eap-radius>,unclear
@@ -9223,7 +9223,7 @@ load-interval default 5,unclear
 <authserver>,unclear
 "edit ""HP-Other""",unclear
 set radius-port 1812,unclear
-username aaa privilege 15 secret sha512 $6$1b/rOJXKhrCHmRXC$CZwapm2wW/hSXzssnE8Mgdv/VXNzKvhwlp0mifzQxiAj5YpLC/BHyE2Dt9/hlJcwPBL/dJxms9pxNwaTjNrPr.,unclear
+username aaa privilege 15 secret sha512 $6$1b/rOJXKhrCHmRXC$CZwapm2wW/hSXzssnE8Mgdv/VXNzKvhwlp0mifzQxiAj5YpLC/BHyE2Dt9/hlJcwPBL/dJxms9pxNwaTjNrPr.,password_encryption:sha512
 "<form action=\""/\"" method=\""post\"" onsubmit=\'return form_check();\'>",unclear
 "edit ""Facebook-LDAP""",unclear
 <max-src-states/>,unclear
@@ -17704,3 +17704,55 @@ no logging monitor,unclear
 no logging source-interface,unclear
 no logging buffered,unclear
 no logging rate-limit,unclear
+username arista privilege 15 secret sha512 $6$ZEiPXaEMcm5rjw7p$DB7pgkMJdZUGUlCzh7QlrNyWrwkE2iFSosNl5JUc4PfYp69vdYsaKgyzuYwpJ1NuePXby46LLGs7pruDbUGyM.,password_encryption:sha512
+username cvp-infra privilege 15 secret sha512 $6$.I7/ZR/zlLIUv8fr$vR/JvLTbq5amMt6Y1SE4CKlPDv/AzJYlFYHkUZ17BDovm0Oi4aLdBULe1EmZ0Y9xKjVLMKpxCSKmlrAioDxbQ0,password_encryption:sha512
+logging host 10.83.28.52,logging_enabled:true
+username telemetry secret 5 $1$vA97cJ5S$ac7KClc1KmrHRCyWKBXfq1,password_encryption:type5
+stelnet server enable,ssh_enabled:true
+stelnet ipv6 server enable,ssh_enabled:true
+undo stelnet server enable,ssh_enabled:false
+undo stelnet ipv6 server enable,ssh_enabled:false
+protocol inbound ssh,ssh_enabled:true
+protocol inbound ssh port 1025,ssh_enabled:true
+telnet server enable,telnet_enabled:true
+telnet ipv6 server enable,telnet_enabled:true
+undo telnet server enable,telnet_enabled:false
+undo telnet ipv6 server enable,telnet_enabled:false
+protocol inbound telnet,telnet_enabled:true
+info-center enable,logging_enabled:true
+info-center loghost 10.1.1.1,logging_enabled:true
+info-center loghost 192.168.10.5 facility local5,logging_enabled:true
+info-center loghost 10.137.217.10 channel 2,logging_enabled:true
+undo info-center enable,logging_enabled:false
+"header login information ""Authorized access only""",banner_configured:true
+"header shell information ""Welcome to the device""",banner_configured:true
+header login file banner.txt,banner_configured:true
+header shell file motd.txt,banner_configured:true
+telnet server port 1025,unclear
+telnet server-source all-interface,unclear
+telnet server-source -i Vlanif 10,unclear
+ssh server-source -i Vlanif 10,unclear
+ssh user admin123 service-type stelnet,unclear
+ssh user admin123 authentication-type password,unclear
+ssh user client001,unclear
+ssh authentication-type default password,unclear
+ssh server timeout 60,unclear
+ssh server authentication-retries 3,unclear
+rsa local-key-pair create,unclear
+local-user admin123 service-type ssh,unclear
+local-user admin123 service-type telnet,unclear
+local-user admin123 privilege level 15,unclear
+aaa,unclear
+authentication-mode aaa,unclear
+authentication-mode password,unclear
+user-interface vty 0 4,unclear
+user-interface maximum-vty 8,unclear
+user privilege level 3,unclear
+acl number 2001,unclear
+rule 5 permit source 10.137.217.10 0,unclear
+rule 10 deny source 10.137.217.20 0,unclear
+sysname SSH_Server,unclear
+info-center source default channel 2 log state off,unclear
+info-center logbuffer size 1024,unclear
+info-center timestamp log date,unclear
+info-center channel 2 name loghost,unclear

@@ -46,6 +46,19 @@ RULES = [
     ("telnet_enabled:true",    r"^feature\s+telnet\b"),
     ("telnet_enabled:true",    r"^protocol:\s*legacy-telnet$"),
 
+    # Huawei VRP: "undo" is the negation keyword; STelnet == SSH.
+    ("ssh_enabled:false",      r"^undo\s+stelnet(\s+ipv6)?\s+server\s+enable$"),
+    ("ssh_enabled:true",       r"^stelnet(\s+ipv6)?\s+server\s+enable$"),
+    ("telnet_enabled:false",   r"^undo\s+telnet(\s+ipv6)?\s+server\s+enable$"),
+    ("telnet_enabled:true",    r"^telnet(\s+ipv6)?\s+server\s+enable$"),
+    # Huawei parameter lines that mention ssh/telnet but do NOT toggle the service.
+    # Pinned to "unclear" here because the TF-IDF model over-fires on the words
+    # "telnet"/"ssh" (small classes + class_weight="balanced").
+    ("unclear",                r"^telnet(\s+ipv6)?\s+server(-source|\s+(port|-source|source))\b"),
+    ("unclear",                r"^ssh(\s+ipv6)?\s+server(-source|\s+(timeout|authentication-retries|port|cipher|hmac|key-exchange|dh-exchange|publickey|compatible-ssh1x))\b"),
+    ("unclear",                r"^ssh\s+user\b"),
+    ("unclear",                r"^local-user\s+\S+\s+service-type\b"),
+
     ("logging_enabled:false",  r"^no\s+logging\s+(on|trap)\b"),
     ("unclear",                r"^no\s+logging\s+(?!on\b|trap\b)\S+"),
     ("logging_enabled:true",   r"^logging\s+(on|enable|trap|buffered|host)\b"),
@@ -59,7 +72,13 @@ RULES = [
                                 r"log-settings\b.*\bsend-syslog\b"),
     ("logging_enabled:true",   r"^set\s+log-collector-group\b.*log-settings\b.*\bsend-syslog\b"),
 
+    # Huawei VRP logging (info-center is the syslog subsystem).
+    ("logging_enabled:false",  r"^undo\s+info-center\s+enable$"),
+    ("logging_enabled:true",   r"^info-center\s+(enable|loghost)\b"),
+
     ("banner_configured:true", r"^banner\s+(motd|login|exec)\b"),
+    # Huawei VRP banner: "header login|shell information|file ..."
+    ("banner_configured:true", r"^header\s+(login|shell)\s+(information|file)\b"),
     # Confirmed 3x in real_eval.csv (pre-login-banner / post-login-banner /
     # PAN-OS deviceconfig login-banner) -- the old rule required the exact
     # "banner motd|login|exec" prefix and missed all of these.
@@ -73,6 +92,7 @@ RULES = [
     ("password_encryption:type7", r"\bsecret\s+7\s+\S+"),
     ("password_encryption:type5", r"\bsecret\s+5\s+\S+"),
     # Confirmed 2x in real_eval.csv -- old rule only covered "secret 5".
+    ("password_encryption:sha512", r"\bsecret\s+sha512\s+\S+"),
     ("password_encryption:type5", r"\bpassword\s+5\s+\S+"),
     # Ported from label_helper.py -- no eval hit yet.
     ("password_encryption:type5", r"\busers\s+\S+\s+phash\s+\$1\$"),
@@ -88,6 +108,18 @@ RULES = [
     # Anchored to exactly two tokens so it can't shadow the type7/type5/
     # type0 rules above, which all require a digit as the second token.
     ("password_encryption:none",  r"^password\s+\S+$"),
+    # Huawei VRP password schemes, mapped onto existing password_encryption labels.
+    # cipher = reversible (weak, like Cisco type7); irreversible-cipher = one-way
+    # hash (closest existing label is type5); simple = plaintext.
+    ("password_encryption:type7", r"^(?:.*\s)?password\s+cipher\s+\S"),
+    ("password_encryption:type5", r"^(?:.*\s)?password\s+irreversible-cipher\s+\S"),
+    ("password_encryption:none",  r"^(?:.*\s)?password\s+simple\s+\S"),
+    # Check Point Gaia clish.
+    ("telnet_enabled:true",    r"^set\s+net-access\s+telnet\s+on$"),
+    ("telnet_enabled:false",   r"^set\s+net-access\s+telnet\s+off$"),
+    ("logging_enabled:true",   r"^add\s+syslog\s+log-remote-address\b"),
+    ("banner_configured:true", r"^set\s+message\s+(banner|motd)\s+on\b"),
+    ("password_encryption:type5", r"^set\s+user\s+\S+\s+password-hash\s+\$1\$"),
 ]
 
 _COMPILED = [(lbl, re.compile(p, re.IGNORECASE)) for lbl, p in RULES]
@@ -107,6 +139,19 @@ def rule_labels(line: str) -> set[str]:
             return {"ssh_enabled:true", "telnet_enabled:true"}
         if "none" in modes:
             return {"ssh_enabled:false", "telnet_enabled:false"}
+        out = set()
+        if "ssh" in modes:
+            out.add("ssh_enabled:true")
+        if "telnet" in modes:
+            out.add("telnet_enabled:true")
+        return out
+
+    # Huawei VRP VTY: "protocol inbound ssh|telnet|all" (multi-label like transport input).
+    m = re.match(r"^protocol\s+inbound\s+(.+)$", text, re.IGNORECASE)
+    if m:
+        modes = m.group(1).lower().split()
+        if "all" in modes:
+            return {"ssh_enabled:true", "telnet_enabled:true"}
         out = set()
         if "ssh" in modes:
             out.add("ssh_enabled:true")

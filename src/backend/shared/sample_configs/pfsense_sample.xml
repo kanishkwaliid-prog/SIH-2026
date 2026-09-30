@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- SYNTHETIC sample: structure only, not a real export -->
+<pfsense>
+  <version>22.0</version>
+  <system>
+    <hostname>fw01</hostname>
+    <domain>example.local</domain>
+    <enablesshd/>
+    <webgui>
+      <session_timeout>15</session_timeout>
+    </webgui>
+  </system>
+  <snmpd>
+    <enable/>
+    <rocommunity>public</rocommunity>
+  </snmpd>
+</pfsense>

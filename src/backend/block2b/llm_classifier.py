@@ -62,7 +62,10 @@ Valid fields and their value types:
 - ssh_enabled (bool): line enables/disables SSH access (e.g. "ip ssh version 2", "transport input ssh")
 - telnet_enabled (bool): line enables/disables Telnet access (e.g. "transport input telnet")
 - session_timeout_seconds (int): line sets a session/exec timeout, converted to total seconds
-  (e.g. "exec-timeout 10 0" means 10 minutes 0 seconds -> 600; "ip ssh time-out 60" -> 60)
+  
+  (e.g. "exec-timeout 10 0" means 10 minutes 0 seconds -> 600; "ip ssh time-out 60" -> 60;
+  "set inactivity-timeout 10" is Check Point, value in minutes -> 600;
+  "cli idle-timeout default 5" is SonicWall, value in minutes -> 300)
 - logging_enabled (bool): line turns logging/syslog on or off (e.g. "logging trap informational" -> true,
   "no logging on" -> false)
 - password_encryption (str): line sets a password encryption/hashing scheme -- use the short form
@@ -92,7 +95,18 @@ VENDOR_GUESS_SYSTEM_PROMPT = """You are a network configuration vendor identifie
 Given a snippet of raw configuration text, guess which vendor/OS produced it.
 
 Common vendors: Cisco IOS, Cisco NX-OS, Juniper JunOS, Palo Alto PAN-OS,
-Fortinet FortiOS, Arista EOS, Unknown.
+Fortinet FortiOS, Arista EOS, Huawei VRP, Check Point Gaia, SonicWall SonicOS, Unknown.
+
+Distinguishing syntax markers:
+- Palo Alto PAN-OS: flat "set deviceconfig ...", "set network ...", "set rulebase ...", "set zone ...", "set shared ..." (deep hierarchical paths; short "set hostname/ntp/interface" lines alone are NOT enough to pick PAN-OS)
+- Juniper JunOS: "set system ...", "set interfaces ..." (plural), "set protocols ...", or curly-brace hierarchy with "system {" and "interfaces {"
+- Check Point Gaia: short clish lines such as "set interface eth0 ipv4-address X mask-length N" (singular "interface"), "set static-route X nexthop gateway address Y on", "set user admin password-hash ...", "set expert-password-hash ...", "set net-access telnet on", "set inactivity-timeout N", "set message banner on ...", "add syslog log-remote-address ...", "set ntp server primary ...", "set clienv ..."
+- SonicWall SonicOS: "configure" to enter config mode, "cli idle-timeout ...", "cli banner", "show current-config", "no <command>" negations, and mode-based contexts
+- Fortinet FortiOS: "config system global" / "config firewall policy" blocks with "edit", "set", "next", "end"
+- Cisco IOS: "hostname X", "interface GigabitEthernet", "line vty 0 4", "service password-encryption", lines separated by "!"
+- Cisco NX-OS: "feature ...", "vdc ...", "interface Ethernet1/1"
+- Arista EOS: like Cisco IOS but with "management api", "daemon", "interface Management1"
+- Huawei VRP: "sysname X", "user-interface vty 0 4", "info-center ...", "undo ..." commands, "return" at the end
 
 Respond with ONLY valid JSON, no markdown, no extra text:
 {"vendor": "<vendor name or 'Unknown'>", "confidence": <float 0.0-1.0>, "reasoning": "<one short sentence>"}
@@ -127,7 +141,7 @@ def _safe_parse_json(raw_text: str, fallback: dict) -> dict:
     vendor), so a single hardcoded fallback shape here would silently
     return the wrong shape to whichever caller didn't match it.
     """
-    cleaned = re.sub(r"```json|```", "", raw_text).strip()
+    cleaned = re.sub(r"```json|```", "", raw_text or "").strip()
     match = re.search(r"\{.*\}", cleaned, re.DOTALL)
     cleaned = match.group(0) if match else cleaned
     try:
@@ -149,13 +163,14 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
     which function you're wrapping -- don't reuse one shape for both.
     """
     global _quota_exhausted
+
+    if fallback is None:
+        fallback = CLASSIFY_FALLBACK
+
     if _quota_exhausted:
         result = dict(fallback)
         result["reasoning"] = "Groq daily quota exhausted"
         return result
-
-    if fallback is None:
-        fallback = CLASSIFY_FALLBACK
 
     for attempt in range(retries + 1):
         try:
@@ -177,8 +192,6 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
                 result["reasoning"] = f"API error after retries: {str(e)}"
                 return result
             time.sleep(delay)
-            print(f"Groq attempt {attempt} failed: {type(e).__name__}: {e}")
-
 # ---------- Main functions ----------
 
 def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict:
@@ -256,8 +269,9 @@ def _guess_vendor_inner(config_text: str) -> dict:
 
     response = get_client().chat.completions.create(
         model=MODEL,
-        max_tokens=400,
+        max_tokens=1000,
         temperature=0,
+        reasoning_effort="low",
         messages=[
             {"role": "system", "content": VENDOR_GUESS_SYSTEM_PROMPT},
             {"role": "user", "content": snippet}
