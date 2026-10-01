@@ -92,10 +92,11 @@ _FREE_TEXT = re.compile(
 # ---------------------------------------------------------------------------
 # Words that may sit between the keyword and the real value and are NOT the
 # secret: type numbers (5, 7, 9), "ENC" (FortiGate), "ascii-text", "level 15",
-# hash names used by NTP keys, etc. They are kept so the classifier can still
-# tell type5 from type7.
+# hash names used by NTP keys, cipher markers (Huawei), etc. They are kept so
+# the classifier can still tell type5 from type7.
 _MODS = (r'(?:(?:enc|encrypted|ascii-text|hex|local|remote|clear|md5|sha1|sha256|'
-         r'sha384|sha512|hmac-sha1|hmac-sha256|cmac-aes-128|level\s+\d+|[0-9](?=\s))\s+)*')
+         r'sha384|sha512|hmac-sha1|hmac-sha256|cmac-aes-128|cipher|irreversible-cipher|'
+         r'level\s+\d+|[0-9](?=\s))\s+)*')
 
 # Words that follow "password"/"secret" but are a policy keyword, not a value
 # (e.g. Junos "password minimum-length 8").
@@ -106,7 +107,8 @@ _POLICY_WORDS = (r'(?!(?:minimum-length|minimum-changes|maximum-length|change-ty
 _SECRET_KEYWORDS = (r'(?:enable\s+)?(?:secret|password|passwd|passphrase|psksecret|'
                     r'pre-shared-key|preshared-key|shared-secret|encrypted-password|'
                     r'auth-password|priv-password|private-key|authentication-key|'
-                    r'auth-key|md5-key|hmac-key|key-string)')
+                    r'auth-key|md5-key|hmac-key|key-string|phash|psk-secret|ike-psk|'
+                    r'api-key)')
 
 _SECRET = re.compile(
     r'(?<![\w-])(' + _SECRET_KEYWORDS + r')(\s+' + _MODS + r')'
@@ -120,8 +122,21 @@ _KEY = re.compile(
     r'exchange|size|length|type|encrypt)\b)' + _NOT_PLACEHOLDER
     + _NOT_TYPE_THEN_PLACEHOLDER + r'(' + _VAL + r')', _I)
 
-# SNMP
-_SNMP_COMMUNITY = re.compile(r'((?:snmp-server|snmp)\s+community\s+)(\S+)', _I)
+# "key=value" / "password=value" style (e.g. MikroTik)
+_SECRET_EQUALS = re.compile(
+    r'(?<![\w-])(' + _SECRET_KEYWORDS + r')(=)' + _NOT_PLACEHOLDER + r'([^\s"]+)', _I)
+
+# XML: <password>...</password>, <psk>...</psk>, etc. (pfSense/OPNsense)
+_XML_SECRET = re.compile(
+    r'(<(?:' + _SECRET_KEYWORDS + r')>)' + _NOT_PLACEHOLDER + r'([^<]*)(</(?:' + _SECRET_KEYWORDS + r')>)', _I)
+# JSON: "password": "...", "community": "...", etc. (SONiC)
+_JSON_SECRET = re.compile(
+    r'("(?:' + _SECRET_KEYWORDS + r'|community)"\s*:\s*")' + _NOT_PLACEHOLDER + r'([^"]*)(")', _I)
+
+# SNMP (snmp-agent is Huawei's keyword; read/write/ro/rw/cipher are optional
+# modifiers that sit between the keyword and the real community string)
+_SNMP_COMMUNITY = re.compile(
+    r'((?:snmp-server|snmp-agent|snmp)\s+community\s+(?:(?:read|write|ro|rw|cipher)\s+)*)(\S+)', _I)
 _SNMP_HOST_COMM = re.compile(r'(version\s+\d+c\s+)(\S+)', _I)
 _SNMP_V3_AUTH = re.compile(r'(\bauth\s+(?:md5|sha\w*)\s+)' + _NOT_PLACEHOLDER + r'(\S+)', _I)
 _SNMP_V3_PRIV = re.compile(
@@ -198,6 +213,9 @@ def redact_sensitive(text: str) -> str:
     # 4. secrets
     t = _SECRET.sub(lambda m: f"{m.group(1)}{m.group(2)}<REDACTED>", t)
     t = _KEY.sub(_key_cb, t)
+    t = _SECRET_EQUALS.sub(lambda m: f"{m.group(1)}{m.group(2)}<REDACTED>", t)
+    t = _XML_SECRET.sub(lambda m: f"{m.group(1)}<REDACTED>{m.group(3)}", t)
+    t = _JSON_SECRET.sub(lambda m: f"{m.group(1)}<REDACTED>{m.group(3)}", t)
     t = _SNMP_COMMUNITY.sub(lambda m: f"{m.group(1)}<REDACTED>", t)
     t = _SNMP_HOST_COMM.sub(lambda m: f"{m.group(1)}<REDACTED>", t)
     t = _SNMP_V3_AUTH.sub(lambda m: f"{m.group(1)}<REDACTED>", t)
@@ -291,8 +309,9 @@ _RISK_PATTERNS = [
     ('e-mail', _EMAIL),
     ('URL', _URL),
     ('secret-like value', re.compile(
-        r'(?<![\w-])(?:password|secret|passwd|passphrase|psk|token|community|key-string|key)\s+'
+        r'(?<![\w-])(?:password|secret|passwd|passphrase|psk|token|community|key-string|key)\s*[=:]?\s*'
         r'(?:[0-9]\s+)*(?!<)(?=\S*\d)(?=\S*[A-Za-z])\S{6,}', _I)),
+    ('secret-like token', re.compile(r'\bsk-[A-Za-z0-9_-]{10,}', _I)),
 ]
 
 
