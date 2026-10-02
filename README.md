@@ -1,6 +1,6 @@
 # AI-Driven Multi-Vendor Network Security Compliance Auditor
 
-![Home Page](assets/screenshots/home.png)
+![Home Page](assets/screenshots/05-upload-configuration.png)
 
 ## 1. Project Information
 
@@ -80,8 +80,6 @@ organization-scoped, with 2FA and role-based permissions.
 ## 6. Architecture
 
 Full breakdown: [Architecture Document](https://drive.google.com/drive/folders/1SJUBmso8XW0OwtMuxsepUmIMRxHzHp3Q?usp=sharing)
-
-![Architecture Diagram](assets/screenshots/architecture.png)
 
 ```
 User uploads config(s)
@@ -189,11 +187,11 @@ SIH-2026/
 
 **Upload Configuration**
 
-![Upload Configuration](assets/screenshots/home.png)
+![Upload Configuration](assets/screenshots/05-upload-configuration.png)
 
 **Compliance Report Dashboard** (click to watch the demo)
 
-[![Demo Video](assets/screenshots/demo-thumbnail.png)](https://www.youtube.com/watch?v=amNHwsLx78g)
+[![Demo Video](assets/screenshots/12-compliance-report.png)](https://www.youtube.com/watch?v=amNHwsLx78g)
 
 ## 11. Installation
 
