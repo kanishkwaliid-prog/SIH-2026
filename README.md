@@ -281,8 +281,6 @@ sent to the sign-in page first.
 
 - **Live device polling** — pull configs directly from devices over SSH
   instead of relying on uploaded files
-- **Local/on-prem LLM option** — for organizations that can't send any
-  config data to a third-party API, even redacted
 - **Broader parser coverage** — deeper support for the 7 experimental
   vendors
 - **Tighter CORS and a relative API base** — currently permissive/
