@@ -104,7 +104,7 @@ rules:
   - id: NIST-IA-5-1C
     field: password_encryption
     condition:
-      in: [type8, type9, sha256, sha512, scrypt]
+      in: [type8, type9, sha256, sha512, scrypt, bcrypt]
     severity: medium
     explanation: "NIST SP 800-53 Rev. 5 IA-5(1)(c): protect authenticators with approved cryptography; require a modern KDF (type 8/9, SHA-256/512, or scrypt) rather than type 5 MD5 or type 7."
     remediation:

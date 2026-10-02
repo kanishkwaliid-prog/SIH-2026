@@ -154,7 +154,7 @@ rules:
   - id: CIS-4.3.3
     field: password_encryption
     condition:
-      not_equals: type5
+      not_in: [type5, md5]
     severity: medium
     explanation: "MD5-based type 5 hashes are no longer a strong password type; migrate to type 8 (PBKDF2) or type 9 (scrypt). Flagged at medium because type 5 is hashed (unlike type 7) but is cryptographically weak."
     remediation:
@@ -169,7 +169,7 @@ rules:
   - id: CIS-4.3.4
     field: password_encryption
     condition:
-      in: [type8, type9, sha256, sha512, scrypt]
+      in: [type8, type9, sha256, sha512, scrypt, bcrypt]
     severity: high
     explanation: "CIS Level 2: stored secrets must use a modern KDF (type 8/9, SHA-256/512, or scrypt), not type 5/7 or plaintext."
     remediation:

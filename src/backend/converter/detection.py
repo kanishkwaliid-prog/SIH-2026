@@ -19,10 +19,6 @@ def detect_vendor(config_text: str) -> tuple[str, str, str]:
     Returns (vendor, confidence, reason).
     """
     stripped = config_text.strip()
-    # pfSense: XML export with a <pfsense> root. Must be checked BEFORE
-    # Palo Alto, whose check treats any "<?xml" file as PAN-OS.
-    if re.search(r"<pfsense>", stripped[:2000]):
-        return "pfsense", "high", "Detected pfSense XML config (<pfsense> root)"
 
     # Netgate pfSense: XML config.xml with a <pfsense> root tag. Checked
     # BEFORE Palo Alto's generic XML check below, since both start with

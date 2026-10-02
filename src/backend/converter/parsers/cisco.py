@@ -70,7 +70,10 @@ def parse_cisco(config_text: str) -> tuple[dict, list[str]]:
         fields["password_encryption"] = "none"
     elif "service password-encryption" in config_text:
         fields["password_encryption"] = "type7"
-    elif "enable secret" in config_text and "enable password" not in config_text:
+    elif "enable secret" in config_text:
+        # enable secret always takes priority on the real device, even if
+        # a legacy "enable password" line is also still present in the
+        # file -- so its presence should never downgrade this to "none".
         fields["password_encryption"] = "md5"
     elif "enable password" in config_text:
         fields["password_encryption"] = "none"
