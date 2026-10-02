@@ -81,7 +81,7 @@ rules:
   - id: SEBI-CSCRF-5
     field: password_encryption
     condition:
-      in: [type8, type9, sha256, sha512, scrypt]
+      in: [type8, type9, sha256, sha512, scrypt, bcrypt]
     severity: high
     explanation: "SEBI's CSCRF Protect function requires protection of credentials and cryptographic controls — mapped here to requiring a modern stored-password type (type 8/9, SHA-256/512, or scrypt)."
     remediation:
