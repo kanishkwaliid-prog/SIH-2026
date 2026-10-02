@@ -32,6 +32,40 @@ KNOWN_LINE_PATTERNS = [
 ]
 
 
+_SECRET_TYPE_MAP = {
+    "0": "none",      # enable secret 0 <plaintext>
+    "4": "sha256",
+    "5": "md5",
+    "7": "type7",
+    "8": "type8",
+    "9": "type9",
+}
+
+
+def _detect_password_encryption(config_text):
+    """Strongest credential protection on the device, in rule vocabulary.
+
+    Priority (fixes the case where 'no service password-encryption' appeared
+    first and short-circuited a perfectly good 'enable secret 5 ...'):
+      1. 'enable secret [<type>] <hash>' -- real devices always prefer it
+         over 'enable password', and it is independent of the
+         'service password-encryption' flag, which only affects type-7.
+      2. 'service password-encryption' / 'no service password-encryption'
+      3. bare 'enable password'
+    Matching is line-anchored so comments/banners can't trigger it.
+    """
+    m = re.search(r"^\s*enable secret(?:\s+(\d))?\s+\S+", config_text, re.MULTILINE)
+    if m:
+        return _SECRET_TYPE_MAP.get(m.group(1) or "5", "md5")
+    if re.search(r"^\s*no service password-encryption\s*$", config_text, re.MULTILINE):
+        return "none"
+    if re.search(r"^\s*service password-encryption\s*$", config_text, re.MULTILINE):
+        return "type7"
+    if re.search(r"^\s*enable password\s+\S+", config_text, re.MULTILINE):
+        return "none"
+    return None
+
+
 def parse_cisco(config_text: str) -> tuple[dict, list[str]]:
     """Returns (fields, unrecognized_lines)."""
     fields = {
@@ -66,17 +100,7 @@ def parse_cisco(config_text: str) -> tuple[dict, list[str]]:
     elif re.search(r"logging (synchronous|buffered)", config_text):
         fields["logging_enabled"] = True
 
-    if "no service password-encryption" in config_text:
-        fields["password_encryption"] = "none"
-    elif "service password-encryption" in config_text:
-        fields["password_encryption"] = "type7"
-    elif "enable secret" in config_text:
-        # enable secret always takes priority on the real device, even if
-        # a legacy "enable password" line is also still present in the
-        # file -- so its presence should never downgrade this to "none".
-        fields["password_encryption"] = "md5"
-    elif "enable password" in config_text:
-        fields["password_encryption"] = "none"
+    fields["password_encryption"] = _detect_password_encryption(config_text)
 
     fields["banner_configured"] = bool(re.search(r"banner (motd|login)", config_text))
 
