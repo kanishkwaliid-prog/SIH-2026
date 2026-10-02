@@ -246,14 +246,17 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
     """
     global _quota_exhausted
 
+    global _quota_exhausted_until
+
     if fallback is None:
         fallback = CLASSIFY_FALLBACK
 
-    if _quota_exhausted:
+    if _quota_exhausted_until and time.time() < _quota_exhausted_until:
         result = dict(fallback)
-        result["reasoning"] = "Groq daily quota exhausted"
+        result["reasoning"] = "Groq daily quota exhausted (retrying automatically after cooldown)"
         return result
-
+    _quota_exhausted_until = 0.0  # cooldown passed -- clear it and try again
+    
     for attempt in range(retries + 1):
         try:
             return func(*args, **kwargs)
@@ -265,9 +268,9 @@ def call_with_retry(func, *args, retries=2, delay=1.5, fallback: dict = None, **
         except Exception as e:
             print(f"Groq attempt {attempt} failed: {type(e).__name__}: {e}")
             if "tokens per day" in str(e):
-                _quota_exhausted = True
+                _quota_exhausted_until = time.time() + _QUOTA_COOLDOWN_SECONDS
                 result = dict(fallback)
-                result["reasoning"] = "Groq daily quota exhausted"
+                result["reasoning"] = "Groq daily quota exhausted (will retry automatically in 1 hour)"
                 return result
             if attempt == retries:
                 result = dict(fallback)
@@ -307,7 +310,8 @@ def _classify_unknown_line_inner(raw_line: str, vendor_hint: str = None) -> dict
 
 CACHE_FILE = "block2b/llm_cache.json"
 _cache = json.load(open(CACHE_FILE)) if os.path.exists(CACHE_FILE) else {}
-_quota_exhausted = False
+_quota_exhausted_until = 0.0  # epoch timestamp; 0 means not exhausted
+_QUOTA_COOLDOWN_SECONDS = 60 * 60  # retry after 1 hour, not just on restart
 
 def classify_unknown_line(raw_line: str, vendor_hint: str = None, *, org_id: str) -> dict:
     if not raw_line or not raw_line.strip():
